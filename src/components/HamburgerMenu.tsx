@@ -9,7 +9,7 @@ interface HamburgerMenuProps {
 
 const menuItems = [
   { label: "Morning Briefing", icon: Sun, path: "/morning-briefing" },
-  { label: "Brain Dump", icon: Brain, path: "/brain-dump" },
+  { label: "Tasks", icon: Brain, path: "/brain-dump" },
   { label: "Mix Notes", icon: Music, path: "/mix-notes" },
   { label: "Time Track", icon: Clock, path: "/time-track" },
   { label: "Wrap Up", icon: CheckSquare, path: "/wrap-up" },

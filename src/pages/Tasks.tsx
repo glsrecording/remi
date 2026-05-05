@@ -6,6 +6,7 @@ const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 const ACCENT = "#f59e0b";
 const COMMIT_THRESHOLD = 65;
+const LONG_PRESS_MS = 500;
 
 interface Task {
   id: string;
@@ -21,8 +22,8 @@ interface TaskBuckets {
 }
 
 type Bucket = keyof TaskBuckets;
+type SwipeAction = Bucket | "done";
 
-// TASK 2: distinct, readable colors on dark background
 const BUCKET_META: Record<Bucket, { label: string; emoji: string; color: string }> = {
   today:    { label: "Today",    emoji: "⚡", color: "#f59e0b" },
   tonight:  { label: "Tonight",  emoji: "🌙", color: "#c084fc" },
@@ -30,23 +31,22 @@ const BUCKET_META: Record<Bucket, { label: string; emoji: string; color: string 
   someday:  { label: "Someday",  emoji: "💭", color: "#94a3b8" },
 };
 
-// Index matches swipe direction: 0=up→Today, 1=right→Tonight, 2=down→Tomorrow, 3=left→Someday
-const SWIPE_TARGETS: Array<{ bucket: Bucket; label: string; color: string; arrow: string }> = [
-  { bucket: "today",    label: "Today",    color: "#f59e0b", arrow: "↑" },
-  { bucket: "tonight",  label: "Tonight",  color: "#c084fc", arrow: "→" },
-  { bucket: "tomorrow", label: "Tomorrow", color: "#60a5fa", arrow: "↓" },
-  { bucket: "someday",  label: "Someday",  color: "#94a3b8", arrow: "←" },
+// Index matches swipe direction: 0=up→Today, 1=right→Tonight, 2=down→Tomorrow, 3=left→Done
+const SWIPE_TARGETS: Array<{ action: SwipeAction; label: string; color: string; arrow: string }> = [
+  { action: "today",    label: "Today",    color: "#f59e0b", arrow: "↑" },
+  { action: "tonight",  label: "Tonight",  color: "#c084fc", arrow: "→" },
+  { action: "tomorrow", label: "Tomorrow", color: "#60a5fa", arrow: "↓" },
+  { action: "done",     label: "Done ✓",   color: "#22c55e", arrow: "←" },
 ];
 
-// TASK 1: direct Notion update via page_id — no NLP, no fuzzy match
-async function moveTaskToNotion(pageId: string, bucket: Bucket): Promise<void> {
+async function applyTaskAction(pageId: string, action: SwipeAction): Promise<void> {
   await fetch(`${JARVIS_URL}/tasks/move`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${REMI_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ page_id: pageId, bucket }),
+    body: JSON.stringify({ page_id: pageId, bucket: action }),
   }).then((r) => {
     if (!r.ok) console.error("[Remi] /tasks/move failed:", r.status, r.statusText);
   }).catch((err) => {
@@ -69,14 +69,22 @@ function getDominantSwipe(x: number, y: number) {
   return y < 0 ? SWIPE_TARGETS[0] : SWIPE_TARGETS[2];
 }
 
-// TASK 3: undo state
 interface UndoState {
   task: Task;
   fromBucket: Bucket;
-  toBucket: Bucket;
+  action: SwipeAction;
 }
 
-// TASK 3: undo toast component
+function undoLabel(action: SwipeAction): string {
+  if (action === "done") return "Marked done";
+  return `Moved to ${BUCKET_META[action].label}`;
+}
+
+function actionColor(action: SwipeAction): string {
+  if (action === "done") return "#22c55e";
+  return BUCKET_META[action].color;
+}
+
 function UndoToast({
   state,
   onUndo,
@@ -86,7 +94,7 @@ function UndoToast({
   onUndo: () => void;
   onDismiss: () => void;
 }) {
-  const meta = BUCKET_META[state.toBucket];
+  const color = actionColor(state.action);
 
   useEffect(() => {
     const t = setTimeout(onDismiss, 5000);
@@ -99,19 +107,18 @@ function UndoToast({
       style={{
         bottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
         background: "#1e1e1e",
-        border: `1px solid ${meta.color}30`,
+        border: `1px solid ${color}30`,
         animation: "slide-up 0.2s ease",
       }}
     >
       <span className="text-sm text-white/70 flex-1 leading-snug">
-        Moved to{" "}
-        <span className="font-semibold" style={{ color: meta.color }}>
-          {meta.label}
+        <span className="font-semibold" style={{ color }}>
+          {undoLabel(state.action)}
         </span>
       </span>
       <button
         className="shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all active:scale-95"
-        style={{ background: meta.color + "22", color: meta.color }}
+        style={{ background: color + "22", color }}
         onClick={onUndo}
       >
         Undo
@@ -123,23 +130,34 @@ function UndoToast({
 interface SwipeableCardProps {
   task: Task;
   sourceBucket: Bucket;
-  onMoved: (task: Task, toBucket: Bucket) => void;
+  onMoved: (task: Task, action: SwipeAction) => void;
 }
 
 function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [committing, setCommitting] = useState(false);
   const [committed, setCommitted] = useState(false);
+  const [longPressing, setLongPressing] = useState(false);
 
-  const startPos  = useRef<{ x: number; y: number } | null>(null);
-  const dragging  = useRef(false);
-  const offsetRef = useRef({ x: 0, y: 0 });
+  const startPos       = useRef<{ x: number; y: number } | null>(null);
+  const dragging       = useRef(false);
+  const offsetRef      = useRef({ x: 0, y: 0 });
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const commitColorRef = useRef<string>("#22c55e");
 
   const magnitude   = Math.sqrt(offset.x ** 2 + offset.y ** 2);
   const progress    = Math.min(1, magnitude / COMMIT_THRESHOLD);
   const dominant    = magnitude > 8 ? getDominantSwipe(offset.x, offset.y) : null;
-  const validTarget = dominant && dominant.bucket !== sourceBucket;
+  const validTarget = dominant && dominant.action !== sourceBucket;
   const swipeColor  = validTarget ? dominant!.color : "rgba(255,255,255,0.25)";
+
+  function cancelLongPress() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    setLongPressing(false);
+  }
 
   function handlePointerDown(e: React.PointerEvent) {
     if (e.button !== 0 && e.pointerType === "mouse") return;
@@ -148,6 +166,21 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
     offsetRef.current = { x: 0, y: 0 };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     e.stopPropagation();
+
+    // Start long press timer
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null;
+      // Only fire if no significant movement
+      if (Math.sqrt(offsetRef.current.x ** 2 + offsetRef.current.y ** 2) < 8) {
+        dragging.current = false;
+        commitColorRef.current = BUCKET_META["someday"].color;
+        setCommitting(true);
+        setTimeout(() => {
+          setCommitted(true);
+          onMoved(task, "someday");
+        }, 200);
+      }
+    }, LONG_PRESS_MS);
   }
 
   function handlePointerMove(e: React.PointerEvent) {
@@ -156,10 +189,16 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
     const ny = e.clientY - startPos.current.y;
     offsetRef.current = { x: nx, y: ny };
     setOffset({ x: nx, y: ny });
+
+    // Cancel long press if moved more than 8px
+    if (Math.sqrt(nx ** 2 + ny ** 2) > 8) {
+      cancelLongPress();
+    }
   }
 
   function handlePointerUp() {
     if (!dragging.current) return;
+    cancelLongPress();
     dragging.current = false;
 
     const { x, y } = offsetRef.current;
@@ -167,11 +206,12 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
 
     if (mag >= COMMIT_THRESHOLD) {
       const swipe = getDominantSwipe(x, y);
-      if (swipe.bucket !== sourceBucket) {
+      if (swipe.action !== sourceBucket) {
+        commitColorRef.current = swipe.color;
         setCommitting(true);
         setTimeout(() => {
           setCommitted(true);
-          onMoved(task, swipe.bucket);
+          onMoved(task, swipe.action);
         }, 200);
         return;
       }
@@ -184,6 +224,8 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
 
   if (committed) return null;
 
+  const commitColor = commitColorRef.current;
+
   return (
     <div className="relative rounded-xl" style={{ overflow: "hidden" }}>
       {/* Direction hint backdrop */}
@@ -192,9 +234,13 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
         style={{
           background: dominant
             ? `color-mix(in srgb, ${swipeColor} ${Math.round(progress * 25)}%, transparent)`
+            : longPressing
+            ? "color-mix(in srgb, #94a3b8 20%, transparent)"
             : "transparent",
           border: dominant
             ? `1.5px solid color-mix(in srgb, ${swipeColor} ${Math.round(progress * 70)}%, transparent)`
+            : longPressing
+            ? "1.5px solid #94a3b870"
             : "1.5px solid transparent",
           transition: dragging.current ? "none" : "all 0.25s ease",
         }}
@@ -212,14 +258,21 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
             {dominant.label}
           </span>
         )}
+        {longPressing && !dominant && (
+          <span
+            className="text-xs font-bold tracking-widest uppercase"
+            style={{ color: "#94a3b8", fontFamily: "'Space Mono', monospace" }}
+          >
+            Someday
+          </span>
+        )}
       </div>
 
       {/* Sliding card */}
       <div
         className="relative flex items-center gap-3 px-4 py-3.5 rounded-xl select-none"
         style={{
-          background: committing ? `${swipeColor}22` : "#333333",
-          // TASK 2: left accent strip gives each bucket a distinct visual identity
+          background: committing ? `${commitColor}22` : "#333333",
           borderLeft: `3px solid ${BUCKET_META[sourceBucket].color}70`,
           borderTop: "1px solid rgba(255,255,255,0.05)",
           borderRight: "1px solid rgba(255,255,255,0.05)",
@@ -250,7 +303,7 @@ function BucketSection({
   bucket: Bucket;
   tasks: Task[];
   defaultOpen: boolean;
-  onMoved: (task: Task, fromBucket: Bucket, toBucket: Bucket) => void;
+  onMoved: (task: Task, fromBucket: Bucket, action: SwipeAction) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const meta = BUCKET_META[bucket];
@@ -290,7 +343,7 @@ function BucketSection({
               key={task.id}
               task={task}
               sourceBucket={bucket}
-              onMoved={(t, toBucket) => onMoved(t, bucket, toBucket)}
+              onMoved={(t, action) => onMoved(t, bucket, action)}
             />
           ))}
         </div>
@@ -322,33 +375,28 @@ export default function Tasks() {
 
   useEffect(() => { load(); }, [load]);
 
-  // TASK 1 + TASK 3: move task in Notion, update UI, show undo toast
-  const handleMoved = useCallback((task: Task, fromBucket: Bucket, toBucket: Bucket) => {
-    // Direct Notion update — reliable, no NLP
-    moveTaskToNotion(task.id, toBucket);
+  const handleMoved = useCallback((task: Task, fromBucket: Bucket, action: SwipeAction) => {
+    applyTaskAction(task.id, action);
 
-    // Remove card from source bucket immediately
     setBuckets((prev) => ({
       ...prev,
       [fromBucket]: prev[fromBucket].filter((t) => t.id !== task.id),
     }));
 
-    // Show undo toast
-    setUndoState({ task, fromBucket, toBucket });
+    setUndoState({ task, fromBucket, action });
   }, []);
 
   const handleUndo = useCallback(() => {
     if (!undoState) return;
-    const { task, fromBucket, toBucket } = undoState;
-    // Revert Notion
-    moveTaskToNotion(task.id, fromBucket);
+    const { task, fromBucket, action } = undoState;
+    // Revert Notion back to original bucket
+    applyTaskAction(task.id, fromBucket);
     // Re-add card to original bucket
     setBuckets((prev) => ({
       ...prev,
       [fromBucket]: [...prev[fromBucket], task],
     }));
-    // Clear the undo state that was for toBucket (might have been replaced by new swipe)
-    setUndoState((s) => (s?.task.id === task.id && s.toBucket === toBucket ? null : s));
+    setUndoState((s) => (s?.task.id === task.id && s.action === action ? null : s));
   }, [undoState]);
 
   const totalCount = Object.values(buckets).reduce((n, a) => n + a.length, 0);
@@ -393,7 +441,7 @@ export default function Tasks() {
         <div className="flex items-center justify-center gap-5">
           {SWIPE_TARGETS.map((s) => (
             <span
-              key={s.bucket}
+              key={s.action}
               className="text-xs"
               style={{ color: s.color, opacity: 0.75, fontFamily: "'Space Mono', monospace" }}
             >
@@ -443,7 +491,6 @@ export default function Tasks() {
         )}
       </div>
 
-      {/* TASK 3: undo toast */}
       {undoState && (
         <UndoToast
           state={undoState}
