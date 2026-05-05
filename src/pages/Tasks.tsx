@@ -1,9 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, RefreshCw, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  ArrowLeft, RefreshCw, Loader2, ChevronDown, ChevronRight,
+  Plus, Mic, MicOff, Check, X,
+} from "lucide-react";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
 const ACCENT = "#f59e0b";
 const COMMIT_THRESHOLD = 65;
 const LONG_PRESS_MS = 500;
@@ -39,6 +43,21 @@ const SWIPE_TARGETS: Array<{ action: SwipeAction; label: string; color: string; 
   { action: "done",     label: "Done ✓",   color: "#22c55e", arrow: "←" },
 ];
 
+async function transcribeAudio(audioBlob: Blob): Promise<string> {
+  const formData = new FormData();
+  formData.append("file", audioBlob, "recording.webm");
+  formData.append("model", "whisper-1");
+  formData.append("language", "en");
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+    body: formData,
+  });
+  if (!response.ok) throw new Error(`Whisper error ${response.status}`);
+  const data = await response.json();
+  return (data.text ?? "").trim();
+}
+
 async function applyTaskAction(pageId: string, action: SwipeAction): Promise<void> {
   await fetch(`${JARVIS_URL}/tasks/move`, {
     method: "POST",
@@ -61,6 +80,21 @@ async function fetchTasks(): Promise<TaskBuckets> {
   if (!res.ok) throw new Error(`${res.status}`);
   const data = await res.json();
   return data.tasks as TaskBuckets;
+}
+
+async function sendTaskToJarvis(title: string, bucket: Bucket): Promise<void> {
+  await fetch(`${JARVIS_URL}/remi`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${REMI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ message: `add ${title} to ${bucket}`, user_id: "remi" }),
+  }).then((r) => {
+    if (!r.ok) console.error("[Remi] /remi add task failed:", r.status);
+  }).catch((err) => {
+    console.error("[Remi] add task network error:", err);
+  });
 }
 
 function getDominantSwipe(x: number, y: number) {
@@ -126,6 +160,157 @@ function UndoToast({
     </div>
   );
 }
+
+// ── Inline add-task card ────────────────────────────────────────────────────
+
+interface AddTaskCardProps {
+  bucket: Bucket;
+  color: string;
+  onCancel: () => void;
+  onSubmitted: () => void;
+}
+
+function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps) {
+  const [text, setText] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const inputRef        = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef  = useRef<BlobPart[]>([]);
+  const streamRef       = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  async function handleSubmit() {
+    const title = text.trim();
+    if (!title || submitting) return;
+    setSubmitting(true);
+    await sendTaskToJarvis(title, bucket);
+    onSubmitted();
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") handleSubmit();
+    if (e.key === "Escape") onCancel();
+  }
+
+  async function handleMicDown() {
+    if (isRecording || isTranscribing) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      audioChunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        audioChunksRef.current = [];
+        if (blob.size > 0) {
+          setIsTranscribing(true);
+          try {
+            const transcript = await transcribeAudio(blob);
+            if (transcript) setText(transcript);
+          } catch {
+            // silent fail — user can type instead
+          } finally {
+            setIsTranscribing(false);
+            inputRef.current?.focus();
+          }
+        }
+      };
+      recorder.start(100);
+      setIsRecording(true);
+    } catch {
+      // mic permission denied
+    }
+  }
+
+  function handleMicUp() {
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") return;
+    mediaRecorderRef.current.stop();
+    mediaRecorderRef.current = null;
+    setIsRecording(false);
+  }
+
+  const canSubmit = text.trim().length > 0 && !submitting;
+
+  return (
+    <div
+      className="flex items-center gap-1.5 px-3 py-2 rounded-xl"
+      style={{
+        background: "#333333",
+        borderLeft: `3px solid ${color}70`,
+        borderTop: "1px solid rgba(255,255,255,0.05)",
+        borderRight: "1px solid rgba(255,255,255,0.05)",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+      }}
+    >
+      <input
+        ref={inputRef}
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="New task…"
+        className="flex-1 bg-transparent text-sm text-white/85 outline-none min-w-0 placeholder:text-white/25"
+      />
+
+      {/* Mic */}
+      <button
+        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
+        style={{
+          background: isRecording ? "#ef444420" : "transparent",
+          border: `1px solid ${isRecording ? "#ef4444" : isTranscribing ? color + "50" : "rgba(255,255,255,0.1)"}`,
+        }}
+        onPointerDown={handleMicDown}
+        onPointerUp={handleMicUp}
+        onPointerLeave={handleMicUp}
+        disabled={submitting}
+      >
+        {isTranscribing
+          ? <Loader2 size={11} className="animate-spin" style={{ color }} />
+          : isRecording
+          ? <MicOff size={11} style={{ color: "#ef4444" }} />
+          : <Mic size={11} style={{ color: "rgba(255,255,255,0.35)" }} />}
+      </button>
+
+      {/* Confirm */}
+      <button
+        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
+        style={{
+          background: canSubmit ? color + "22" : "transparent",
+          border: `1px solid ${canSubmit ? color + "60" : "rgba(255,255,255,0.08)"}`,
+        }}
+        onClick={handleSubmit}
+        disabled={!canSubmit}
+      >
+        {submitting
+          ? <Loader2 size={11} className="animate-spin" style={{ color }} />
+          : <Check size={11} style={{ color: canSubmit ? color : "rgba(255,255,255,0.2)" }} />}
+      </button>
+
+      {/* Cancel */}
+      <button
+        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
+        style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.08)" }}
+        onClick={onCancel}
+      >
+        <X size={11} style={{ color: "rgba(255,255,255,0.3)" }} />
+      </button>
+    </div>
+  );
+}
+
+// ── Swipeable task card ─────────────────────────────────────────────────────
 
 interface SwipeableCardProps {
   task: Task;
@@ -321,50 +506,95 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
   );
 }
 
+// ── Bucket section ──────────────────────────────────────────────────────────
+
 function BucketSection({
   bucket,
   tasks,
   defaultOpen,
   onMoved,
+  onTaskAdded,
 }: {
   bucket: Bucket;
   tasks: Task[];
   defaultOpen: boolean;
   onMoved: (task: Task, fromBucket: Bucket, action: SwipeAction) => void;
+  onTaskAdded: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [adding, setAdding] = useState(false);
   const meta = BUCKET_META[bucket];
+
+  function handleAddClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    setOpen(true);
+    setAdding(true);
+  }
 
   return (
     <div className="space-y-2">
-      <button
-        className="w-full flex items-center gap-2 py-1 text-left"
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className="text-base">{meta.emoji}</span>
-        <span
-          className="text-sm font-bold tracking-tight flex-1"
-          style={{ color: meta.color, fontFamily: "'Space Mono', monospace" }}
+      {/* Header row — div so we can nest buttons */}
+      <div className="w-full flex items-center gap-2 py-1">
+        {/* Collapse trigger covers emoji + label */}
+        <div
+          className="flex items-center gap-2 flex-1 cursor-pointer"
+          onClick={() => setOpen((o) => !o)}
+          role="button"
+          aria-expanded={open}
         >
-          {meta.label}
-        </span>
+          <span className="text-base">{meta.emoji}</span>
+          <span
+            className="text-sm font-bold tracking-tight"
+            style={{ color: meta.color, fontFamily: "'Space Mono', monospace" }}
+          >
+            {meta.label}
+          </span>
+        </div>
+
+        {/* Count badge */}
         <span
-          className="text-xs font-mono px-2 py-0.5 rounded-full mr-1"
+          className="text-xs font-mono px-2 py-0.5 rounded-full"
           style={{ background: meta.color + "20", color: meta.color }}
         >
           {tasks.length}
         </span>
-        {open
-          ? <ChevronDown  size={14} style={{ color: meta.color, opacity: 0.6 }} />
-          : <ChevronRight size={14} style={{ color: meta.color, opacity: 0.6 }} />}
-      </button>
 
-      {open && tasks.length === 0 && (
-        <p className="text-xs text-white/25 pl-7">Nothing here.</p>
-      )}
+        {/* Add button */}
+        <button
+          className="w-6 h-6 rounded-md flex items-center justify-center transition-all active:scale-90"
+          style={{ background: meta.color + "18", color: meta.color }}
+          onClick={handleAddClick}
+          aria-label={`Add task to ${meta.label}`}
+        >
+          <Plus size={12} />
+        </button>
 
-      {open && tasks.length > 0 && (
+        {/* Chevron */}
+        <div
+          className="cursor-pointer p-0.5"
+          onClick={() => setOpen((o) => !o)}
+          role="button"
+          aria-label={open ? "Collapse" : "Expand"}
+        >
+          {open
+            ? <ChevronDown  size={14} style={{ color: meta.color, opacity: 0.6 }} />
+            : <ChevronRight size={14} style={{ color: meta.color, opacity: 0.6 }} />}
+        </div>
+      </div>
+
+      {open && (
         <div className="space-y-1.5 mx-4">
+          {adding && (
+            <AddTaskCard
+              bucket={bucket}
+              color={meta.color}
+              onCancel={() => setAdding(false)}
+              onSubmitted={() => { setAdding(false); onTaskAdded(); }}
+            />
+          )}
+          {tasks.length === 0 && !adding && (
+            <p className="text-xs text-white/25 pl-2">Nothing here.</p>
+          )}
           {tasks.map((task) => (
             <SwipeableCard
               key={task.id}
@@ -378,6 +608,8 @@ function BucketSection({
     </div>
   );
 }
+
+// ── Page ────────────────────────────────────────────────────────────────────
 
 export default function Tasks() {
   const [, navigate] = useLocation();
@@ -402,6 +634,11 @@ export default function Tasks() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Refresh 1s after a task is added — gives Notion write time to settle
+  const handleTaskAdded = useCallback(() => {
+    setTimeout(load, 1000);
+  }, [load]);
+
   const handleMoved = useCallback((task: Task, fromBucket: Bucket, action: SwipeAction) => {
     applyTaskAction(task.id, action);
 
@@ -416,9 +653,7 @@ export default function Tasks() {
   const handleUndo = useCallback(() => {
     if (!undoState) return;
     const { task, fromBucket, action } = undoState;
-    // Revert Notion back to original bucket
     applyTaskAction(task.id, fromBucket);
-    // Re-add card to original bucket
     setBuckets((prev) => ({
       ...prev,
       [fromBucket]: [...prev[fromBucket], task],
@@ -512,6 +747,7 @@ export default function Tasks() {
                 tasks={buckets[b]}
                 defaultOpen={b === "today" || b === "tonight"}
                 onMoved={handleMoved}
+                onTaskAdded={handleTaskAdded}
               />
             ))}
           </div>
