@@ -82,18 +82,18 @@ async function fetchTasks(): Promise<TaskBuckets> {
   return data.tasks as TaskBuckets;
 }
 
-async function sendTaskToJarvis(title: string, bucket: Bucket): Promise<void> {
-  await fetch(`${JARVIS_URL}/remi`, {
+function createTaskDirect(title: string, bucket: Bucket): void {
+  fetch(`${JARVIS_URL}/tasks/create`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${REMI_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ message: `add ${title} to ${bucket}`, user_id: "remi" }),
+    body: JSON.stringify({ title, bucket }),
   }).then((r) => {
-    if (!r.ok) console.error("[Remi] /remi add task failed:", r.status);
+    if (!r.ok) console.error("[Remi] /tasks/create failed:", r.status);
   }).catch((err) => {
-    console.error("[Remi] add task network error:", err);
+    console.error("[Remi] /tasks/create network error:", err);
   });
 }
 
@@ -167,14 +167,13 @@ interface AddTaskCardProps {
   bucket: Bucket;
   color: string;
   onCancel: () => void;
-  onSubmitted: () => void;
+  onSubmitted: (title: string) => void;
 }
 
 function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps) {
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
   const inputRef        = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef  = useRef<BlobPart[]>([]);
@@ -184,12 +183,11 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
     inputRef.current?.focus();
   }, []);
 
-  async function handleSubmit() {
+  function handleSubmit() {
     const title = text.trim();
-    if (!title || submitting) return;
-    setSubmitting(true);
-    await sendTaskToJarvis(title, bucket);
-    onSubmitted();
+    if (!title) return;
+    onSubmitted(title);           // dismiss immediately + optimistic add
+    createTaskDirect(title, bucket); // fire-and-forget background write
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -241,7 +239,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
     setIsRecording(false);
   }
 
-  const canSubmit = text.trim().length > 0 && !submitting;
+  const canSubmit = text.trim().length > 0;
 
   return (
     <div
@@ -274,7 +272,6 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
         onPointerDown={handleMicDown}
         onPointerUp={handleMicUp}
         onPointerLeave={handleMicUp}
-        disabled={submitting}
       >
         {isTranscribing
           ? <Loader2 size={11} className="animate-spin" style={{ color }} />
@@ -293,9 +290,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
         onClick={handleSubmit}
         disabled={!canSubmit}
       >
-        {submitting
-          ? <Loader2 size={11} className="animate-spin" style={{ color }} />
-          : <Check size={11} style={{ color: canSubmit ? color : "rgba(255,255,255,0.2)" }} />}
+        <Check size={11} style={{ color: canSubmit ? color : "rgba(255,255,255,0.2)" }} />
       </button>
 
       {/* Cancel */}
@@ -519,7 +514,7 @@ function BucketSection({
   tasks: Task[];
   defaultOpen: boolean;
   onMoved: (task: Task, fromBucket: Bucket, action: SwipeAction) => void;
-  onTaskAdded: () => void;
+  onTaskAdded: (title: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [adding, setAdding] = useState(false);
@@ -589,7 +584,7 @@ function BucketSection({
               bucket={bucket}
               color={meta.color}
               onCancel={() => setAdding(false)}
-              onSubmitted={() => { setAdding(false); onTaskAdded(); }}
+              onSubmitted={(title) => { setAdding(false); onTaskAdded(title); }}
             />
           )}
           {tasks.length === 0 && !adding && (
@@ -634,9 +629,14 @@ export default function Tasks() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Refresh 1s after a task is added — gives Notion write time to settle
-  const handleTaskAdded = useCallback(() => {
-    setTimeout(load, 1000);
+  // Optimistically add task, then refresh after 2s to pick up the real page_id
+  const handleTaskAdded = useCallback((title: string, bucket: Bucket) => {
+    const tempTask: Task = { id: `temp-${Date.now()}`, title, url: "" };
+    setBuckets((prev) => ({
+      ...prev,
+      [bucket]: [tempTask, ...prev[bucket]],
+    }));
+    setTimeout(load, 2000);
   }, [load]);
 
   const handleMoved = useCallback((task: Task, fromBucket: Bucket, action: SwipeAction) => {
@@ -747,7 +747,7 @@ export default function Tasks() {
                 tasks={buckets[b]}
                 defaultOpen={b === "today" || b === "tonight"}
                 onMoved={handleMoved}
-                onTaskAdded={handleTaskAdded}
+                onTaskAdded={(title) => handleTaskAdded(title, b)}
               />
             ))}
           </div>
