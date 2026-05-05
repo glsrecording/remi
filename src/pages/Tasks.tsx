@@ -47,7 +47,11 @@ async function moveTaskToNotion(pageId: string, bucket: Bucket): Promise<void> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ page_id: pageId, bucket }),
-  }).catch(() => {});
+  }).then((r) => {
+    if (!r.ok) console.error("[Remi] /tasks/move failed:", r.status, r.statusText);
+  }).catch((err) => {
+    console.error("[Remi] /tasks/move network error:", err);
+  });
 }
 
 async function fetchTasks(): Promise<TaskBuckets> {
@@ -212,9 +216,14 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
 
       {/* Sliding card */}
       <div
-        className="relative flex items-center gap-3 px-4 py-3.5 rounded-xl border border-white/5 select-none"
+        className="relative flex items-center gap-3 px-4 py-3.5 rounded-xl select-none"
         style={{
           background: committing ? `${swipeColor}22` : "#333333",
+          // TASK 2: left accent strip gives each bucket a distinct visual identity
+          borderLeft: `3px solid ${BUCKET_META[sourceBucket].color}70`,
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          borderRight: "1px solid rgba(255,255,255,0.05)",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
           transform: `translate(${offset.x}px, ${offset.y}px)`,
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
