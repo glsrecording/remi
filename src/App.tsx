@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import PinLock, { isPinUnlocked } from "@/components/PinLock";
 import MainChat from "@/pages/MainChat";
 import BrainDump from "@/pages/BrainDump";
 import Commands from "@/pages/Commands";
@@ -39,6 +41,12 @@ function Router() {
 }
 
 function App() {
+  const [unlocked, setUnlocked] = useState(isPinUnlocked);
+
+  if (!unlocked) {
+    return <PinLock onUnlock={() => setUnlocked(true)} />;
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

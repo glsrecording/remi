@@ -1055,83 +1055,57 @@ export default function MainChat() {
       </div>
 
       <div
-        className="shrink-0 flex flex-col items-center px-4 pt-4"
+        className="shrink-0 px-4 pt-2"
         style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
         }}
       >
-        {isRecording && (
-          <div className="flex items-center gap-1 mb-4 h-6">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                className="wave-bar w-1 rounded-full"
-                style={{
-                  height: "20px",
-                  background: "#ef4444",
-                  animationDelay: `${(i - 1) * 0.1}s`,
-                }}
-              />
-            ))}
+        {/* Recording / transcribing state above the input row */}
+        {(isRecording || isTranscribing) && (
+          <div className="flex items-center justify-center gap-2 mb-2 h-5">
+            {isRecording && (
+              <>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className="wave-bar w-0.5 rounded-full"
+                    style={{
+                      height: "14px",
+                      background: "#ef4444",
+                      animationDelay: `${(i - 1) * 0.1}s`,
+                    }}
+                  />
+                ))}
+                <span className="text-xs ml-1" style={{ color: "#ef4444" }}>
+                  Recording
+                </span>
+              </>
+            )}
+            {isTranscribing && (
+              <>
+                <Loader2
+                  size={13}
+                  className="animate-spin"
+                  style={{ color: userColor }}
+                />
+                <span className="text-xs" style={{ color: userColor }}>
+                  Transcribing...
+                </span>
+              </>
+            )}
           </div>
         )}
-        {isTranscribing && (
-          <div className="flex items-center gap-2 mb-4">
-            <Loader2
-              size={16}
-              className="animate-spin"
-              style={{ color: userColor }}
-            />
-            <span className="text-xs" style={{ color: userColor }}>
-              Transcribing...
-            </span>
-          </div>
-        )}
-
-        <button
-          className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 mb-4 ${isRecording ? "voice-button-recording" : ""}`}
-          style={{
-            background: isRecording
-              ? "#ef444420"
-              : isTranscribing
-                ? userColor + "15"
-                : "#333333",
-            border: `2px solid ${isRecording ? "#ef4444" : isTranscribing ? userColor + "60" : "rgba(255,255,255,0.1)"}`,
-            opacity: isTranscribing ? 0.5 : 1,
-            cursor: isTranscribing ? "not-allowed" : "pointer",
-          }}
-          onPointerDown={handleVoiceHoldStart}
-          onPointerUp={handleVoiceHoldEnd}
-          onPointerLeave={handleVoiceHoldEnd}
-          data-testid="button-voice"
-        >
-          {isTranscribing ? (
-            <Loader2
-              size={28}
-              className="animate-spin"
-              style={{ color: userColor }}
-            />
-          ) : isRecording ? (
-            <MicOff size={28} style={{ color: "#ef4444" }} />
-          ) : (
-            <Mic size={28} style={{ color: "rgba(255,255,255,0.5)" }} />
-          )}
-        </button>
-
-        <p className="text-xs text-white/25 mb-3 tracking-wide">{micLabel}</p>
 
         {recordingError && (
-          <div className="flex items-center gap-2 mb-2">
-            <p className="text-xs text-red-400/80 text-center">
-              {recordingError}
-            </p>
+          <div className="flex items-center gap-2 mb-1.5">
+            <p className="text-xs text-red-400/80 flex-1">{recordingError}</p>
             {retryBlob && (
               <button
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all active:scale-95"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all active:scale-95 shrink-0"
                 style={{ background: userColor + "20", color: userColor }}
                 onClick={() => handleTranscribe(retryBlob)}
               >
-                <RotateCcw size={11} /> Retry
+                <RotateCcw size={10} /> Retry
               </button>
             )}
           </div>
@@ -1172,12 +1146,13 @@ export default function MainChat() {
           </div>
         )}
 
+        {/* Input row: [text input] [mic] [send] */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             sendMessage(inputText);
           }}
-          className="w-full flex gap-2"
+          className="w-full flex gap-2 items-center"
         >
           <input
             value={inputText}
@@ -1186,9 +1161,38 @@ export default function MainChat() {
             className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
             data-testid="input-text-command"
           />
+
+          {/* Inline mic button */}
+          <button
+            type="button"
+            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+            style={{
+              background: isRecording
+                ? "#ef444422"
+                : isTranscribing
+                  ? userColor + "18"
+                  : "rgba(255,255,255,0.06)",
+              border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? userColor + "50" : "rgba(255,255,255,0.1)"}`,
+              opacity: isTranscribing ? 0.5 : 1,
+              cursor: isTranscribing ? "not-allowed" : "pointer",
+            }}
+            onPointerDown={handleVoiceHoldStart}
+            onPointerUp={handleVoiceHoldEnd}
+            onPointerLeave={handleVoiceHoldEnd}
+            data-testid="button-voice"
+          >
+            {isTranscribing ? (
+              <Loader2 size={16} className="animate-spin" style={{ color: userColor }} />
+            ) : isRecording ? (
+              <MicOff size={16} style={{ color: "#ef4444" }} />
+            ) : (
+              <Mic size={16} style={{ color: "rgba(255,255,255,0.45)" }} />
+            )}
+          </button>
+
           <button
             type="submit"
-            className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+            className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
             style={{ background: userColor, color: "#111111" }}
             data-testid="button-send"
           >
