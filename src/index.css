@@ -74,8 +74,8 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  /* Background: #2a2a2a */
-  --background: 0 0% 16%;
+  /* Background: #000000 */
+  --background: 0 0% 0%;
   /* Foreground: white */
   --foreground: 0 0% 100%;
   /* Border: subtle dark line */
@@ -189,7 +189,7 @@
     height: 100%;
     overflow: hidden;
     position: relative;
-    background: #2a2a2a;
+    background: #000000;
     /* Subtle border on very wide screens so the app edge is visible */
     box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 0 60px rgba(0,0,0,0.6);
   }

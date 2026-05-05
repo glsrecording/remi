@@ -824,7 +824,7 @@ export default function MainChat() {
   return (
     <div
       className="flex flex-col h-full w-full select-none"
-      style={{ background: "#232323" }}
+      style={{ background: "#000000" }}
     >
       {/* Header */}
       <div
