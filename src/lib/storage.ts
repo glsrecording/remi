@@ -46,6 +46,7 @@ export interface ChatMessage {
   role: "user" | "ai";
   text: string;
   timestamp: string;
+  isVoice?: boolean;
 }
 
 /** Parse "mix note for [song] — [note body]" from a user message. Returns null if not a mix-note command. */

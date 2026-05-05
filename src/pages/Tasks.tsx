@@ -364,7 +364,7 @@ function BucketSection({
       )}
 
       {open && tasks.length > 0 && (
-        <div className="space-y-1.5 pl-1 mr-10">
+        <div className="space-y-1.5 mx-4">
           {tasks.map((task) => (
             <SwipeableCard
               key={task.id}

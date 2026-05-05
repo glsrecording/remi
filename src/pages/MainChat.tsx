@@ -532,7 +532,7 @@ export default function MainChat() {
   }, []);
 
   const sendMessage = useCallback(
-    (text: string) => {
+    (text: string, isVoice = false) => {
       if (!text.trim()) return;
       setSuggestion(null);
       setDismissedTrigger(null);
@@ -545,6 +545,7 @@ export default function MainChat() {
         role: "user",
         text: text.trim(),
         timestamp: now,
+        ...(isVoice && { isVoice: true }),
       };
       setMessages((prev) => [...prev, userMsg]);
       setInputText("");
@@ -753,7 +754,7 @@ export default function MainChat() {
         const transcript = await transcribeAudio(blob);
         if (transcript) {
           setInputText(transcript);
-          sendMessage(transcript);
+          sendMessage(transcript, true);
         } else setRecordingError("Nothing captured — try again.");
       } catch {
         setRecordingError("Transcription failed — check connection.");
@@ -1039,7 +1040,7 @@ export default function MainChat() {
               style={
                 msg.role === "user"
                   ? {
-                      ...userBubbleStyles(userColor, bubbleStyle),
+                      ...userBubbleStyles(userColor, msg.isVoice ? "outline" : bubbleStyle),
                       borderRadius: "1rem 1rem 0.25rem 1rem",
                     }
                   : {
