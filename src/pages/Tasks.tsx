@@ -144,6 +144,8 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
   const offsetRef      = useRef({ x: 0, y: 0 });
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitColorRef = useRef<string>("#22c55e");
+  // "undecided" until first 8px of movement reveals intent; "scroll" aborts swipe handler
+  const directionRef   = useRef<"undecided" | "swipe" | "scroll">("undecided");
 
   const magnitude   = Math.sqrt(offset.x ** 2 + offset.y ** 2);
   const progress    = Math.min(1, magnitude / COMMIT_THRESHOLD);
@@ -159,20 +161,31 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
     setLongPressing(false);
   }
 
+  function resetDrag() {
+    dragging.current = false;
+    directionRef.current = "undecided";
+    offsetRef.current = { x: 0, y: 0 };
+    setOffset({ x: 0, y: 0 });
+    startPos.current = null;
+  }
+
   function handlePointerDown(e: React.PointerEvent) {
     if (e.button !== 0 && e.pointerType === "mouse") return;
     startPos.current = { x: e.clientX, y: e.clientY };
     dragging.current = true;
+    directionRef.current = "undecided";
     offsetRef.current = { x: 0, y: 0 };
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // Defer setPointerCapture until direction is confirmed as a horizontal swipe
     e.stopPropagation();
 
     // Start long press timer
     longPressTimer.current = setTimeout(() => {
       longPressTimer.current = null;
-      // Only fire if no significant movement
+      // Only fire if drag is still active and no significant movement
+      if (!dragging.current) return;
       if (Math.sqrt(offsetRef.current.x ** 2 + offsetRef.current.y ** 2) < 8) {
         dragging.current = false;
+        directionRef.current = "undecided";
         commitColorRef.current = BUCKET_META["someday"].color;
         setCommitting(true);
         setTimeout(() => {
@@ -187,27 +200,43 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
     if (!dragging.current || !startPos.current) return;
     const nx = e.clientX - startPos.current.x;
     const ny = e.clientY - startPos.current.y;
+    const mag = Math.sqrt(nx ** 2 + ny ** 2);
+
+    // Cancel long press on any significant movement (same threshold as direction lock)
+    if (mag >= 8) cancelLongPress();
+
+    // Lock direction on first meaningful movement
+    if (directionRef.current === "undecided" && mag >= 8) {
+      if (Math.abs(ny) > Math.abs(nx)) {
+        // Vertical dominant → treat as scroll, hand control back to browser
+        directionRef.current = "scroll";
+        resetDrag();
+        return;
+      }
+      // Horizontal dominant → commit to swipe, capture pointer
+      directionRef.current = "swipe";
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    }
+
+    if (directionRef.current !== "swipe") return;
+
     offsetRef.current = { x: nx, y: ny };
     setOffset({ x: nx, y: ny });
-
-    // Cancel long press if moved more than 8px
-    if (Math.sqrt(nx ** 2 + ny ** 2) > 8) {
-      cancelLongPress();
-    }
   }
 
   function handlePointerUp() {
     if (!dragging.current) return;
     cancelLongPress();
-    dragging.current = false;
 
     const { x, y } = offsetRef.current;
     const mag = Math.sqrt(x ** 2 + y ** 2);
 
-    if (mag >= COMMIT_THRESHOLD) {
+    if (directionRef.current === "swipe" && mag >= COMMIT_THRESHOLD) {
       const swipe = getDominantSwipe(x, y);
       if (swipe.action !== sourceBucket) {
         commitColorRef.current = swipe.color;
+        dragging.current = false;
+        directionRef.current = "undecided";
         setCommitting(true);
         setTimeout(() => {
           setCommitted(true);
@@ -217,9 +246,7 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
       }
     }
 
-    offsetRef.current = { x: 0, y: 0 };
-    setOffset({ x: 0, y: 0 });
-    startPos.current = null;
+    resetDrag();
   }
 
   if (committed) return null;
@@ -281,7 +308,7 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
           cursor: magnitude > 4 ? "grabbing" : "default",
-          touchAction: "none",
+          touchAction: "pan-y",
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
