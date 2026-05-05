@@ -187,8 +187,9 @@ function userBubbleStyles(color: string, style: UserBubbleStyle) {
 
 function remiBubbleStyles(color: string) {
   return {
-    background: "#333333",
-    borderLeft: `2px solid ${color}66`,
+    background: "#111111",
+    border: "1px solid rgba(255,255,255,0.07)",
+    borderLeft: `2px solid ${color}55`,
     color: "rgba(255,255,255,0.9)" as const,
   };
 }
@@ -1040,7 +1041,7 @@ export default function MainChat() {
               style={
                 msg.role === "user"
                   ? {
-                      ...userBubbleStyles(userColor, msg.isVoice ? "outline" : bubbleStyle),
+                      ...userBubbleStyles(userColor, bubbleStyle),
                       borderRadius: "1rem 1rem 0.25rem 1rem",
                     }
                   : {
