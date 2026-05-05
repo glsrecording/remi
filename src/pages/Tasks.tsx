@@ -394,14 +394,15 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
     if (mag >= 8) cancelLongPress();
 
     // Lock direction on first meaningful movement
-    // Require horizontal to be at least 2× vertical to commit to a swipe
+    // One axis must be at least 1.5× the other to commit to a swipe
     if (directionRef.current === "undecided" && mag >= 8) {
-      if (Math.abs(nx) >= 2 * Math.abs(ny)) {
-        // Horizontal dominant (2:1 ratio) → commit to swipe, capture pointer
+      const ax = Math.abs(nx), ay = Math.abs(ny);
+      if (ax >= 1.5 * ay || ay >= 1.5 * ax) {
+        // One axis clearly dominant → commit to swipe, capture pointer
         directionRef.current = "swipe";
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
       } else {
-        // Too diagonal or vertical → treat as scroll
+        // Too diagonal → treat as scroll
         directionRef.current = "scroll";
         resetDrag();
         return;
@@ -410,9 +411,8 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
 
     if (directionRef.current !== "swipe") return;
 
-    // Lock card movement to X axis — no vertical drift
-    offsetRef.current = { x: nx, y: 0 };
-    setOffset({ x: nx, y: 0 });
+    offsetRef.current = { x: nx, y: ny };
+    setOffset({ x: nx, y: ny });
   }
 
   function handlePointerUp() {
@@ -499,7 +499,7 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
           cursor: magnitude > 4 ? "grabbing" : "default",
-          touchAction: "pan-y",
+          touchAction: "none",
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -687,7 +687,7 @@ export default function Tasks() {
   const totalCount = Object.values(buckets).reduce((n, a) => n + a.length, 0);
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#232323" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "#000000" }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
