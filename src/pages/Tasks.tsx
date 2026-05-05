@@ -174,7 +174,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const inputRef        = useRef<HTMLInputElement>(null);
+  const inputRef        = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef  = useRef<BlobPart[]>([]);
   const streamRef       = useRef<MediaStream | null>(null);
@@ -182,6 +182,13 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  }, [text]);
 
   function handleSubmit() {
     const title = text.trim();
@@ -191,7 +198,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") handleSubmit();
+    if (e.key === "Enter") { e.preventDefault(); handleSubmit(); }
     if (e.key === "Escape") onCancel();
   }
 
@@ -243,7 +250,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
 
   return (
     <div
-      className="flex items-center gap-1.5 px-3 py-2 rounded-xl"
+      className="flex items-end gap-1.5 px-3 py-2 rounded-xl"
       style={{
         background: "#333333",
         borderLeft: `3px solid ${color}70`,
@@ -252,14 +259,15 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
         borderBottom: "1px solid rgba(255,255,255,0.05)",
       }}
     >
-      <input
+      <textarea
         ref={inputRef}
-        type="text"
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="New task…"
-        className="flex-1 bg-transparent text-base text-white/85 outline-none min-w-0 placeholder:text-white/25"
+        rows={1}
+        className="flex-1 bg-transparent text-lg text-white/85 outline-none min-w-0 placeholder:text-white/25 resize-none overflow-hidden"
+        style={{ lineHeight: "1.4" }}
       />
 
       {/* Mic */}
@@ -498,7 +506,7 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        <p className="text-base text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words">{task.title}</p>
+        <p className="text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words">{task.title}</p>
       </div>
     </div>
   );
