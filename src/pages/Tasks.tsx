@@ -269,7 +269,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
           background: isRecording ? "#ef444420" : "transparent",
           border: `1px solid ${isRecording ? "#ef4444" : isTranscribing ? color + "50" : "rgba(255,255,255,0.1)"}`,
         }}
-        onPointerDown={handleMicDown}
+        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); handleMicDown(); }}
         onPointerUp={handleMicUp}
         onPointerLeave={handleMicUp}
       >
@@ -627,17 +627,26 @@ export default function Tasks() {
     }
   }, []);
 
+  // Background refresh — no spinner, no error state change
+  const silentLoad = useCallback(async () => {
+    try {
+      setBuckets(await fetchTasks());
+    } catch {
+      // silent — leave existing state intact
+    }
+  }, []);
+
   useEffect(() => { load(); }, [load]);
 
-  // Optimistically add task, then refresh after 2s to pick up the real page_id
+  // Optimistically add task, then silently refresh after 2s to get the real page_id
   const handleTaskAdded = useCallback((title: string, bucket: Bucket) => {
     const tempTask: Task = { id: `temp-${Date.now()}`, title, url: "" };
     setBuckets((prev) => ({
       ...prev,
       [bucket]: [tempTask, ...prev[bucket]],
     }));
-    setTimeout(load, 2000);
-  }, [load]);
+    setTimeout(silentLoad, 2000);
+  }, [silentLoad]);
 
   const handleMoved = useCallback((task: Task, fromBucket: Bucket, action: SwipeAction) => {
     applyTaskAction(task.id, action);
