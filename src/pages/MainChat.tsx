@@ -30,6 +30,8 @@ import { findBestMatch, CATEGORY_COLORS, COMMANDS } from "@/lib/commands";
 import type { Command } from "@/lib/commands";
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
+const JARVIS_URL = "https://jarvis.joshhollandgls.com";
+const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
 const ACCENT_COLORS = [
   { name: "green", value: "#22c55e" },
@@ -480,6 +482,17 @@ export default function MainChat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+  // On mount: pull shared history from server; fall back to localStorage silently
+  useEffect(() => {
+    fetch(`${JARVIS_URL}/remi/history`, {
+      headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.messages?.length) setMessages(data.messages as ChatMessage[]);
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (inputText.length < 3) {
       setSuggestion(null);
@@ -678,11 +691,10 @@ export default function MainChat() {
         } else {
           const match = findBestMatch(text.trim(), 0.3);
           if (match) recordRecentCommand(match.command.trigger);
-          fetch("https://jarvis.joshhollandgls.com/remi", {
+          fetch(`${JARVIS_URL}/remi`, {
             method: "POST",
             headers: {
-              Authorization:
-                `Bearer ${import.meta.env.VITE_REMI_API_KEY}`,
+              Authorization: `Bearer ${REMI_API_KEY}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ message: text.trim(), user_id: "remi" }),
