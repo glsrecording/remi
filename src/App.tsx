@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import PinLock, { isPinUnlocked } from "@/components/PinLock";
 import MainChat from "@/pages/MainChat";
-import BrainDump from "@/pages/BrainDump";
+import Tasks from "@/pages/Tasks";
 import Commands from "@/pages/Commands";
 import MixNotes from "@/pages/MixNotes";
 import TimeTrack from "@/pages/TimeTrack";
@@ -24,7 +24,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={MainChat} />
-      <Route path="/brain-dump" component={BrainDump} />
+      <Route path="/brain-dump" component={Tasks} />
       <Route path="/commands" component={Commands} />
       <Route path="/mix-notes" component={MixNotes} />
       <Route path="/time-track" component={TimeTrack} />
