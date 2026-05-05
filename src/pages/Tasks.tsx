@@ -259,7 +259,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="New task…"
-        className="flex-1 bg-transparent text-sm text-white/85 outline-none min-w-0 placeholder:text-white/25"
+        className="flex-1 bg-transparent text-base text-white/85 outline-none min-w-0 placeholder:text-white/25"
       />
 
       {/* Mic */}
@@ -386,22 +386,25 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
     if (mag >= 8) cancelLongPress();
 
     // Lock direction on first meaningful movement
+    // Require horizontal to be at least 2× vertical to commit to a swipe
     if (directionRef.current === "undecided" && mag >= 8) {
-      if (Math.abs(ny) > Math.abs(nx)) {
-        // Vertical dominant → treat as scroll, hand control back to browser
+      if (Math.abs(nx) >= 2 * Math.abs(ny)) {
+        // Horizontal dominant (2:1 ratio) → commit to swipe, capture pointer
+        directionRef.current = "swipe";
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } else {
+        // Too diagonal or vertical → treat as scroll
         directionRef.current = "scroll";
         resetDrag();
         return;
       }
-      // Horizontal dominant → commit to swipe, capture pointer
-      directionRef.current = "swipe";
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     }
 
     if (directionRef.current !== "swipe") return;
 
-    offsetRef.current = { x: nx, y: ny };
-    setOffset({ x: nx, y: ny });
+    // Lock card movement to X axis — no vertical drift
+    offsetRef.current = { x: nx, y: 0 };
+    setOffset({ x: nx, y: 0 });
   }
 
   function handlePointerUp() {
@@ -477,7 +480,7 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
 
       {/* Sliding card */}
       <div
-        className="relative flex items-center gap-3 px-4 py-3.5 rounded-xl select-none"
+        className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
         style={{
           background: committing ? `${commitColor}22` : "#333333",
           borderLeft: `3px solid ${BUCKET_META[sourceBucket].color}70`,
@@ -495,7 +498,7 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        <p className="text-sm text-white/85 leading-snug flex-1 min-w-0">{task.title}</p>
+        <p className="text-base text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words">{task.title}</p>
       </div>
     </div>
   );
@@ -614,12 +617,15 @@ export default function Tasks() {
     today: [], tonight: [], tomorrow: [], someday: [],
   });
   const [undoState, setUndoState] = useState<UndoState | null>(null);
+  // True after first successful fetch — suppresses the full-page spinner on subsequent load() calls
+  const initialLoaded = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       setBuckets(await fetchTasks());
+      initialLoaded.current = true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load tasks");
     } finally {
@@ -727,7 +733,7 @@ export default function Tasks() {
         className="flex-1 overflow-y-auto px-4 py-5 space-y-5"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}
       >
-        {loading && (
+        {loading && !initialLoaded.current && (
           <div className="flex items-center justify-center gap-2 py-12">
             <Loader2 size={18} className="animate-spin" style={{ color: ACCENT }} />
             <span className="text-sm text-white/40">Loading tasks…</span>
@@ -747,7 +753,7 @@ export default function Tasks() {
           </div>
         )}
 
-        {!loading && !error && (
+        {(!loading || initialLoaded.current) && !error && (
           <div className="space-y-6">
             {(["today", "tonight", "tomorrow", "someday"] as Bucket[]).map((b) => (
               <BucketSection
