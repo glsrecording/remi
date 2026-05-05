@@ -185,7 +185,13 @@ function userBubbleStyles(color: string, style: UserBubbleStyle) {
   };
 }
 
-function remiBubbleStyles(color: string) {
+function remiBubbleStyles(color: string, style: UserBubbleStyle) {
+  if (style === "outline")
+    return {
+      background: "transparent",
+      border: `1px solid ${color}55`,
+      color: "rgba(255,255,255,0.9)" as const,
+    };
   return {
     background: "#111111",
     border: "1px solid rgba(255,255,255,0.07)",
@@ -1045,7 +1051,7 @@ export default function MainChat() {
                       borderRadius: "1rem 1rem 0.25rem 1rem",
                     }
                   : {
-                      ...remiBubbleStyles(remiColor),
+                      ...remiBubbleStyles(remiColor, bubbleStyle),
                       borderRadius: "1rem 1rem 1rem 0.25rem",
                     }
               }
