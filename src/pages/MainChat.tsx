@@ -188,14 +188,13 @@ function userBubbleStyles(color: string, style: UserBubbleStyle) {
 function remiBubbleStyles(color: string, style: UserBubbleStyle) {
   if (style === "outline")
     return {
-      background: "transparent",
+      background: "#000000",
       border: `1px solid ${color}55`,
       color: "rgba(255,255,255,0.9)" as const,
     };
   return {
     background: "#111111",
     border: "1px solid rgba(255,255,255,0.07)",
-    borderLeft: `2px solid ${color}55`,
     color: "rgba(255,255,255,0.9)" as const,
   };
 }
@@ -1043,7 +1042,7 @@ export default function MainChat() {
             data-testid={`message-${msg.role}-${msg.id}`}
           >
             <div
-              className="max-w-[82%] px-3.5 py-2.5 text-sm leading-relaxed"
+              className="max-w-[75%] px-3.5 py-2.5 text-sm leading-relaxed"
               style={
                 msg.role === "user"
                   ? {
