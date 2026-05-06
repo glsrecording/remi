@@ -32,3 +32,6 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Local pnpm store (used on Hostinger to bypass corrupted shared store)
+.pnpm-store/
