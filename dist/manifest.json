@@ -1,0 +1,54 @@
+{
+  "id": "/",
+  "name": "Remi",
+  "short_name": "Remi",
+  "description": "Voice AI assistant for music producers",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "orientation": "portrait-primary",
+  "lang": "en-US",
+  "categories": ["music", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Brain Dump",
+      "url": "/brain-dump",
+      "description": "Capture a quick thought"
+    },
+    {
+      "name": "Wrap Up",
+      "url": "/wrap-up",
+      "description": "Log your session notes"
+    }
+  ],
+  "prefer_related_applications": false
+}
