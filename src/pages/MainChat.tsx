@@ -8,6 +8,8 @@ import {
   X,
   Loader2,
   RotateCcw,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -453,6 +455,7 @@ export default function MainChat() {
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const [zoomed, setZoomed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [openPicker, setOpenPicker] = useState<"user" | "remi" | null>(null);
   const [systemOnline] = useState(true);
@@ -828,6 +831,43 @@ export default function MainChat() {
 
   return (
     <div
+      style={{
+        width: "100vw",
+        height: "100dvh",
+        overflow: zoomed ? "auto" : "hidden",
+        position: "relative",
+        background: "#000000",
+      }}
+    >
+      {/* Spacer forces the outer container to be scrollable when zoomed */}
+      {zoomed && (
+        <div
+          style={{
+            position: "absolute",
+            width: "200vw",
+            height: "200dvh",
+            top: 0,
+            left: 0,
+            pointerEvents: "none",
+            zIndex: 0,
+          }}
+        />
+      )}
+      <div
+        style={
+          zoomed
+            ? {
+                transform: "scale(2)",
+                transformOrigin: "top left",
+                width: "100vw",
+                height: "100dvh",
+                position: "relative",
+                zIndex: 1,
+              }
+            : { width: "100%", height: "100%", position: "relative", zIndex: 1 }
+        }
+      >
+    <div
       className="flex flex-col h-full w-full select-none"
       style={{ background: "#000000" }}
     >
@@ -840,7 +880,8 @@ export default function MainChat() {
           paddingBottom: "14px",
         }}
       >
-        <div className="relative -ml-1">
+        <div className="flex items-center -ml-1">
+        <div className="relative">
           <button
             className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
             onClick={() => {
@@ -871,6 +912,14 @@ export default function MainChat() {
               </span>
             </div>
           )}
+        </div>
+          <button
+            className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
+            onClick={() => setZoomed((z) => !z)}
+            data-testid="button-zoom-toggle"
+          >
+            {zoomed ? <ZoomOut size={20} /> : <ZoomIn size={20} />}
+          </button>
         </div>
         <span
           className="text-lg font-bold tracking-tighter"
@@ -1239,6 +1288,8 @@ export default function MainChat() {
           accentColor={remiColor}
         />
       )}
+    </div>
+      </div>
     </div>
   );
 }
