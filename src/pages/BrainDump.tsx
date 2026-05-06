@@ -17,21 +17,19 @@ import UndoBar from "@/components/UndoBar";
 
 const COMMIT_THRESHOLD = 80;
 
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
+const JARVIS_URL = "https://jarvis.joshhollandgls.com";
+const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
   const formData = new FormData();
   formData.append("file", audioBlob, "recording.webm");
   formData.append("model", "whisper-1");
   formData.append("language", "en");
-  const response = await fetch(
-    "https://api.openai.com/v1/audio/transcriptions",
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
-      body: formData,
-    },
-  );
+  const response = await fetch(`${JARVIS_URL}/transcribe`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+    body: formData,
+  });
   if (!response.ok) throw new Error(`Whisper error ${response.status}`);
   const data = await response.json();
   return (data.text ?? "").trim();

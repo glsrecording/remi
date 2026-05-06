@@ -7,7 +7,6 @@ import {
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY as string;
 const ACCENT = "#f59e0b";
 const COMMIT_THRESHOLD = 65;
 const LONG_PRESS_MS = 500;
@@ -48,9 +47,9 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
   formData.append("file", audioBlob, "recording.webm");
   formData.append("model", "whisper-1");
   formData.append("language", "en");
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+  const response = await fetch(`${JARVIS_URL}/transcribe`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+    headers: { Authorization: `Bearer ${REMI_API_KEY}` },
     body: formData,
   });
   if (!response.ok) throw new Error(`Whisper error ${response.status}`);
