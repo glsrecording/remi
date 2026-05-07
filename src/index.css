@@ -315,7 +315,8 @@
 .prose-dark li { margin: 0.15em 0; }
 .prose-dark strong { color: var(--remi-accent, #f59e0b); }
 .prose-dark em { color: rgba(255,255,255,0.75); }
-.prose-dark code { 
+.prose-dark table { display: block; overflow-x: auto; max-width: 100%; }
+.prose-dark code {
   background: color-mix(in srgb, var(--remi-accent, #f59e0b) 15%, transparent);
   padding: 0.1em 0.3em; 
   border-radius: 3px; 

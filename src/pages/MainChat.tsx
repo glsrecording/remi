@@ -828,7 +828,7 @@ export default function MainChat() {
   return (
     <div
       style={{
-        width: "100vw",
+        width: zoomed ? "100vw" : "100%",
         height: "100dvh",
         overflow: zoomed ? "auto" : "hidden",
         position: "relative",
@@ -1093,10 +1093,14 @@ export default function MainChat() {
                   ? {
                       ...userBubbleStyles(userColor, bubbleStyle),
                       borderRadius: "1rem 1rem 0.25rem 1rem",
+                      overflowWrap: "break-word",
+                      wordBreak: "break-word",
                     }
                   : {
                       ...remiBubbleStyles(remiColor, bubbleStyle),
                       borderRadius: "1rem 1rem 1rem 0.25rem",
+                      overflowWrap: "break-word",
+                      wordBreak: "break-word",
                     }
               }
             >
