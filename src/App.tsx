@@ -16,6 +16,7 @@ import MessageToDad from "@/pages/MessageToDad";
 import SomedayReview from "@/pages/SomedayReview";
 import SessionHistory from "@/pages/SessionHistory";
 import DataExport from "@/pages/DataExport";
+import Triage from "@/pages/Triage";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/someday-review" component={SomedayReview} />
       <Route path="/session-history" component={SessionHistory} />
       <Route path="/data-export" component={DataExport} />
+      <Route path="/triage" component={Triage} />
       <Route component={NotFound} />
     </Switch>
   );
