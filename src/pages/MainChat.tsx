@@ -453,7 +453,23 @@ export default function MainChat() {
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const [zoomed, setZoomed] = useState(false);
+  // Pinch-to-zoom: 1.0–2.0, persisted in localStorage
+  const [zoomScale, setZoomScaleState] = useState<number>(() => {
+    const s = parseFloat(localStorage.getItem("remi_zoom") ?? "1");
+    return isNaN(s) ? 1.0 : Math.min(2.0, Math.max(1.0, s));
+  });
+  const zoomScaleRef = useRef(zoomScale);
+  const contentRef   = useRef<HTMLDivElement>(null);
+  const pinchDist0   = useRef<number | null>(null);
+  const pinchScale0  = useRef(1.0);
+
+  function setZoomScale(n: number) {
+    const s = Math.min(2.0, Math.max(1.0, n));
+    zoomScaleRef.current = s;
+    setZoomScaleState(s);
+    localStorage.setItem("remi_zoom", String(s));
+  }
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [openPicker, setOpenPicker] = useState<"user" | "remi" | null>(null);
   const [systemOnline] = useState(true);
@@ -517,6 +533,52 @@ export default function MainChat() {
     }, 280);
     return () => clearTimeout(timer);
   }, [inputText, dismissedTrigger]);
+
+  // Sync ref when state changes (needed by pinch event listeners in effect below)
+  useEffect(() => { zoomScaleRef.current = zoomScale; }, [zoomScale]);
+
+  // Attach pinch-to-zoom handlers directly (passive:false needed for preventDefault)
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    function dist(t: TouchList): number {
+      return Math.sqrt(
+        (t[0].clientX - t[1].clientX) ** 2 + (t[0].clientY - t[1].clientY) ** 2,
+      );
+    }
+    function onStart(e: TouchEvent) {
+      if (e.touches.length === 2) {
+        pinchDist0.current  = dist(e.touches);
+        pinchScale0.current = zoomScaleRef.current;
+      }
+    }
+    function onMove(e: TouchEvent) {
+      if (e.touches.length !== 2 || pinchDist0.current === null) return;
+      e.preventDefault(); // stop browser native zoom
+      const ratio = dist(e.touches) / pinchDist0.current;
+      const next  = Math.min(2.0, Math.max(1.0, pinchScale0.current * ratio));
+      zoomScaleRef.current = next;
+      setZoomScaleState(next);
+    }
+    function onEnd() {
+      if (pinchDist0.current !== null) {
+        localStorage.setItem("remi_zoom", String(zoomScaleRef.current));
+        pinchDist0.current = null;
+      }
+    }
+
+    el.addEventListener("touchstart",  onStart, { passive: true  });
+    el.addEventListener("touchmove",   onMove,  { passive: false });
+    el.addEventListener("touchend",    onEnd,   { passive: true  });
+    el.addEventListener("touchcancel", onEnd,   { passive: true  });
+    return () => {
+      el.removeEventListener("touchstart",  onStart);
+      el.removeEventListener("touchmove",   onMove);
+      el.removeEventListener("touchend",    onEnd);
+      el.removeEventListener("touchcancel", onEnd);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const recordRecentCommand = useCallback(
     (trigger: string) => {
@@ -834,43 +896,8 @@ export default function MainChat() {
       : "Hold to record";
 
   return (
-    <div
-      style={{
-        width: zoomed ? "100vw" : "100%",
-        height: "100dvh",
-        overflow: zoomed ? "auto" : "hidden",
-        position: "relative",
-        background: "#000000",
-      }}
-    >
-      {/* Spacer forces the outer container to be scrollable when zoomed */}
-      {zoomed && (
-        <div
-          style={{
-            position: "absolute",
-            width: "200vw",
-            height: "200dvh",
-            top: 0,
-            left: 0,
-            pointerEvents: "none",
-            zIndex: 0,
-          }}
-        />
-      )}
-      <div
-        style={
-          zoomed
-            ? {
-                transform: "scale(2)",
-                transformOrigin: "top left",
-                width: "100vw",
-                height: "100dvh",
-                position: "relative",
-                zIndex: 1,
-              }
-            : { width: "100%", height: "100%", position: "relative", zIndex: 1 }
-        }
-      >
+    <div style={{ width: "100%", height: "100dvh", overflow: "hidden", position: "relative", background: "#000000" }}>
+      <div style={{ width: "100%", height: "100%", position: "relative" }}>
     <div
       className="flex flex-col h-full w-full select-none"
       style={{ background: "#000000" }}
@@ -919,10 +946,11 @@ export default function MainChat() {
         </div>
           <button
             className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
-            onClick={() => setZoomed((z) => !z)}
+            onClick={() => setZoomScale(zoomScale > 1.0 ? 1.0 : 1.5)}
             data-testid="button-zoom-toggle"
+            title={zoomScale > 1.0 ? "Reset zoom" : "Zoom in"}
           >
-            {zoomed ? <ZoomOut size={20} /> : <ZoomIn size={20} />}
+            {zoomScale > 1.0 ? <ZoomOut size={20} /> : <ZoomIn size={20} />}
           </button>
         </div>
         <span
@@ -1080,14 +1108,25 @@ export default function MainChat() {
         </div>
       )}
 
+      {/* Pinch-to-zoom target — nav above is NOT inside this ref */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
+        ref={contentRef}
+        className="flex-1 overflow-y-auto"
         data-testid="chat-history"
         onClick={() => {
           setOpenPicker(null);
           setStatusOpen(false);
         }}
       >
+        <div
+          style={{
+            transform: `scale(${zoomScale})`,
+            transformOrigin: "top left",
+            width: `${100 / zoomScale}%`,
+            padding: "16px",
+          }}
+        >
+        <div className="space-y-3">
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -1128,6 +1167,8 @@ export default function MainChat() {
           </div>
         ))}
         <div ref={messagesEndRef} />
+        </div>{/* space-y-3 */}
+        </div>{/* scale wrapper */}
       </div>
 
       <div
