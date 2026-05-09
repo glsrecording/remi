@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import {
   Mic,
   MicOff,
@@ -405,6 +406,7 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MainChat() {
+  const [, navigate] = useLocation();
   const [messages, setMessages] = useLocalStorage<ChatMessage[]>(
     STORAGE_KEYS.CHAT_MESSAGES,
     SEED_MESSAGES,
@@ -707,6 +709,11 @@ export default function MainChat() {
           })
             .then((r) => r.json())
             .then((data) => {
+              if (data.type === "triage_redirect" && Array.isArray(data.items)) {
+                sessionStorage.setItem("triage_preload", JSON.stringify(data.items));
+                navigate("/triage");
+                return;
+              }
               setMessages((prev) => [
                 ...prev,
                 {
@@ -746,6 +753,7 @@ export default function MainChat() {
       setSessionLog,
       setOneThing,
       recordRecentCommand,
+      navigate,
     ],
   );
 

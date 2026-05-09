@@ -547,6 +547,21 @@ export default function Triage() {
   const [counts, setCounts]         = useState<Counts>({ today: 0, tomorrow: 0, someday: 0, memory: 0 });
   const [decomposing, setDecomposing] = useState(false);
 
+  // On mount: load pre-decomposed items from a Remi brain dump redirect
+  useEffect(() => {
+    const preload = sessionStorage.getItem("triage_preload");
+    if (!preload) return;
+    sessionStorage.removeItem("triage_preload");
+    try {
+      const items: string[] = JSON.parse(preload);
+      if (Array.isArray(items) && items.length > 0) {
+        setPass1Queue(items.filter(Boolean).map((t) => ({ id: uid(), text: t })));
+      }
+    } catch {
+      // malformed preload — ignore
+    }
+  }, []);
+
   // Transition: pass 1 complete → pass 2 or done
   useEffect(() => {
     if (phase !== "capture") return;
