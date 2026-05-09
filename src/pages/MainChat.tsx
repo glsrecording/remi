@@ -554,8 +554,8 @@ export default function MainChat() {
       }
     }
     function onMove(e: TouchEvent) {
+      if (e.touches.length === 2) e.preventDefault(); // prevent scroll on any 2-finger touch
       if (e.touches.length !== 2 || pinchDist0.current === null) return;
-      e.preventDefault(); // stop browser native zoom
       const ratio = dist(e.touches) / pinchDist0.current;
       const next  = Math.min(2.0, Math.max(1.0, pinchScale0.current * ratio));
       zoomScaleRef.current = next;
@@ -1121,8 +1121,9 @@ export default function MainChat() {
         <div
           style={{
             transform: `scale(${zoomScale})`,
-            transformOrigin: "top left",
+            transformOrigin: "top center",
             width: `${100 / zoomScale}%`,
+            margin: "0 auto",
             padding: "16px",
           }}
         >
