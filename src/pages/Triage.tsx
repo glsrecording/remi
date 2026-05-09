@@ -1,38 +1,45 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, Mic, MicOff, Loader2, Check } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, Loader2, Check, X } from "lucide-react";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 const COMMIT_THRESHOLD = 65; // identical to Tasks.tsx
+const LONG_PRESS_MS    = 500; // identical to Tasks.tsx
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = "capture" | "pass2" | "done";
-type Pass1Action = "today" | "tomorrow" | "someday" | "memory";
-type Pass2Action = "memory" | "insight";
-interface TriageItem { id: string; text: string }
-interface Counts { today: number; tomorrow: number; someday: number; memory: number }
+type Phase       = "capture" | "pass2" | "done";
+type Pass1Action = "today" | "tonight" | "tomorrow" | "memory" | "someday";
+type Pass2Action = "insight" | "memory" | "gratitude" | "bio";
 
-// ── Swipe targets — directions and colors mirror Tasks.tsx exactly.
-//    Right (→) was "Tonight" — relabeled "Memory / Insight" per spec.
-//    Left  (←) was "Done"    — relabeled "Someday" for triage context.
+interface TriageItem { id: string; text: string }
+interface Counts {
+  today: number; tonight: number; tomorrow: number; someday: number;
+  insight: number; memory: number; gratitude: number; bio: number;
+}
+
+// ── Swipe targets ─────────────────────────────────────────────────────────────
+// Pass 1 mirrors Tasks.tsx exactly: ↑Today ↓Tomorrow →Tonight ←Memory/Insight
+// Long press → Someday (same as Tasks.tsx).
 
 const P1_TARGETS = [
-  { action: "today"    as Pass1Action, label: "Today",            color: "#f59e0b", arrow: "↑" },
-  { action: "memory"   as Pass1Action, label: "Memory / Insight", color: "#c084fc", arrow: "→" },
-  { action: "tomorrow" as Pass1Action, label: "Tomorrow",         color: "#60a5fa", arrow: "↓" },
-  { action: "someday"  as Pass1Action, label: "Someday",          color: "#94a3b8", arrow: "←" },
+  { action: "today"   as Pass1Action, label: "Today",            color: "#f59e0b", arrow: "↑" },
+  { action: "tonight" as Pass1Action, label: "Tonight",          color: "#c084fc", arrow: "→" },
+  { action: "tomorrow"as Pass1Action, label: "Tomorrow",         color: "#60a5fa", arrow: "↓" },
+  { action: "memory"  as Pass1Action, label: "Memory / Insight", color: "#94a3b8", arrow: "←" },
 ];
 
 const P2_TARGETS = [
-  { action: "insight" as Pass2Action, label: "Key Insight", color: "#f59e0b", arrow: "→" },
-  { action: "memory"  as Pass2Action, label: "Memory",      color: "#60a5fa", arrow: "←" },
+  { action: "insight"   as Pass2Action, label: "Key Insight", color: "#f59e0b", arrow: "→" },
+  { action: "memory"    as Pass2Action, label: "Memory",      color: "#60a5fa", arrow: "←" },
+  { action: "gratitude" as Pass2Action, label: "Gratitude",   color: "#22c55e", arrow: "↑" },
+  { action: "bio"       as Pass2Action, label: "Bio Note",    color: "#fb923c", arrow: "↓" },
 ];
 
 // ── API helpers ──────────────────────────────────────────────────────────────
 
-function createTask(title: string, bucket: "today" | "tomorrow" | "someday"): void {
+function createTask(title: string, bucket: "today" | "tonight" | "tomorrow" | "someday"): void {
   fetch(`${JARVIS_URL}/tasks/create`, {
     method: "POST",
     headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
@@ -42,17 +49,20 @@ function createTask(title: string, bucket: "today" | "tomorrow" | "someday"): vo
     .catch((err) => console.error("[Triage] /tasks/create network error:", err));
 }
 
-// Routes through /remi NLP: "Memory: …" → memory_capture intent → Memory Bank DB.
-// "Key insight: …" → memory_capture with Insight category.
-// No dedicated visual-memory endpoint exists without touching telegram_bot.py.
 function saveMemory(text: string, type: Pass2Action): void {
-  const message = type === "memory" ? `Memory: ${text}` : `Key insight: ${text}`;
+  const prefixes: Record<Pass2Action, string> = {
+    insight:   "Key insight:",
+    memory:    "Memory:",
+    gratitude: "Gratitude:",
+    bio:       "Bio note:",
+  };
+  const message = `${prefixes[type]} ${text}`;
   fetch(`${JARVIS_URL}/remi`, {
     method: "POST",
     headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({ message, user_id: "triage" }),
   })
-    .then((r) => { if (!r.ok) console.error("[Triage] /remi memory save failed:", r.status, type, text); })
+    .then((r) => { if (!r.ok) console.error("[Triage] /remi save failed:", r.status, type, text); })
     .catch((err) => console.error("[Triage] /remi network error:", err));
 }
 
@@ -72,8 +82,6 @@ async function transcribeAudio(blob: Blob): Promise<string> {
 
 function uid(): string { return Math.random().toString(36).slice(2, 10); }
 
-// Splits raw input into individual card texts via Jarvis decompose.
-// Falls back to [text] on any error so the caller always gets a non-empty array.
 async function decomposeText(text: string): Promise<string[]> {
   try {
     const r = await fetch(`${JARVIS_URL}/triage/decompose`, {
@@ -95,13 +103,14 @@ async function decomposeText(text: string): Promise<string[]> {
 
 function getP1Dominant(x: number, y: number) {
   const ax = Math.abs(x), ay = Math.abs(y);
-  if (ax > ay) return x > 0 ? P1_TARGETS[1] : P1_TARGETS[3]; // right=memory, left=someday
-  return y < 0 ? P1_TARGETS[0] : P1_TARGETS[2];              // up=today,   down=tomorrow
+  if (ax > ay) return x > 0 ? P1_TARGETS[1] : P1_TARGETS[3]; // right=tonight, left=memory
+  return y < 0 ? P1_TARGETS[0] : P1_TARGETS[2];              // up=today,    down=tomorrow
 }
 
 function getP2Dominant(x: number, y: number) {
-  if (Math.abs(y) > Math.abs(x) * 0.8) return null; // too vertical — no commit in Pass 2
-  return x > 0 ? P2_TARGETS[0] : P2_TARGETS[1];     // right=insight, left=memory
+  const ax = Math.abs(x), ay = Math.abs(y);
+  if (ax > ay) return x > 0 ? P2_TARGETS[0] : P2_TARGETS[1]; // right=insight, left=memory
+  return y < 0 ? P2_TARGETS[2] : P2_TARGETS[3];              // up=gratitude, down=bio
 }
 
 // ── Input row — matches AddTaskCard from Tasks.tsx ───────────────────────────
@@ -110,9 +119,9 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
   const [text, setText] = useState("");
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const taRef    = useRef<HTMLTextAreaElement>(null);
-  const recRef   = useRef<MediaRecorder | null>(null);
-  const chunks   = useRef<BlobPart[]>([]);
+  const taRef     = useRef<HTMLTextAreaElement>(null);
+  const recRef    = useRef<MediaRecorder | null>(null);
+  const chunks    = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => { taRef.current?.focus(); }, []);
@@ -217,23 +226,197 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
   );
 }
 
-// ── Pass 1 card — 4-direction swipe, identical to Tasks.tsx SwipeableCard ────
+// ── Pass 1 card — 4-direction swipe + long press (Someday) + dismiss X ────────
+// Gesture map mirrors Tasks.tsx SwipeableCard exactly.
 
-interface P1CardProps { item: TriageItem; onSwiped: (item: TriageItem, action: Pass1Action) => void }
+interface P1CardProps {
+  item: TriageItem;
+  onSwiped: (item: TriageItem, action: Pass1Action) => void;
+  onDismissed: (item: TriageItem) => void;
+}
 
-function Pass1Card({ item, onSwiped }: P1CardProps) {
-  const [offset, setOffset]       = useState({ x: 0, y: 0 });
-  const [committing, setCommitting] = useState(false);
-  const [committed, setCommitted]   = useState(false);
-  const startPos      = useRef<{ x: number; y: number } | null>(null);
-  const dragging      = useRef(false);
-  const offsetRef     = useRef({ x: 0, y: 0 });
-  const dirRef        = useRef<"undecided" | "swipe" | "scroll">("undecided");
+function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
+  const [offset, setOffset]         = useState({ x: 0, y: 0 });
+  const [committing, setCommitting]   = useState(false);
+  const [committed, setCommitted]     = useState(false);
+  const [longPressing, setLongPressing] = useState(false);
+
+  const startPos       = useRef<{ x: number; y: number } | null>(null);
+  const dragging       = useRef(false);
+  const offsetRef      = useRef({ x: 0, y: 0 });
+  const dirRef         = useRef<"undecided" | "swipe" | "scroll">("undecided");
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const commitColorRef = useRef("#94a3b8");
 
   const mag      = Math.sqrt(offset.x ** 2 + offset.y ** 2);
   const progress = Math.min(1, mag / COMMIT_THRESHOLD);
   const dominant = mag > 8 ? getP1Dominant(offset.x, offset.y) : null;
+  const swipeColor = dominant ? dominant.color : "rgba(255,255,255,0.25)";
+
+  function cancelLongPress() {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+    setLongPressing(false);
+  }
+
+  function resetDrag() {
+    dragging.current = false; dirRef.current = "undecided";
+    offsetRef.current = { x: 0, y: 0 }; setOffset({ x: 0, y: 0 });
+    startPos.current = null;
+  }
+
+  function onDown(e: React.PointerEvent) {
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    startPos.current = { x: e.clientX, y: e.clientY };
+    dragging.current = true; dirRef.current = "undecided";
+    offsetRef.current = { x: 0, y: 0 }; e.stopPropagation();
+
+    longPressTimer.current = setTimeout(() => {
+      longPressTimer.current = null;
+      if (!dragging.current) return;
+      if (Math.sqrt(offsetRef.current.x ** 2 + offsetRef.current.y ** 2) < 8) {
+        setLongPressing(true);
+        dragging.current = false; dirRef.current = "undecided";
+        commitColorRef.current = "#94a3b8";
+        setCommitting(true);
+        setTimeout(() => { setCommitted(true); onSwiped(item, "someday"); }, 200);
+      }
+    }, LONG_PRESS_MS);
+  }
+
+  function onMove(e: React.PointerEvent) {
+    if (!dragging.current || !startPos.current) return;
+    const nx = e.clientX - startPos.current.x, ny = e.clientY - startPos.current.y;
+    const m  = Math.sqrt(nx ** 2 + ny ** 2);
+    if (m >= 8) cancelLongPress();
+    if (dirRef.current === "undecided" && m >= 8) {
+      const ax = Math.abs(nx), ay = Math.abs(ny);
+      if (ax >= 1.5 * ay || ay >= 1.5 * ax) {
+        dirRef.current = "swipe";
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } else { dirRef.current = "scroll"; resetDrag(); return; }
+    }
+    if (dirRef.current !== "swipe") return;
+    offsetRef.current = { x: nx, y: ny }; setOffset({ x: nx, y: ny });
+  }
+
+  function onUp() {
+    if (!dragging.current) return;
+    cancelLongPress();
+    const { x, y } = offsetRef.current;
+    const m = Math.sqrt(x ** 2 + y ** 2);
+    if (dirRef.current === "swipe" && m >= COMMIT_THRESHOLD) {
+      const swipe = getP1Dominant(x, y);
+      commitColorRef.current = swipe.color;
+      dragging.current = false; dirRef.current = "undecided";
+      setCommitting(true);
+      setTimeout(() => { setCommitted(true); onSwiped(item, swipe.action as Pass1Action); }, 200);
+      return;
+    }
+    resetDrag();
+  }
+
+  if (committed) return null;
+
+  return (
+    <div className="relative rounded-xl" style={{ overflow: "hidden", touchAction: "none" }}>
+      {/* Direction hint backdrop */}
+      <div
+        className="absolute inset-0 rounded-xl flex items-center justify-center"
+        style={{
+          background: dominant
+            ? `color-mix(in srgb, ${swipeColor} ${Math.round(progress * 25)}%, transparent)`
+            : longPressing
+            ? "color-mix(in srgb, #94a3b8 20%, transparent)"
+            : "transparent",
+          border: dominant
+            ? `1.5px solid color-mix(in srgb, ${swipeColor} ${Math.round(progress * 70)}%, transparent)`
+            : longPressing
+            ? "1.5px solid #94a3b870"
+            : "1.5px solid transparent",
+          transition: dragging.current ? "none" : "all 0.25s ease",
+        }}
+      >
+        {dominant && (
+          <span
+            className="text-xs font-bold tracking-widest uppercase"
+            style={{
+              color: swipeColor, opacity: progress,
+              fontFamily: "'Space Mono', monospace",
+              transition: dragging.current ? "none" : "opacity 0.15s",
+            }}
+          >
+            {dominant.label}
+          </span>
+        )}
+        {longPressing && !dominant && (
+          <span
+            className="text-xs font-bold tracking-widest uppercase"
+            style={{ color: "#94a3b8", fontFamily: "'Space Mono', monospace" }}
+          >
+            Someday
+          </span>
+        )}
+      </div>
+      {/* Sliding card */}
+      <div
+        className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
+        style={{
+          background: committing ? `${commitColorRef.current}22` : "#333333",
+          borderLeft: "3px solid rgba(245,158,11,0.4)",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          borderRight: "1px solid rgba(255,255,255,0.05)",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          transform: `translate(${offset.x}px, ${offset.y}px)`,
+          transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
+          willChange: "transform",
+          cursor: mag > 4 ? "grabbing" : "default",
+          touchAction: "none",
+        }}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <p className="text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words pr-5">
+          {item.text}
+        </p>
+        <button
+          className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity active:scale-90"
+          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+          onClick={(e) => { e.stopPropagation(); setCommitted(true); onDismissed(item); }}
+        >
+          <X size={8} style={{ color: "rgba(255,255,255,0.7)" }} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Pass 2 card — 4-direction swipe + dismiss X ───────────────────────────────
+// ↑Gratitude ↓Bio →Key Insight ←Memory — all routed via /remi with prefix.
+
+interface P2CardProps {
+  item: TriageItem;
+  onSwiped: (item: TriageItem, action: Pass2Action) => void;
+  onDismissed: (item: TriageItem) => void;
+}
+
+function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
+  const [offset, setOffset]         = useState({ x: 0, y: 0 });
+  const [committing, setCommitting]   = useState(false);
+  const [committed, setCommitted]     = useState(false);
+
+  const startPos       = useRef<{ x: number; y: number } | null>(null);
+  const dragging       = useRef(false);
+  const offsetRef      = useRef({ x: 0, y: 0 });
+  const dirRef         = useRef<"undecided" | "swipe" | "scroll">("undecided");
+  const commitColorRef = useRef("#60a5fa");
+
+  const mag      = Math.sqrt(offset.x ** 2 + offset.y ** 2);
+  const progress = Math.min(1, mag / COMMIT_THRESHOLD);
+  const dominant = mag > 8 ? getP2Dominant(offset.x, offset.y) : null;
   const swipeColor = dominant ? dominant.color : "rgba(255,255,255,0.25)";
 
   function resetDrag() {
@@ -269,11 +452,11 @@ function Pass1Card({ item, onSwiped }: P1CardProps) {
     const { x, y } = offsetRef.current;
     const m = Math.sqrt(x ** 2 + y ** 2);
     if (dirRef.current === "swipe" && m >= COMMIT_THRESHOLD) {
-      const swipe = getP1Dominant(x, y);
+      const swipe = getP2Dominant(x, y);
       commitColorRef.current = swipe.color;
       dragging.current = false; dirRef.current = "undecided";
       setCommitting(true);
-      setTimeout(() => { setCommitted(true); onSwiped(item, swipe.action as Pass1Action); }, 200);
+      setTimeout(() => { setCommitted(true); onSwiped(item, swipe.action as Pass2Action); }, 200);
       return;
     }
     resetDrag();
@@ -282,8 +465,7 @@ function Pass1Card({ item, onSwiped }: P1CardProps) {
   if (committed) return null;
 
   return (
-    <div className="relative rounded-xl" style={{ overflow: "hidden" }}>
-      {/* Direction hint backdrop — identical to Tasks.tsx */}
+    <div className="relative rounded-xl" style={{ overflow: "hidden", touchAction: "none" }}>
       <div
         className="absolute inset-0 rounded-xl flex items-center justify-center"
         style={{
@@ -309,12 +491,11 @@ function Pass1Card({ item, onSwiped }: P1CardProps) {
           </span>
         )}
       </div>
-      {/* Sliding card */}
       <div
         className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
         style={{
           background: committing ? `${commitColorRef.current}22` : "#333333",
-          borderLeft: "3px solid rgba(245,158,11,0.4)",
+          borderLeft: "3px solid rgba(148,163,184,0.4)", // gray — from memory swipe in pass 1
           borderTop: "1px solid rgba(255,255,255,0.05)",
           borderRight: "1px solid rgba(255,255,255,0.05)",
           borderBottom: "1px solid rgba(255,255,255,0.05)",
@@ -328,130 +509,19 @@ function Pass1Card({ item, onSwiped }: P1CardProps) {
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
+        onContextMenu={(e) => e.preventDefault()}
       >
-        <p className="text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words">
+        <p className="text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words pr-5">
           {item.text}
         </p>
-      </div>
-    </div>
-  );
-}
-
-// ── Pass 2 card — horizontal swipe only (left=Memory, right=Key Insight) ─────
-
-interface P2CardProps { item: TriageItem; onSwiped: (item: TriageItem, action: Pass2Action) => void }
-
-function Pass2Card({ item, onSwiped }: P2CardProps) {
-  const [offset, setOffset]         = useState({ x: 0, y: 0 });
-  const [committing, setCommitting]   = useState(false);
-  const [committed, setCommitted]     = useState(false);
-  const startPos      = useRef<{ x: number; y: number } | null>(null);
-  const dragging      = useRef(false);
-  const offsetRef     = useRef({ x: 0, y: 0 });
-  const dirRef        = useRef<"undecided" | "swipe" | "scroll">("undecided");
-  const commitColorRef = useRef("#60a5fa");
-
-  const mag      = Math.abs(offset.x); // horizontal only
-  const progress = Math.min(1, mag / COMMIT_THRESHOLD);
-  const dominant = mag > 8 ? getP2Dominant(offset.x, offset.y) : null;
-  const swipeColor = dominant ? dominant.color : "rgba(255,255,255,0.25)";
-
-  function resetDrag() {
-    dragging.current = false; dirRef.current = "undecided";
-    offsetRef.current = { x: 0, y: 0 }; setOffset({ x: 0, y: 0 });
-    startPos.current = null;
-  }
-
-  function onDown(e: React.PointerEvent) {
-    if (e.button !== 0 && e.pointerType === "mouse") return;
-    startPos.current = { x: e.clientX, y: e.clientY };
-    dragging.current = true; dirRef.current = "undecided";
-    offsetRef.current = { x: 0, y: 0 }; e.stopPropagation();
-  }
-
-  function onMove(e: React.PointerEvent) {
-    if (!dragging.current || !startPos.current) return;
-    const nx = e.clientX - startPos.current.x, ny = e.clientY - startPos.current.y;
-    const m  = Math.sqrt(nx ** 2 + ny ** 2);
-    if (dirRef.current === "undecided" && m >= 8) {
-      const ax = Math.abs(nx), ay = Math.abs(ny);
-      if (ax >= 1.5 * ay) {
-        dirRef.current = "swipe";
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-      } else { dirRef.current = "scroll"; resetDrag(); return; }
-    }
-    if (dirRef.current !== "swipe") return;
-    offsetRef.current = { x: nx, y: 0 }; setOffset({ x: nx, y: 0 }); // y locked to 0
-  }
-
-  function onUp() {
-    if (!dragging.current) return;
-    const { x } = offsetRef.current;
-    const m = Math.abs(x);
-    if (dirRef.current === "swipe" && m >= COMMIT_THRESHOLD) {
-      const swipe = getP2Dominant(x, 0);
-      if (swipe) {
-        commitColorRef.current = swipe.color;
-        dragging.current = false; dirRef.current = "undecided";
-        setCommitting(true);
-        setTimeout(() => { setCommitted(true); onSwiped(item, swipe.action as Pass2Action); }, 200);
-        return;
-      }
-    }
-    resetDrag();
-  }
-
-  if (committed) return null;
-
-  return (
-    <div className="relative rounded-xl" style={{ overflow: "hidden" }}>
-      <div
-        className="absolute inset-0 rounded-xl flex items-center justify-center"
-        style={{
-          background: dominant
-            ? `color-mix(in srgb, ${swipeColor} ${Math.round(progress * 25)}%, transparent)`
-            : "transparent",
-          border: dominant
-            ? `1.5px solid color-mix(in srgb, ${swipeColor} ${Math.round(progress * 70)}%, transparent)`
-            : "1.5px solid transparent",
-          transition: dragging.current ? "none" : "all 0.25s ease",
-        }}
-      >
-        {dominant && (
-          <span
-            className="text-xs font-bold tracking-widest uppercase"
-            style={{
-              color: swipeColor, opacity: progress,
-              fontFamily: "'Space Mono', monospace",
-              transition: dragging.current ? "none" : "opacity 0.15s",
-            }}
-          >
-            {dominant.label}
-          </span>
-        )}
-      </div>
-      <div
-        className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
-        style={{
-          background: committing ? `${commitColorRef.current}22` : "#333333",
-          borderLeft: "3px solid rgba(192,132,252,0.5)", // purple — flagged as memory in pass 1
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          borderRight: "1px solid rgba(255,255,255,0.05)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
-          transform: `translateX(${offset.x}px)`,
-          transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
-          willChange: "transform",
-          cursor: mag > 4 ? "grabbing" : "default",
-          touchAction: "none",
-        }}
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        onPointerCancel={onUp}
-      >
-        <p className="text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words">
-          {item.text}
-        </p>
+        <button
+          className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity active:scale-90"
+          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
+          onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
+          onClick={(e) => { e.stopPropagation(); setCommitted(true); onDismissed(item); }}
+        >
+          <X size={8} style={{ color: "rgba(255,255,255,0.7)" }} />
+        </button>
       </div>
     </div>
   );
@@ -490,15 +560,17 @@ function HintStrip({ pass }: { pass: 1 | 2 }) {
     >
       {pass === 1 ? (
         <>
-          <span style={{ color: "#94a3b8" }}>← Someday</span>
+          <span style={{ color: "#94a3b8" }}>← Memory</span>
           <span style={{ color: "#f59e0b" }}>↑ Today</span>
           <span style={{ color: "#60a5fa" }}>↓ Tomorrow</span>
-          <span style={{ color: "#c084fc" }}>→ Memory</span>
+          <span style={{ color: "#c084fc" }}>→ Tonight</span>
         </>
       ) : (
         <>
+          <span style={{ color: "#22c55e" }}>↑ Gratitude</span>
           <span style={{ color: "#60a5fa" }}>← Memory</span>
-          <span style={{ color: "#f59e0b" }}>→ Key Insight</span>
+          <span style={{ color: "#f59e0b" }}>→ Insight</span>
+          <span style={{ color: "#fb923c" }}>↓ Bio</span>
         </>
       )}
     </div>
@@ -540,12 +612,16 @@ function Header({ label, accent, count }: { label: string; accent: string; count
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+const ZERO_COUNTS: Counts = { today: 0, tonight: 0, tomorrow: 0, someday: 0, insight: 0, memory: 0, gratitude: 0, bio: 0 };
+
 export default function Triage() {
+  const [, navigate] = useLocation();
   const [pass1Queue, setPass1Queue] = useState<TriageItem[]>([]);
   const [pass2Queue, setPass2Queue] = useState<TriageItem[]>([]);
   const [phase, setPhase]           = useState<Phase>("capture");
-  const [counts, setCounts]         = useState<Counts>({ today: 0, tomorrow: 0, someday: 0, memory: 0 });
+  const [counts, setCounts]         = useState<Counts>(ZERO_COUNTS);
   const [decomposing, setDecomposing] = useState(false);
+  const hasStarted = useRef(false); // true once any item enters pass1Queue
 
   // On mount: load pre-decomposed items from a Remi brain dump redirect
   useEffect(() => {
@@ -555,22 +631,20 @@ export default function Triage() {
     try {
       const items: string[] = JSON.parse(preload);
       if (Array.isArray(items) && items.length > 0) {
+        hasStarted.current = true;
         setPass1Queue(items.filter(Boolean).map((t) => ({ id: uid(), text: t })));
       }
-    } catch {
-      // malformed preload — ignore
-    }
+    } catch { /* malformed preload — ignore */ }
   }, []);
 
   // Transition: pass 1 complete → pass 2 or done
   useEffect(() => {
     if (phase !== "capture") return;
-    const processed = counts.today + counts.tomorrow + counts.someday + pass2Queue.length;
-    if (pass1Queue.length === 0 && processed === 0) return; // nothing has happened yet
+    if (pass1Queue.length === 0 && !hasStarted.current) return; // nothing added yet
     if (pass1Queue.length === 0) {
       setPhase(pass2Queue.length > 0 ? "pass2" : "done");
     }
-  }, [pass1Queue.length, pass2Queue.length, counts, phase]);
+  }, [pass1Queue.length, pass2Queue.length, phase]);
 
   // Transition: pass 2 complete → done
   useEffect(() => {
@@ -578,6 +652,7 @@ export default function Triage() {
   }, [pass2Queue.length, phase]);
 
   function addItem(text: string): void {
+    hasStarted.current = true;
     setDecomposing(true);
     decomposeText(text)
       .then((items) => {
@@ -590,6 +665,9 @@ export default function Triage() {
     if (action === "today") {
       createTask(item.text, "today");
       setCounts((c) => ({ ...c, today: c.today + 1 }));
+    } else if (action === "tonight") {
+      createTask(item.text, "tonight");
+      setCounts((c) => ({ ...c, tonight: c.tonight + 1 }));
     } else if (action === "tomorrow") {
       createTask(item.text, "tomorrow");
       setCounts((c) => ({ ...c, tomorrow: c.tomorrow + 1 }));
@@ -597,26 +675,39 @@ export default function Triage() {
       createTask(item.text, "someday");
       setCounts((c) => ({ ...c, someday: c.someday + 1 }));
     } else if (action === "memory") {
-      setPass2Queue((prev) => [...prev, item]);
+      setPass2Queue((prev) => [...prev, item]); // no count yet — incremented in pass 2
     }
+    setPass1Queue((prev) => prev.filter((i) => i.id !== item.id));
+  }
+
+  function handlePass1Dismiss(item: TriageItem) {
     setPass1Queue((prev) => prev.filter((i) => i.id !== item.id));
   }
 
   function handlePass2Swipe(item: TriageItem, action: Pass2Action) {
     saveMemory(item.text, action);
-    setCounts((c) => ({ ...c, memory: c.memory + 1 }));
+    if (action === "insight")   setCounts((c) => ({ ...c, insight:   c.insight   + 1 }));
+    else if (action === "memory")    setCounts((c) => ({ ...c, memory:    c.memory    + 1 }));
+    else if (action === "gratitude") setCounts((c) => ({ ...c, gratitude: c.gratitude + 1 }));
+    else if (action === "bio")       setCounts((c) => ({ ...c, bio:       c.bio       + 1 }));
+    setPass2Queue((prev) => prev.filter((i) => i.id !== item.id));
+  }
+
+  function handlePass2Dismiss(item: TriageItem) {
     setPass2Queue((prev) => prev.filter((i) => i.id !== item.id));
   }
 
   function reset() {
+    hasStarted.current = false;
     setPass1Queue([]); setPass2Queue([]);
-    setPhase("capture"); setCounts({ today: 0, tomorrow: 0, someday: 0, memory: 0 });
+    setPhase("capture"); setCounts(ZERO_COUNTS);
     setDecomposing(false);
   }
 
   // ── Done screen ─────────────────────────────────────────────────────────────
   if (phase === "done") {
-    const total = counts.today + counts.tomorrow + counts.someday + counts.memory;
+    const total = counts.today + counts.tonight + counts.tomorrow + counts.someday
+                + counts.insight + counts.memory + counts.gratitude + counts.bio;
     return (
       <div className="flex flex-col h-screen" style={{ background: "#111111" }}>
         <Header label="Triage" accent="#f59e0b" />
@@ -633,6 +724,11 @@ export default function Triage() {
                 {counts.today} today
               </p>
             )}
+            {counts.tonight > 0 && (
+              <p className="text-lg" style={{ color: "#c084fc" }}>
+                {counts.tonight} tonight
+              </p>
+            )}
             {counts.tomorrow > 0 && (
               <p className="text-lg" style={{ color: "#60a5fa" }}>
                 {counts.tomorrow} tomorrow
@@ -643,22 +739,46 @@ export default function Triage() {
                 {counts.someday} someday
               </p>
             )}
+            {counts.insight > 0 && (
+              <p className="text-lg" style={{ color: "#f59e0b" }}>
+                {counts.insight} key insight{counts.insight !== 1 ? "s" : ""}
+              </p>
+            )}
             {counts.memory > 0 && (
-              <p className="text-lg" style={{ color: "#c084fc" }}>
-                {counts.memory} saved to memory
+              <p className="text-lg" style={{ color: "#60a5fa" }}>
+                {counts.memory} to memory
+              </p>
+            )}
+            {counts.gratitude > 0 && (
+              <p className="text-lg" style={{ color: "#22c55e" }}>
+                {counts.gratitude} gratitude{counts.gratitude !== 1 ? "s" : ""}
+              </p>
+            )}
+            {counts.bio > 0 && (
+              <p className="text-lg" style={{ color: "#fb923c" }}>
+                {counts.bio} bio note{counts.bio !== 1 ? "s" : ""}
               </p>
             )}
             {total === 0 && (
               <p className="text-lg text-white/30">Nothing sorted.</p>
             )}
           </div>
-          <button
-            className="px-6 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
-            style={{ background: "#f59e0b22", color: "#f59e0b", border: "1px solid #f59e0b40" }}
-            onClick={reset}
-          >
-            Start another session
-          </button>
+          <div className="flex gap-3">
+            <button
+              className="px-6 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
+              style={{ background: "#ffffff10", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.12)" }}
+              onClick={reset}
+            >
+              New session
+            </button>
+            <button
+              className="px-6 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
+              style={{ background: "#f59e0b22", color: "#f59e0b", border: "1px solid #f59e0b40" }}
+              onClick={() => navigate("/tasks")}
+            >
+              Task view
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -668,12 +788,17 @@ export default function Triage() {
   if (phase === "pass2") {
     return (
       <div className="flex flex-col h-screen" style={{ background: "#111111" }}>
-        <Header label="Memory or Insight?" accent="#c084fc" count={pass2Queue.length} />
+        <Header label="What type?" accent="#94a3b8" count={pass2Queue.length} />
         <div className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto">
           <HintStrip pass={2} />
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3" style={{ touchAction: "none" }}>
             {pass2Queue.map((item) => (
-              <Pass2Card key={item.id} item={item} onSwiped={handlePass2Swipe} />
+              <Pass2Card
+                key={item.id}
+                item={item}
+                onSwiped={handlePass2Swipe}
+                onDismissed={handlePass2Dismiss}
+              />
             ))}
           </div>
         </div>
@@ -705,9 +830,14 @@ export default function Triage() {
         ) : (
           <>
             <HintStrip pass={1} />
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3" style={{ touchAction: "none" }}>
               {pass1Queue.map((item) => (
-                <Pass1Card key={item.id} item={item} onSwiped={handlePass1Swipe} />
+                <Pass1Card
+                  key={item.id}
+                  item={item}
+                  onSwiped={handlePass1Swipe}
+                  onDismissed={handlePass1Dismiss}
+                />
               ))}
             </div>
           </>
