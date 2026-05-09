@@ -9,8 +9,6 @@ import {
   X,
   Loader2,
   RotateCcw,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -453,21 +451,16 @@ export default function MainChat() {
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Pinch-to-zoom: 1.0–2.0, persisted in localStorage
-  const [zoomScale, setZoomScaleState] = useState<number>(() => {
-    const s = parseFloat(localStorage.getItem("remi_zoom") ?? "1");
-    return isNaN(s) ? 1.0 : Math.min(2.0, Math.max(1.0, s));
+  // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
+  const FONT_SIZES = [16, 20, 24] as const;
+  const [fontSizeStep, setFontSizeStep] = useState<number>(() => {
+    const s = parseInt(localStorage.getItem("remi_font_size") ?? "0", 10);
+    return [0, 1, 2].includes(s) ? s : 0;
   });
-  const zoomScaleRef = useRef(zoomScale);
-  const contentRef   = useRef<HTMLDivElement>(null);
-  const pinchDist0   = useRef<number | null>(null);
-  const pinchScale0  = useRef(1.0);
-
-  function setZoomScale(n: number) {
-    const s = Math.min(2.0, Math.max(1.0, n));
-    zoomScaleRef.current = s;
-    setZoomScaleState(s);
-    localStorage.setItem("remi_zoom", String(s));
+  function cycleFontSize() {
+    const next = (fontSizeStep + 1) % 3;
+    setFontSizeStep(next);
+    localStorage.setItem("remi_font_size", String(next));
   }
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -533,52 +526,6 @@ export default function MainChat() {
     }, 280);
     return () => clearTimeout(timer);
   }, [inputText, dismissedTrigger]);
-
-  // Sync ref when state changes (needed by pinch event listeners in effect below)
-  useEffect(() => { zoomScaleRef.current = zoomScale; }, [zoomScale]);
-
-  // Attach pinch-to-zoom handlers directly (passive:false needed for preventDefault)
-  useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
-
-    function dist(t: TouchList): number {
-      return Math.sqrt(
-        (t[0].clientX - t[1].clientX) ** 2 + (t[0].clientY - t[1].clientY) ** 2,
-      );
-    }
-    function onStart(e: TouchEvent) {
-      if (e.touches.length === 2) {
-        pinchDist0.current  = dist(e.touches);
-        pinchScale0.current = zoomScaleRef.current;
-      }
-    }
-    function onMove(e: TouchEvent) {
-      if (e.touches.length === 2) e.preventDefault(); // prevent scroll on any 2-finger touch
-      if (e.touches.length !== 2 || pinchDist0.current === null) return;
-      const ratio = dist(e.touches) / pinchDist0.current;
-      const next  = Math.min(2.0, Math.max(1.0, pinchScale0.current * ratio));
-      zoomScaleRef.current = next;
-      setZoomScaleState(next);
-    }
-    function onEnd() {
-      if (pinchDist0.current !== null) {
-        localStorage.setItem("remi_zoom", String(zoomScaleRef.current));
-        pinchDist0.current = null;
-      }
-    }
-
-    el.addEventListener("touchstart",  onStart, { passive: true  });
-    el.addEventListener("touchmove",   onMove,  { passive: false });
-    el.addEventListener("touchend",    onEnd,   { passive: true  });
-    el.addEventListener("touchcancel", onEnd,   { passive: true  });
-    return () => {
-      el.removeEventListener("touchstart",  onStart);
-      el.removeEventListener("touchmove",   onMove);
-      el.removeEventListener("touchend",    onEnd);
-      el.removeEventListener("touchcancel", onEnd);
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const recordRecentCommand = useCallback(
     (trigger: string) => {
@@ -950,11 +897,17 @@ export default function MainChat() {
         </div>
           <button
             className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
-            onClick={() => setZoomScale(zoomScale > 1.0 ? 1.0 : 1.5)}
-            data-testid="button-zoom-toggle"
-            title={zoomScale > 1.0 ? "Reset zoom" : "Zoom in"}
+            onClick={cycleFontSize}
+            data-testid="button-font-size"
+            title="Font size"
           >
-            {zoomScale > 1.0 ? <ZoomOut size={20} /> : <ZoomIn size={20} />}
+            <span style={{
+              fontSize: fontSizeStep === 0 ? "13px" : fontSizeStep === 1 ? "17px" : "21px",
+              fontWeight: 700,
+              lineHeight: 1,
+              display: "block",
+              color: "inherit",
+            }}>A</span>
           </button>
         </div>
         <span
@@ -1112,25 +1065,15 @@ export default function MainChat() {
         </div>
       )}
 
-      {/* Pinch-to-zoom target — nav above is NOT inside this ref */}
       <div
-        ref={contentRef}
-        className="flex-1 overflow-y-auto"
+        className="flex-1 overflow-y-auto p-4"
         data-testid="chat-history"
+        style={{ fontSize: FONT_SIZES[fontSizeStep] }}
         onClick={() => {
           setOpenPicker(null);
           setStatusOpen(false);
         }}
       >
-        <div
-          style={{
-            transform: `scale(${zoomScale})`,
-            transformOrigin: "top center",
-            width: `${100 / zoomScale}%`,
-            margin: "0 auto",
-            padding: "16px",
-          }}
-        >
         <div className="space-y-3">
         {messages.map((msg) => (
           <div
@@ -1139,7 +1082,7 @@ export default function MainChat() {
             data-testid={`message-${msg.role}-${msg.id}`}
           >
             <div
-              className="max-w-[75%] px-3.5 py-2.5 text-sm leading-relaxed"
+              className="max-w-[75%] px-3.5 py-2.5 leading-relaxed"
               style={
                 msg.role === "user"
                   ? {
@@ -1147,17 +1090,19 @@ export default function MainChat() {
                       borderRadius: "1rem 1rem 0.25rem 1rem",
                       overflowWrap: "break-word",
                       wordBreak: "break-word",
+                      fontSize: "inherit",
                     }
                   : {
                       ...remiBubbleStyles(remiColor, bubbleStyle),
                       borderRadius: "1rem 1rem 1rem 0.25rem",
                       overflowWrap: "break-word",
                       wordBreak: "break-word",
+                      fontSize: "inherit",
                     }
               }
             >
               {msg.role === "ai" ? (
-                <div className="prose-dark text-sm leading-relaxed whitespace-pre-wrap">
+                <div className="prose-dark leading-relaxed whitespace-pre-wrap" style={{ fontSize: "inherit" }}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {formatAiText(msg.text)}
                   </ReactMarkdown>
@@ -1172,8 +1117,7 @@ export default function MainChat() {
           </div>
         ))}
         <div ref={messagesEndRef} />
-        </div>{/* space-y-3 */}
-        </div>{/* scale wrapper */}
+        </div>
       </div>
 
       <div
