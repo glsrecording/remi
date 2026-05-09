@@ -216,6 +216,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
       recorder.onstop = async () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        await new Promise<void>((resolve) => setTimeout(resolve, 800));
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         audioChunksRef.current = [];
         if (blob.size > 0) {

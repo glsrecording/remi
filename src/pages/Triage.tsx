@@ -155,6 +155,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
       rec.onstop = async () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        await new Promise<void>((resolve) => setTimeout(resolve, 800));
         const blob = new Blob(chunks.current, { type: mime });
         chunks.current = [];
         if (blob.size > 0) {

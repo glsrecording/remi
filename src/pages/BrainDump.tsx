@@ -492,9 +492,12 @@ export default function BrainDump() {
       recorder.onstop = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        audioChunksRef.current = [];
-        if (blob.size > 0) handleTranscribe(blob);
+        // 800ms flush delay: Safari delivers dataavailable after onstop (out of spec order).
+        setTimeout(() => {
+          const blob = new Blob(audioChunksRef.current, { type: mimeType });
+          audioChunksRef.current = [];
+          if (blob.size > 0) handleTranscribe(blob);
+        }, 800);
       };
       recorder.start(100);
       setIsRecording(true);
