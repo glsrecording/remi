@@ -1264,6 +1264,30 @@ export default function MainChat() {
           >
             Send
           </button>
+
+          {/* Hold-to-send mic — right thumb position, auto-sends on release */}
+          <button
+            type="button"
+            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+            style={{
+              background: isRecording ? "#ef444422" : isTranscribing ? "#f59e0b18" : "#f59e0b14",
+              border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+              opacity: isTranscribing ? 0.5 : 1,
+              cursor: isTranscribing ? "not-allowed" : "pointer",
+            }}
+            onPointerDown={handleVoiceHoldStart}
+            onPointerUp={handleVoiceHoldEnd}
+            onPointerLeave={handleVoiceHoldEnd}
+            data-testid="button-voice-hold"
+          >
+            {isTranscribing ? (
+              <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+            ) : isRecording ? (
+              <MicOff size={16} style={{ color: "#ef4444" }} />
+            ) : (
+              <Mic size={16} style={{ color: "#f59e0b" }} />
+            )}
+          </button>
         </form>
 
         {suggestion && (

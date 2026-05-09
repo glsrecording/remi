@@ -119,10 +119,11 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
   const [text, setText] = useState("");
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const taRef     = useRef<HTMLTextAreaElement>(null);
-  const recRef    = useRef<MediaRecorder | null>(null);
-  const chunks    = useRef<BlobPart[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const taRef         = useRef<HTMLTextAreaElement>(null);
+  const recRef        = useRef<MediaRecorder | null>(null);
+  const chunks        = useRef<BlobPart[]>([]);
+  const streamRef     = useRef<MediaStream | null>(null);
+  const holdToSendRef = useRef(false);
 
   useEffect(() => { taRef.current?.focus(); }, []);
 
@@ -144,6 +145,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
 
   async function micDown() {
     if (recording || transcribing) return;
+    holdToSendRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -155,13 +157,28 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
       rec.onstop = async () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        const autoSubmit = holdToSendRef.current;
+        holdToSendRef.current = false;
         await new Promise<void>((resolve) => setTimeout(resolve, 800));
         const blob = new Blob(chunks.current, { type: mime });
         chunks.current = [];
         if (blob.size > 0) {
           setTranscribing(true);
-          try { const t = await transcribeAudio(blob); if (t) setText(t); } catch { /* silent */ }
-          finally { setTranscribing(false); taRef.current?.focus(); }
+          try {
+            const t = await transcribeAudio(blob);
+            if (t) {
+              if (autoSubmit) {
+                // Hold-to-send: submit immediately without requiring Check button
+                onAdd(t.trim());
+                setText("");
+                setTimeout(() => taRef.current?.focus(), 50);
+              } else {
+                setText(t);
+                taRef.current?.focus();
+              }
+            }
+          } catch { /* silent */ }
+          finally { setTranscribing(false); }
         }
       };
       rec.start(100); setRecording(true);
@@ -171,6 +188,13 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
   function micUp() {
     if (!recRef.current || recRef.current.state === "inactive") return;
     recRef.current.stop(); recRef.current = null; setRecording(false);
+  }
+
+  function holdDown(e: React.PointerEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    holdToSendRef.current = true;
+    micDown();
   }
 
   const canSubmit = text.trim().length > 0;
@@ -222,6 +246,24 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         disabled={!canSubmit}
       >
         <Check size={11} style={{ color: canSubmit ? "#f59e0b" : "rgba(255,255,255,0.2)" }} />
+      </button>
+
+      {/* Hold-to-send mic — right thumb position, auto-submits on release */}
+      <button
+        className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90 ${recording ? "voice-button-recording" : ""}`}
+        style={{
+          background: recording ? "#ef444420" : "#f59e0b14",
+          border: `1px solid ${recording ? "#ef4444" : "#f59e0b50"}`,
+        }}
+        onPointerDown={holdDown}
+        onPointerUp={micUp}
+        onPointerLeave={micUp}
+      >
+        {transcribing
+          ? <Loader2 size={11} className="animate-spin" style={{ color: "#f59e0b" }} />
+          : recording
+          ? <MicOff size={11} style={{ color: "#ef4444" }} />
+          : <Mic size={11} style={{ color: "#f59e0b" }} />}
       </button>
     </div>
   );

@@ -177,6 +177,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef  = useRef<BlobPart[]>([]);
   const streamRef       = useRef<MediaStream | null>(null);
+  const holdToSendRef   = useRef(false);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -203,6 +204,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
 
   async function handleMicDown() {
     if (isRecording || isTranscribing) return;
+    holdToSendRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -216,6 +218,8 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
       recorder.onstop = async () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        const autoSubmit = holdToSendRef.current;
+        holdToSendRef.current = false;
         await new Promise<void>((resolve) => setTimeout(resolve, 800));
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         audioChunksRef.current = [];
@@ -223,12 +227,20 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
           setIsTranscribing(true);
           try {
             const transcript = await transcribeAudio(blob);
-            if (transcript) setText(transcript);
+            if (transcript) {
+              if (autoSubmit) {
+                // Hold-to-send: submit immediately without requiring Check button
+                onSubmitted(transcript.trim());
+                createTaskDirect(transcript.trim(), bucket);
+              } else {
+                setText(transcript);
+                inputRef.current?.focus();
+              }
+            }
           } catch {
             // silent fail — user can type instead
           } finally {
             setIsTranscribing(false);
-            inputRef.current?.focus();
           }
         }
       };
@@ -244,6 +256,13 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
     mediaRecorderRef.current.stop();
     mediaRecorderRef.current = null;
     setIsRecording(false);
+  }
+
+  function handleHoldDown(e: React.PointerEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    holdToSendRef.current = true;
+    handleMicDown();
   }
 
   const canSubmit = text.trim().length > 0;
@@ -308,6 +327,24 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
         onClick={onCancel}
       >
         <X size={11} style={{ color: "rgba(255,255,255,0.3)" }} />
+      </button>
+
+      {/* Hold-to-send mic — right thumb position, auto-submits on release */}
+      <button
+        className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+        style={{
+          background: isRecording ? "#ef444420" : "#f59e0b14",
+          border: `1px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+        }}
+        onPointerDown={handleHoldDown}
+        onPointerUp={handleMicUp}
+        onPointerLeave={handleMicUp}
+      >
+        {isTranscribing
+          ? <Loader2 size={11} className="animate-spin" style={{ color: "#f59e0b" }} />
+          : isRecording
+          ? <MicOff size={11} style={{ color: "#ef4444" }} />
+          : <Mic size={11} style={{ color: "#f59e0b" }} />}
       </button>
     </div>
   );

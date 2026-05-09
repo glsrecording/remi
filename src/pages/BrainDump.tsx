@@ -747,42 +747,69 @@ export default function BrainDump() {
             </span>
           </div>
         )}
-        <button
-          className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 ${isRecording ? "voice-button-recording" : ""}`}
-          style={{
-            background: isRecording
-              ? "#ef444415"
-              : selectedBucket && !isTranscribing
-                ? ACCENT + "15"
-                : "#333333",
-            border: `2px solid ${isRecording ? "#ef4444" : selectedBucket && !isTranscribing ? ACCENT + "60" : "rgba(255,255,255,0.08)"}`,
-            opacity: !selectedBucket || isTranscribing ? 0.4 : 1,
-            cursor:
-              !selectedBucket || isTranscribing ? "not-allowed" : "pointer",
-          }}
-          onPointerDown={handleVoiceHoldStart}
-          onPointerUp={handleVoiceHoldEnd}
-          onPointerLeave={handleVoiceHoldEnd}
-          disabled={!selectedBucket || isTranscribing}
-          data-testid="button-voice-record"
-        >
-          {isTranscribing ? (
-            <Loader2
-              size={22}
-              className="animate-spin"
-              style={{ color: ACCENT }}
-            />
-          ) : isRecording ? (
-            <MicOff size={22} style={{ color: "#ef4444" }} />
-          ) : (
-            <Mic
-              size={22}
-              style={{
-                color: selectedBucket ? ACCENT : "rgba(255,255,255,0.3)",
-              }}
-            />
-          )}
-        </button>
+        <div className="flex items-center gap-5">
+          {/* Existing mic — left side */}
+          <button
+            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 ${isRecording ? "voice-button-recording" : ""}`}
+            style={{
+              background: isRecording
+                ? "#ef444415"
+                : selectedBucket && !isTranscribing
+                  ? ACCENT + "15"
+                  : "#333333",
+              border: `2px solid ${isRecording ? "#ef4444" : selectedBucket && !isTranscribing ? ACCENT + "60" : "rgba(255,255,255,0.08)"}`,
+              opacity: !selectedBucket || isTranscribing ? 0.4 : 1,
+              cursor:
+                !selectedBucket || isTranscribing ? "not-allowed" : "pointer",
+            }}
+            onPointerDown={handleVoiceHoldStart}
+            onPointerUp={handleVoiceHoldEnd}
+            onPointerLeave={handleVoiceHoldEnd}
+            disabled={!selectedBucket || isTranscribing}
+            data-testid="button-voice-record"
+          >
+            {isTranscribing ? (
+              <Loader2
+                size={22}
+                className="animate-spin"
+                style={{ color: ACCENT }}
+              />
+            ) : isRecording ? (
+              <MicOff size={22} style={{ color: "#ef4444" }} />
+            ) : (
+              <Mic
+                size={22}
+                style={{
+                  color: selectedBucket ? ACCENT : "rgba(255,255,255,0.3)",
+                }}
+              />
+            )}
+          </button>
+
+          {/* Hold-to-send mic — right thumb position, auto-saves on release */}
+          <button
+            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 ${isRecording ? "voice-button-recording" : ""}`}
+            style={{
+              background: isRecording ? "#ef444415" : selectedBucket && !isTranscribing ? "#f59e0b15" : "#333333",
+              border: `2px solid ${isRecording ? "#ef4444" : selectedBucket && !isTranscribing ? "#f59e0b60" : "rgba(255,255,255,0.08)"}`,
+              opacity: !selectedBucket || isTranscribing ? 0.4 : 1,
+              cursor: !selectedBucket || isTranscribing ? "not-allowed" : "pointer",
+            }}
+            onPointerDown={handleVoiceHoldStart}
+            onPointerUp={handleVoiceHoldEnd}
+            onPointerLeave={handleVoiceHoldEnd}
+            disabled={!selectedBucket || isTranscribing}
+            data-testid="button-voice-hold"
+          >
+            {isTranscribing ? (
+              <Loader2 size={22} className="animate-spin" style={{ color: "#f59e0b" }} />
+            ) : isRecording ? (
+              <MicOff size={22} style={{ color: "#ef4444" }} />
+            ) : (
+              <Mic size={22} style={{ color: selectedBucket ? "#f59e0b" : "rgba(255,255,255,0.3)" }} />
+            )}
+          </button>
+        </div>
         <p className="text-xs text-white/25 mt-2">{micLabel}</p>
         {recordingError && (
           <div className="flex items-center gap-2 mt-2">
