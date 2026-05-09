@@ -72,6 +72,25 @@ async function transcribeAudio(blob: Blob): Promise<string> {
 
 function uid(): string { return Math.random().toString(36).slice(2, 10); }
 
+// Splits raw input into individual card texts via Jarvis decompose.
+// Falls back to [text] on any error so the caller always gets a non-empty array.
+async function decomposeText(text: string): Promise<string[]> {
+  try {
+    const r = await fetch(`${JARVIS_URL}/triage/decompose`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    const items: string[] = Array.isArray(data.items) ? data.items.filter(Boolean) : [];
+    return items.length > 0 ? items : [text];
+  } catch (err) {
+    console.error("[Triage] decomposeText failed, using raw input:", err);
+    return [text];
+  }
+}
+
 // ── Swipe direction resolvers ────────────────────────────────────────────────
 
 function getP1Dominant(x: number, y: number) {
@@ -520,8 +539,10 @@ export default function Triage() {
     if (phase === "pass2" && pass2Queue.length === 0) setPhase("done");
   }, [pass2Queue.length, phase]);
 
-  function addItem(text: string) {
-    setPass1Queue((prev) => [...prev, { id: uid(), text }]);
+  function addItem(text: string): void {
+    decomposeText(text).then((items) => {
+      setPass1Queue((prev) => [...prev, ...items.map((t) => ({ id: uid(), text: t }))]);
+    });
   }
 
   function handlePass1Swipe(item: TriageItem, action: Pass1Action) {
