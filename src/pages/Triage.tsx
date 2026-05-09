@@ -457,6 +457,28 @@ function Pass2Card({ item, onSwiped }: P2CardProps) {
   );
 }
 
+// ── Skeleton card — pulsing placeholder shown while decompose is in-flight ────
+
+function SkeletonCard() {
+  return (
+    <div
+      className="animate-pulse px-4 py-3.5 rounded-xl"
+      style={{
+        background: "#2a2a2a",
+        borderLeft: "3px solid rgba(245,158,11,0.12)",
+        borderTop: "1px solid rgba(255,255,255,0.04)",
+        borderRight: "1px solid rgba(255,255,255,0.04)",
+        borderBottom: "1px solid rgba(255,255,255,0.04)",
+      }}
+    >
+      <div
+        className="rounded"
+        style={{ height: "20px", background: "rgba(255,255,255,0.07)", width: "72%" }}
+      />
+    </div>
+  );
+}
+
 // ── Direction hint strip ──────────────────────────────────────────────────────
 
 function HintStrip({ pass }: { pass: 1 | 2 }) {
@@ -523,6 +545,7 @@ export default function Triage() {
   const [pass2Queue, setPass2Queue] = useState<TriageItem[]>([]);
   const [phase, setPhase]           = useState<Phase>("capture");
   const [counts, setCounts]         = useState<Counts>({ today: 0, tomorrow: 0, someday: 0, memory: 0 });
+  const [decomposing, setDecomposing] = useState(false);
 
   // Transition: pass 1 complete → pass 2 or done
   useEffect(() => {
@@ -540,9 +563,12 @@ export default function Triage() {
   }, [pass2Queue.length, phase]);
 
   function addItem(text: string): void {
-    decomposeText(text).then((items) => {
-      setPass1Queue((prev) => [...prev, ...items.map((t) => ({ id: uid(), text: t }))]);
-    });
+    setDecomposing(true);
+    decomposeText(text)
+      .then((items) => {
+        setPass1Queue((prev) => [...prev, ...items.map((t) => ({ id: uid(), text: t }))]);
+      })
+      .finally(() => setDecomposing(false));
   }
 
   function handlePass1Swipe(item: TriageItem, action: Pass1Action) {
@@ -570,6 +596,7 @@ export default function Triage() {
   function reset() {
     setPass1Queue([]); setPass2Queue([]);
     setPhase("capture"); setCounts({ today: 0, tomorrow: 0, someday: 0, memory: 0 });
+    setDecomposing(false);
   }
 
   // ── Done screen ─────────────────────────────────────────────────────────────
@@ -645,7 +672,13 @@ export default function Triage() {
       <Header label="Triage" accent="#f59e0b" count={pass1Queue.length > 0 ? pass1Queue.length : undefined} />
       <div className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto">
         <TriageInputRow onAdd={addItem} />
-        {pass1Queue.length === 0 ? (
+        {pass1Queue.length === 0 && decomposing ? (
+          <div className="flex flex-col gap-3">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        ) : pass1Queue.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <p
               className="text-white/20 text-sm text-center leading-loose"
