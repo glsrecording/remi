@@ -67,6 +67,7 @@ export default function Session() {
   const [startArtist, setStartArtist] = useState("");
   const [startSong, setStartSong] = useState("");
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -249,27 +250,40 @@ export default function Session() {
     handleVoiceHoldStart();
   }, [handleVoiceHoldStart]);
 
+  // Safety: reset form after 30s if session never activates after a successful start
+  useEffect(() => {
+    if (!starting) return;
+    const t = setTimeout(() => {
+      setStarting(false);
+      setStartError("Timed out — session may not have started. Try again.");
+    }, 30000);
+    return () => clearTimeout(t);
+  }, [starting]);
+
   const handleStartSession = useCallback(async () => {
     const artist = startArtist.trim();
     const song   = startSong.trim();
     if (!artist && !song) return;
     setStarting(true);
-    const msg = artist && song
-      ? `session mode ${artist} on ${song}`
-      : `session mode ${artist || song}`;
+    setStartError(null);
     try {
-      await fetch(`${JARVIS_URL}/remi`, {
+      const resp = await fetch(`${JARVIS_URL}/session_start`, {
         method: "POST",
         headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, user_id: "remi" }),
+        body: JSON.stringify({ artist, song }),
       });
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        setStartError(data.error || "Failed to start session");
+        setStarting(false);
+        return;
+      }
+      // Success — Jarvis set session state; poll immediately
       refetchSession();
     } catch {
+      setStartError("Connection error — check Jarvis is running");
       setStarting(false);
-      return;
     }
-    // Safety: reset form after 30s if session never activates
-    setTimeout(() => setStarting(false), 30000);
   }, [startArtist, startSong, refetchSession]);
 
   const handleStop = useCallback(async () => {
@@ -409,6 +423,11 @@ export default function Session() {
               >
                 Start Session
               </button>
+              {startError && (
+                <p className="text-xs text-center pt-1" style={{ color: "#ef4444" }}>
+                  {startError}
+                </p>
+              )}
             </div>
           )}
         </div>
