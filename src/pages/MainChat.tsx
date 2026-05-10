@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import {
   Mic,
   MicOff,
+  Lock,
   Menu,
   CornerDownRight,
   Pin,
@@ -451,9 +452,9 @@ export default function MainChat() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const holdToSendRef = useRef(false);
-  const holdStopFiredRef = useRef(false);
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [micLocked, setMicLocked] = useState(false);
+  const micStartYRef = useRef<number | null>(null);
+  const micCancelledRef = useRef(false);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -632,19 +633,17 @@ export default function MainChat() {
   // ─── Whisper: hold = record raw audio, release = send to Whisper ──────────
   const handleTranscribe = useCallback(
     async (blob: Blob) => {
+      if (micCancelledRef.current) {
+        micCancelledRef.current = false;
+        return;
+      }
       setIsTranscribing(true);
       setRecordingError(null);
       setRetryBlob(null);
       try {
         const transcript = await transcribeAudio(blob);
         if (transcript) {
-          const autoSend = holdToSendRef.current;
-          holdToSendRef.current = false;
-          if (autoSend) {
-            sendMessage(transcript, true);
-          } else {
-            setInputText(transcript);
-          }
+          sendMessage(transcript, true);
         } else setRecordingError("Nothing captured — try again.");
       } catch {
         setRecordingError("Transcription failed — check connection.");
@@ -701,32 +700,42 @@ export default function MainChat() {
     setIsRecording(false);
   }, []);
 
-  const handleHoldDown = useCallback((e: React.PointerEvent) => {
-    e.stopPropagation();
-    holdToSendRef.current = true;
-    holdTimerRef.current = setTimeout(() => {
-      holdTimerRef.current = null;
-      handleVoiceHoldStart();
-    }, 150);
-  }, [handleVoiceHoldStart]);
+  const handleMicPointerDown = useCallback((e: React.PointerEvent) => {
+    if (isRecording || isTranscribing) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    micStartYRef.current = e.clientY;
+    micCancelledRef.current = false;
+    setMicLocked(false);
+    handleVoiceHoldStart();
+  }, [isRecording, isTranscribing, handleVoiceHoldStart]);
 
-  const handleHoldStop = useCallback(() => {
-    if (holdStopFiredRef.current) return;
-    holdStopFiredRef.current = true;
-    if (holdTimerRef.current !== null) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-      holdToSendRef.current = false;
-      holdStopFiredRef.current = false;
-      return;
+  const handleMicPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isRecording || micLocked || micStartYRef.current === null) return;
+    const dy = micStartYRef.current - e.clientY;
+    const dyDown = e.clientY - micStartYRef.current;
+    if (dy >= 60) {
+      setMicLocked(true);
+    } else if (dyDown >= 60) {
+      micCancelledRef.current = true;
+      setMicLocked(false);
+      handleVoiceHoldEnd();
     }
+  }, [isRecording, micLocked, handleVoiceHoldEnd]);
+
+  const handleMicPointerUp = useCallback(() => {
+    if (!isRecording || micLocked) return;
     handleVoiceHoldEnd();
-    setTimeout(() => {
-      holdStopFiredRef.current = false;
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-        mediaRecorderRef.current.stop();
-      }
-    }, 1000);
+  }, [isRecording, micLocked, handleVoiceHoldEnd]);
+
+  const handleMicCancel = useCallback(() => {
+    micCancelledRef.current = true;
+    setMicLocked(false);
+    if (isRecording) handleVoiceHoldEnd();
+  }, [isRecording, handleVoiceHoldEnd]);
+
+  const handleMicSend = useCallback(() => {
+    setMicLocked(false);
+    handleVoiceHoldEnd();
   }, [handleVoiceHoldEnd]);
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -736,12 +745,6 @@ export default function MainChat() {
     hour: "2-digit",
     minute: "2-digit",
   });
-  const micLabel = isTranscribing
-    ? "Transcribing..."
-    : isRecording
-      ? "Recording — release to send"
-      : "Hold to record";
-
   return (
     <div style={{ width: "100%", height: "100dvh", overflow: "hidden", position: "relative", background: "#000000" }}>
       <div style={{ width: "100%", height: "100%", position: "relative" }}>
@@ -1089,41 +1092,51 @@ export default function MainChat() {
           padding: "8px 16px 48px",
         }}
       >
-        {/* Recording / transcribing state above the input row */}
-        {(isRecording || isTranscribing) && (
+        {/* Locked mode bar / recording hint / transcribing indicator */}
+        {micLocked ? (
+          <div className="flex items-center justify-between gap-3 mb-2 px-1">
+            <button
+              type="button"
+              onClick={handleMicCancel}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95"
+              style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444" }}
+            >
+              <X size={12} /> Cancel
+            </button>
+            <div className="flex items-center gap-1.5">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i - 1) * 0.1}s` }} />
+              ))}
+              <Lock size={12} className="ml-1" style={{ color: "#f59e0b" }} />
+            </div>
+            <button
+              type="button"
+              onClick={handleMicSend}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95"
+              style={{ background: userColor + "20", border: `1px solid ${userColor}50`, color: userColor }}
+            >
+              Send ↑
+            </button>
+          </div>
+        ) : (isRecording || isTranscribing) ? (
           <div className="flex items-center justify-center gap-2 mb-2 h-5">
             {isRecording && (
               <>
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <div
-                    key={i}
-                    className="wave-bar w-0.5 rounded-full"
-                    style={{
-                      height: "14px",
-                      background: "#ef4444",
-                      animationDelay: `${(i - 1) * 0.1}s`,
-                    }}
-                  />
+                  <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i - 1) * 0.1}s` }} />
                 ))}
-                <span className="text-xs ml-1" style={{ color: "#ef4444" }}>
-                  Recording
-                </span>
+                <span className="text-xs ml-1" style={{ color: "#ef4444" }}>Recording</span>
+                <span className="text-xs text-white/25 ml-2">↑ slide to lock</span>
               </>
             )}
             {isTranscribing && (
               <>
-                <Loader2
-                  size={13}
-                  className="animate-spin"
-                  style={{ color: userColor }}
-                />
-                <span className="text-xs" style={{ color: userColor }}>
-                  Transcribing...
-                </span>
+                <Loader2 size={13} className="animate-spin" style={{ color: userColor }} />
+                <span className="text-xs" style={{ color: userColor }}>Transcribing...</span>
               </>
             )}
           </div>
-        )}
+        ) : null}
 
         {recordingError && (
           <div className="flex items-center gap-2 mb-1.5">
@@ -1183,28 +1196,25 @@ export default function MainChat() {
           }}
           className="w-full flex gap-2 items-center"
         >
-          {/* Gray mic — hold to record, releases transcript into input field */}
+          {/* Hold-to-record mic: hold=record, slide-up=lock, release=send, swipe-down=cancel */}
           <button
             type="button"
-            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 ${isRecording && !micLocked ? "voice-button-recording" : ""}`}
             style={{
-              background: isRecording
-                ? "#ef444422"
-                : isTranscribing
-                  ? userColor + "18"
-                  : "rgba(255,255,255,0.06)",
+              background: isRecording ? "#ef444422" : isTranscribing ? userColor + "18" : "rgba(255,255,255,0.06)",
               border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? userColor + "50" : "rgba(255,255,255,0.1)"}`,
-              opacity: isTranscribing ? 0.5 : 1,
-              cursor: isTranscribing ? "not-allowed" : "pointer",
+              touchAction: "none",
             }}
-            onPointerDown={handleVoiceHoldStart}
-            onPointerUp={handleVoiceHoldEnd}
-            onPointerLeave={handleVoiceHoldEnd}
-            onTouchEnd={handleVoiceHoldEnd}
+            onPointerDown={handleMicPointerDown}
+            onPointerMove={handleMicPointerMove}
+            onPointerUp={handleMicPointerUp}
+            onPointerCancel={handleMicCancel}
             data-testid="button-voice"
           >
             {isTranscribing ? (
               <Loader2 size={16} className="animate-spin" style={{ color: userColor }} />
+            ) : isRecording && micLocked ? (
+              <Lock size={16} style={{ color: "#f59e0b" }} />
             ) : isRecording ? (
               <MicOff size={16} style={{ color: "#ef4444" }} />
             ) : (
@@ -1229,33 +1239,6 @@ export default function MainChat() {
             Send
           </button>
 
-          {/* Amber mic — hold to record, auto-sends on release */}
-          <button
-            type="button"
-            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
-            style={{
-              background: isRecording ? "#ef444422" : isTranscribing ? "#f59e0b18" : "#f59e0b14",
-              border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
-              opacity: isTranscribing ? 0.5 : 1,
-              cursor: isTranscribing ? "not-allowed" : "pointer",
-              marginRight: "24px",
-              touchAction: "none",
-            }}
-            onPointerDown={handleHoldDown}
-            onPointerUp={handleHoldStop}
-            onPointerLeave={handleHoldStop}
-            onPointerCancel={handleHoldStop}
-            onTouchEnd={handleHoldStop}
-            data-testid="button-voice-hold"
-          >
-            {isTranscribing ? (
-              <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
-            ) : isRecording ? (
-              <MicOff size={16} style={{ color: "#ef4444" }} />
-            ) : (
-              <Mic size={16} style={{ color: "#f59e0b" }} />
-            )}
-          </button>
         </form>
 
         {suggestion && (

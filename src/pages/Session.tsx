@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2 } from "lucide-react";
+import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Lock, Loader2, X } from "lucide-react";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
@@ -86,9 +86,9 @@ export default function Session() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const holdToSendRef = useRef(false);
-  const holdStopFiredRef = useRef(false);
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [micLocked, setMicLocked] = useState(false);
+  const micStartYRef = useRef<number | null>(null);
+  const micCancelledRef = useRef(false);
   const noteInputRef = useRef<HTMLInputElement>(null);
 
   const refetchSession = useCallback(() => {
@@ -196,10 +196,13 @@ export default function Session() {
   }, [noteText, sendNote]);
 
   const handleTranscribe = useCallback(async (blob: Blob) => {
+    if (micCancelledRef.current) {
+      micCancelledRef.current = false;
+      return;
+    }
     setIsTranscribing(true);
     setRecordingError(null);
     try {
-      const openaiKey = "";
       const mimeType = blob.type || "audio/webm";
       const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
       const formData = new FormData();
@@ -212,16 +215,7 @@ export default function Session() {
       });
       const json = await resp.json();
       const transcript = (json.text || "").trim();
-      if (transcript) {
-        const autoSubmit = holdToSendRef.current;
-        holdToSendRef.current = false;
-        if (autoSubmit) {
-          await sendNote(transcript);
-        } else {
-          setNoteText(transcript);
-          noteInputRef.current?.focus();
-        }
-      }
+      if (transcript) await sendNote(transcript);
     } catch {
       setRecordingError("Transcription failed — check connection.");
     } finally {
@@ -262,35 +256,42 @@ export default function Session() {
     mediaRecorderRef.current.stop();
   }, []);
 
-  const handleHoldDown = useCallback((e: React.PointerEvent) => {
-    e.stopPropagation();
-    holdToSendRef.current = true;
-    // Delay start by 150ms — if user releases before then (quick tap), cancel without ever starting
-    holdTimerRef.current = setTimeout(() => {
-      holdTimerRef.current = null;
-      handleVoiceHoldStart();
-    }, 150);
-  }, [handleVoiceHoldStart]);
+  const handleMicPointerDown = useCallback((e: React.PointerEvent) => {
+    if (isRecording || isTranscribing) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    micStartYRef.current = e.clientY;
+    micCancelledRef.current = false;
+    setMicLocked(false);
+    handleVoiceHoldStart();
+  }, [isRecording, isTranscribing, handleVoiceHoldStart]);
 
-  const handleHoldStop = useCallback(() => {
-    if (holdStopFiredRef.current) return;
-    holdStopFiredRef.current = true;
-    // Cancel the delayed start if it hasn't fired yet (quick tap — never started)
-    if (holdTimerRef.current !== null) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-      holdToSendRef.current = false;
-      holdStopFiredRef.current = false;
-      return;
+  const handleMicPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!isRecording || micLocked || micStartYRef.current === null) return;
+    const dy = micStartYRef.current - e.clientY;
+    const dyDown = e.clientY - micStartYRef.current;
+    if (dy >= 60) {
+      setMicLocked(true);
+    } else if (dyDown >= 60) {
+      micCancelledRef.current = true;
+      setMicLocked(false);
+      handleVoiceHoldEnd();
     }
+  }, [isRecording, micLocked, handleVoiceHoldEnd]);
+
+  const handleMicPointerUp = useCallback(() => {
+    if (!isRecording || micLocked) return;
     handleVoiceHoldEnd();
-    setTimeout(() => {
-      holdStopFiredRef.current = false;
-      // Safety: stop any recording that leaked past the getUserMedia timing gap
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-        mediaRecorderRef.current.stop();
-      }
-    }, 1000);
+  }, [isRecording, micLocked, handleVoiceHoldEnd]);
+
+  const handleMicCancel = useCallback(() => {
+    micCancelledRef.current = true;
+    setMicLocked(false);
+    if (isRecording) handleVoiceHoldEnd();
+  }, [isRecording, handleVoiceHoldEnd]);
+
+  const handleMicSend = useCallback(() => {
+    setMicLocked(false);
+    handleVoiceHoldEnd();
   }, [handleVoiceHoldEnd]);
 
   // Safety: reset form after 30s if session never activates after a successful start
@@ -870,24 +871,60 @@ export default function Session() {
             {recordingError && (
               <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
             )}
+            {micLocked ? (
+              <div className="flex items-center justify-between gap-3 mb-2 px-1">
+                <button
+                  type="button"
+                  onClick={handleMicCancel}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95"
+                  style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444" }}
+                >
+                  <X size={12} /> Cancel
+                </button>
+                <div className="flex items-center gap-1.5">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i - 1) * 0.1}s` }} />
+                  ))}
+                  <Lock size={12} className="ml-1" style={{ color: "#f59e0b" }} />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleMicSend}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95"
+                  style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.4)", color: "#4ade80" }}
+                >
+                  Send ↑
+                </button>
+              </div>
+            ) : isRecording ? (
+              <div className="flex items-center justify-center gap-2 mb-2 h-5">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i - 1) * 0.1}s` }} />
+                ))}
+                <span className="text-xs ml-1" style={{ color: "#ef4444" }}>Recording</span>
+                <span className="text-xs text-white/25 ml-2">↑ slide to lock</span>
+              </div>
+            ) : null}
             <div className="flex gap-2 items-center">
+              {/* Hold-to-record mic: hold=record, slide-up=lock, release=send, swipe-down=cancel */}
               <button
                 type="button"
-                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 ${isRecording && !micLocked ? "voice-button-recording" : ""}`}
                 style={{
                   background: isRecording ? "#ef444422" : isTranscribing ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
                   border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)"}`,
-                  opacity: isTranscribing ? 0.5 : 1,
-                  cursor: isTranscribing ? "not-allowed" : "pointer",
+                  touchAction: "none",
                 }}
-                onPointerDown={handleVoiceHoldStart}
-                onPointerUp={handleVoiceHoldEnd}
-                onPointerLeave={handleVoiceHoldEnd}
-                onTouchEnd={handleVoiceHoldEnd}
+                onPointerDown={handleMicPointerDown}
+                onPointerMove={handleMicPointerMove}
+                onPointerUp={handleMicPointerUp}
+                onPointerCancel={handleMicCancel}
                 data-testid="button-voice"
               >
                 {isTranscribing ? (
                   <Loader2 size={16} className="animate-spin" style={{ color: "rgba(255,255,255,0.6)" }} />
+                ) : isRecording && micLocked ? (
+                  <Lock size={16} style={{ color: "#f59e0b" }} />
                 ) : isRecording ? (
                   <MicOff size={16} style={{ color: "#ef4444" }} />
                 ) : (
@@ -911,33 +948,6 @@ export default function Session() {
                 style={{ background: "#4ade80", color: "#000" }}
               >
                 Send
-              </button>
-
-              <button
-                type="button"
-                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
-                style={{
-                  background: isRecording ? "#ef444422" : isTranscribing ? "#f59e0b18" : "#f59e0b14",
-                  border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
-                  opacity: isTranscribing ? 0.5 : 1,
-                  cursor: isTranscribing ? "not-allowed" : "pointer",
-                  marginRight: "24px",
-                  touchAction: "none",
-                }}
-                onPointerDown={handleHoldDown}
-                onPointerUp={handleHoldStop}
-                onPointerLeave={handleHoldStop}
-                onPointerCancel={handleHoldStop}
-                onTouchEnd={handleHoldStop}
-                data-testid="button-voice-hold"
-              >
-                {isTranscribing ? (
-                  <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
-                ) : isRecording ? (
-                  <MicOff size={16} style={{ color: "#ef4444" }} />
-                ) : (
-                  <Mic size={16} style={{ color: "#f59e0b" }} />
-                )}
               </button>
             </div>
           </div>
