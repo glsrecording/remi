@@ -64,6 +64,9 @@ export default function Session() {
   );
   const [editingDayRate, setEditingDayRate] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [startArtist, setStartArtist] = useState("");
+  const [startSong, setStartSong] = useState("");
+  const [starting, setStarting] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -80,21 +83,26 @@ export default function Session() {
   const holdToSendRef = useRef(false);
   const noteInputRef = useRef<HTMLInputElement>(null);
 
-  // Poll session state every 10 seconds
-  useEffect(() => {
-    const fetchSession = () => {
-      fetch(`${JARVIS_URL}/session`, { headers: AUTH_HEADERS })
-        .then((r) => r.json())
-        .then((data: SessionState) => {
-          console.log("[Session] /session response:", data);
-          setSession(data);
-        })
-        .catch((err) => console.warn("[Session] /session fetch failed:", err));
-    };
-    fetchSession();
-    const id = setInterval(fetchSession, 10000);
-    return () => clearInterval(id);
+  const refetchSession = useCallback(() => {
+    fetch(`${JARVIS_URL}/session`, { headers: AUTH_HEADERS })
+      .then((r) => r.json())
+      .then((data: SessionState) => setSession(data))
+      .catch(() => {});
   }, []);
+
+  // Regular 10-second session poll
+  useEffect(() => {
+    refetchSession();
+    const id = setInterval(refetchSession, 10000);
+    return () => clearInterval(id);
+  }, [refetchSession]);
+
+  // Fast 2-second poll while session is starting (stops once active)
+  useEffect(() => {
+    if (!starting) return;
+    const id = setInterval(refetchSession, 2000);
+    return () => clearInterval(id);
+  }, [starting, refetchSession]);
 
   // Poll notes every 10 seconds
   useEffect(() => {
@@ -241,6 +249,29 @@ export default function Session() {
     handleVoiceHoldStart();
   }, [handleVoiceHoldStart]);
 
+  const handleStartSession = useCallback(async () => {
+    const artist = startArtist.trim();
+    const song   = startSong.trim();
+    if (!artist && !song) return;
+    setStarting(true);
+    const msg = artist && song
+      ? `session mode ${artist} on ${song}`
+      : `session mode ${artist || song}`;
+    try {
+      await fetch(`${JARVIS_URL}/remi`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg, user_id: "remi" }),
+      });
+      refetchSession();
+    } catch {
+      setStarting(false);
+      return;
+    }
+    // Safety: reset form after 30s if session never activates
+    setTimeout(() => setStarting(false), 30000);
+  }, [startArtist, startSong, refetchSession]);
+
   const handleStop = useCallback(async () => {
     if (!running) return;
     setStopping(true);
@@ -309,10 +340,6 @@ export default function Session() {
     rateType === "hourly" ? (elapsed / 3600) * hourlyRate :
     rateType === "day_rate" ? dayRateAmount : 0;
 
-  const banner = session.active && (session.artist || session.song)
-    ? `🎵 ${session.artist && session.song ? `${session.artist} — ${session.song}` : session.song || session.artist}`
-    : "No active session";
-
   return (
     <div
       className="flex flex-col min-h-screen"
@@ -341,294 +368,343 @@ export default function Session() {
         <div style={{ width: 36 }} />
       </div>
 
-      {/* Session banner */}
-      <div className="px-5 pt-5 pb-2">
-        <div
-          className="rounded-xl px-4 py-3 border"
-          style={{ background: "#111", borderColor: session.active ? "rgba(74,222,128,0.35)" : "rgba(255,255,255,0.06)" }}
+      {/* ── IDLE: start form ─────────────────────────────────────────── */}
+      {!session.active && (
+        <div className="flex-1 flex flex-col items-center justify-center px-6"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 20px) + 24px)" }}
         >
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: session.active ? "#4ade80" : "rgba(255,255,255,0.3)" }}>
-            {session.active ? "Active" : "Idle"}
-          </p>
-          <p className="text-base font-semibold truncate" style={{ color: session.active ? "#e5e5e5" : "rgba(255,255,255,0.3)" }}>
-            {banner}
-          </p>
-        </div>
-      </div>
-
-      {/* Timer */}
-      <div className="px-5 py-4">
-        <div
-          className="rounded-2xl px-4 py-6 border text-center"
-          style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)" }}
-        >
-          <p
-            className="font-mono text-5xl font-bold tracking-tight mb-1"
-            style={{ color: onBreak ? "#f59e0b" : "#4ade80", letterSpacing: "-0.02em" }}
-          >
-            {fmt(elapsed)}
-          </p>
-          {onBreak && (
-            <p className="text-xs uppercase tracking-widest mt-1" style={{ color: "#f59e0b" }}>
-              On break
-            </p>
-          )}
-
-          {/* Controls */}
-          <div className="flex gap-3 justify-center mt-5">
-            {!running ? (
+          {starting ? (
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 size={24} className="animate-spin" style={{ color: "#4ade80" }} />
+              <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>Starting session…</p>
+            </div>
+          ) : (
+            <div className="w-full max-w-xs space-y-3">
+              <p className="text-center text-xs uppercase tracking-widest mb-4"
+                style={{ color: "rgba(255,255,255,0.25)" }}>
+                No active session
+              </p>
+              <input
+                value={startArtist}
+                onChange={(e) => setStartArtist(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.nextElementSibling && (e.currentTarget.nextElementSibling as HTMLInputElement).focus()}
+                placeholder="Artist name"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+              />
+              <input
+                value={startSong}
+                onChange={(e) => setStartSong(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleStartSession()}
+                placeholder="Song title"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+              />
               <button
-                onClick={handleStart}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
-                style={{ background: "#4ade80", color: "#000" }}
+                onClick={handleStartSession}
+                disabled={!startArtist.trim() && !startSong.trim()}
+                className="w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-95"
+                style={{
+                  background: (startArtist.trim() || startSong.trim()) ? "#4ade80" : "rgba(74,222,128,0.12)",
+                  color: (startArtist.trim() || startSong.trim()) ? "#000" : "rgba(74,222,128,0.35)",
+                }}
               >
-                <Play size={16} />
-                Start
+                Start Session
               </button>
-            ) : (
-              <>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── ACTIVE: timer, rate, notes, mic bar ──────────────────────── */}
+      {session.active && (
+        <>
+          {/* Session banner */}
+          <div className="px-5 pt-5 pb-2">
+            <div
+              className="rounded-xl px-4 py-3 border"
+              style={{ background: "#111", borderColor: "rgba(74,222,128,0.35)" }}
+            >
+              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: "#4ade80" }}>
+                Active
+              </p>
+              <p className="text-base font-semibold truncate" style={{ color: "#e5e5e5" }}>
+                {session.artist && session.song
+                  ? `🎵 ${session.artist} — ${session.song}`
+                  : session.song || session.artist
+                  ? `🎵 ${session.song || session.artist}`
+                  : "🎵 Session active"}
+              </p>
+            </div>
+          </div>
+
+          {/* Timer */}
+          <div className="px-5 py-4">
+            <div
+              className="rounded-2xl px-4 py-6 border text-center"
+              style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)" }}
+            >
+              <p
+                className="font-mono text-5xl font-bold tracking-tight mb-1"
+                style={{ color: onBreak ? "#f59e0b" : "#4ade80", letterSpacing: "-0.02em" }}
+              >
+                {fmt(elapsed)}
+              </p>
+              {onBreak && (
+                <p className="text-xs uppercase tracking-widest mt-1" style={{ color: "#f59e0b" }}>
+                  On break
+                </p>
+              )}
+
+              {/* Controls */}
+              <div className="flex gap-3 justify-center mt-5">
+                {!running ? (
+                  <button
+                    onClick={handleStart}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
+                    style={{ background: "#4ade80", color: "#000" }}
+                  >
+                    <Play size={16} />
+                    Start
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleBreak}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
+                      style={{
+                        background: onBreak ? "rgba(245,158,11,0.15)" : "transparent",
+                        borderColor: "#f59e0b",
+                        color: "#f59e0b",
+                      }}
+                    >
+                      <Coffee size={16} />
+                      {onBreak ? "Resume" : "Break"}
+                    </button>
+                    <button
+                      onClick={handleStop}
+                      disabled={stopping}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all"
+                      style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444", border: "1px solid #ef4444" }}
+                    >
+                      <Square size={16} />
+                      {stopping ? "Logging…" : "Stop"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Rate type + Earnings */}
+          <div className="px-5 pb-3">
+            <div className="flex gap-1.5 mb-2">
+              {(["hourly", "day_rate", "project_rate", "no_charge"] as RateType[]).map((type) => (
                 <button
-                  onClick={handleBreak}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
+                  key={type}
+                  onClick={() => {
+                    setRateType(type);
+                    localStorage.setItem(RATE_TYPE_KEY, type);
+                    setEditingRate(false);
+                    setEditingDayRate(false);
+                  }}
+                  className="flex-1 py-1.5 text-xs rounded-lg font-medium transition-all"
                   style={{
-                    background: onBreak ? "rgba(245,158,11,0.15)" : "transparent",
-                    borderColor: "#f59e0b",
-                    color: "#f59e0b",
+                    background: rateType === type ? "rgba(74,222,128,0.12)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${rateType === type ? "rgba(74,222,128,0.6)" : "rgba(255,255,255,0.08)"}`,
+                    color: rateType === type ? "#4ade80" : "rgba(255,255,255,0.35)",
                   }}
                 >
-                  <Coffee size={16} />
-                  {onBreak ? "Resume" : "Break"}
+                  {RATE_TYPE_LABELS[type]}
                 </button>
-                <button
-                  onClick={handleStop}
-                  disabled={stopping}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all"
-                  style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444", border: "1px solid #ef4444" }}
-                >
-                  <Square size={16} />
-                  {stopping ? "Logging…" : "Stop"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Rate type + Earnings */}
-      <div className="px-5 pb-3">
-        {/* Rate type selector */}
-        <div className="flex gap-1.5 mb-2">
-          {(["hourly", "day_rate", "project_rate", "no_charge"] as RateType[]).map((type) => (
-            <button
-              key={type}
-              onClick={() => {
-                setRateType(type);
-                localStorage.setItem(RATE_TYPE_KEY, type);
-                setEditingRate(false);
-                setEditingDayRate(false);
-              }}
-              className="flex-1 py-1.5 text-xs rounded-lg font-medium transition-all"
-              style={{
-                background: rateType === type ? "rgba(74,222,128,0.12)" : "rgba(255,255,255,0.04)",
-                border: `1px solid ${rateType === type ? "rgba(74,222,128,0.6)" : "rgba(255,255,255,0.08)"}`,
-                color: rateType === type ? "#4ade80" : "rgba(255,255,255,0.35)",
-              }}
-            >
-              {RATE_TYPE_LABELS[type]}
-            </button>
-          ))}
-        </div>
-
-        {/* Earnings card */}
-        <div
-          className="rounded-xl px-4 py-3 border flex items-center justify-between"
-          style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)" }}
-        >
-          <div className="flex items-center gap-2">
-            <DollarSign size={15} style={{ color: "#4ade80" }} />
-            <span className="text-sm text-white/50">Earnings</span>
-          </div>
-
-          {rateType === "hourly" && (
-            <div className="flex items-center gap-3">
-              <span className="text-lg font-semibold font-mono" style={{ color: "#4ade80" }}>
-                ${earnings.toFixed(2)}
-              </span>
-              <span className="text-xs text-white/30">@</span>
-              {editingRate ? (
-                <input
-                  type="number"
-                  value={rateInput}
-                  onChange={(e) => setRateInput(e.target.value)}
-                  onBlur={saveRate}
-                  onKeyDown={(e) => e.key === "Enter" && saveRate()}
-                  className="w-16 bg-transparent border-b text-sm text-right outline-none"
-                  style={{ borderColor: "#4ade80", color: "#4ade80" }}
-                  autoFocus
-                />
-              ) : (
-                <button
-                  onClick={() => { setRateInput(String(hourlyRate)); setEditingRate(true); }}
-                  className="text-sm text-white/40 hover:text-white/70 transition-colors"
-                >
-                  ${hourlyRate}/hr
-                </button>
-              )}
-            </div>
-          )}
-
-          {rateType === "day_rate" && (
-            <div className="flex items-center gap-3">
-              {editingDayRate ? (
-                <input
-                  type="number"
-                  value={dayRateInput}
-                  onChange={(e) => setDayRateInput(e.target.value)}
-                  onBlur={saveDayRate}
-                  onKeyDown={(e) => e.key === "Enter" && saveDayRate()}
-                  className="w-20 bg-transparent border-b text-lg text-right outline-none font-mono font-semibold"
-                  style={{ borderColor: "#4ade80", color: "#4ade80" }}
-                  autoFocus
-                />
-              ) : (
-                <button
-                  onClick={() => { setDayRateInput(String(dayRateAmount)); setEditingDayRate(true); }}
-                  className="text-lg font-semibold font-mono"
-                  style={{ color: "#4ade80" }}
-                >
-                  ${dayRateAmount}
-                </button>
-              )}
-              <span className="text-xs text-white/30">flat</span>
-            </div>
-          )}
-
-          {(rateType === "project_rate" || rateType === "no_charge") && (
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-semibold font-mono" style={{ color: "rgba(255,255,255,0.25)" }}>$0</span>
-              <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
-                {rateType === "project_rate" ? "Project rate" : "No charge"}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Capture log */}
-      <div className="px-5 flex-1 flex flex-col min-h-0">
-        <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "rgba(255,255,255,0.3)" }}>
-          Session Notes
-        </p>
-        <div
-          className="flex-1 rounded-xl border overflow-y-auto"
-          style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)", maxHeight: "200px" }}
-        >
-          {notes.length === 0 ? (
-            <p className="text-sm text-white/25 p-4 text-center">
-              Notes captured via Jarvis or the mic below will appear here
-            </p>
-          ) : (
-            <div className="p-3 space-y-2">
-              {notes.map((n, i) => (
-                <div
-                  key={i}
-                  className="flex gap-3 py-2 px-3 rounded-lg"
-                  style={{ background: "rgba(255,255,255,0.03)" }}
-                >
-                  <span
-                    className="text-xs font-mono mt-0.5 shrink-0"
-                    style={{ color: n.type === "timestamp" ? "#f59e0b" : "#4ade80" }}
-                  >
-                    {n.ts}
-                  </span>
-                  <p className="text-sm text-white/70 leading-snug">{n.text}</p>
-                </div>
               ))}
-              <div ref={notesEndRef} />
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Mic input bar */}
-      <div
-        className="shrink-0 px-4 pt-3"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}
-      >
-        {recordingError && (
-          <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
-        )}
-        <div className="flex gap-2 items-center">
-          {/* Left mic — always-on, sends transcription to text field */}
-          <button
-            type="button"
-            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
-            style={{
-              background: isRecording ? "#ef444422" : isTranscribing ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
-              border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)"}`,
-              opacity: isTranscribing ? 0.5 : 1,
-              cursor: isTranscribing ? "not-allowed" : "pointer",
-            }}
-            onPointerDown={handleVoiceHoldStart}
-            onPointerUp={handleVoiceHoldEnd}
-            onPointerLeave={handleVoiceHoldEnd}
-            data-testid="button-voice"
+            <div
+              className="rounded-xl px-4 py-3 border flex items-center justify-between"
+              style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)" }}
+            >
+              <div className="flex items-center gap-2">
+                <DollarSign size={15} style={{ color: "#4ade80" }} />
+                <span className="text-sm text-white/50">Earnings</span>
+              </div>
+
+              {rateType === "hourly" && (
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-semibold font-mono" style={{ color: "#4ade80" }}>
+                    ${earnings.toFixed(2)}
+                  </span>
+                  <span className="text-xs text-white/30">@</span>
+                  {editingRate ? (
+                    <input
+                      type="number"
+                      value={rateInput}
+                      onChange={(e) => setRateInput(e.target.value)}
+                      onBlur={saveRate}
+                      onKeyDown={(e) => e.key === "Enter" && saveRate()}
+                      className="w-16 bg-transparent border-b text-sm text-right outline-none"
+                      style={{ borderColor: "#4ade80", color: "#4ade80" }}
+                      autoFocus
+                    />
+                  ) : (
+                    <button
+                      onClick={() => { setRateInput(String(hourlyRate)); setEditingRate(true); }}
+                      className="text-sm text-white/40 hover:text-white/70 transition-colors"
+                    >
+                      ${hourlyRate}/hr
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {rateType === "day_rate" && (
+                <div className="flex items-center gap-3">
+                  {editingDayRate ? (
+                    <input
+                      type="number"
+                      value={dayRateInput}
+                      onChange={(e) => setDayRateInput(e.target.value)}
+                      onBlur={saveDayRate}
+                      onKeyDown={(e) => e.key === "Enter" && saveDayRate()}
+                      className="w-20 bg-transparent border-b text-lg text-right outline-none font-mono font-semibold"
+                      style={{ borderColor: "#4ade80", color: "#4ade80" }}
+                      autoFocus
+                    />
+                  ) : (
+                    <button
+                      onClick={() => { setDayRateInput(String(dayRateAmount)); setEditingDayRate(true); }}
+                      className="text-lg font-semibold font-mono"
+                      style={{ color: "#4ade80" }}
+                    >
+                      ${dayRateAmount}
+                    </button>
+                  )}
+                  <span className="text-xs text-white/30">flat</span>
+                </div>
+              )}
+
+              {(rateType === "project_rate" || rateType === "no_charge") && (
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-semibold font-mono" style={{ color: "rgba(255,255,255,0.25)" }}>$0</span>
+                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+                    {rateType === "project_rate" ? "Project rate" : "No charge"}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Session notes */}
+          <div className="px-5 mb-3 flex-1 flex flex-col min-h-0">
+            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "rgba(255,255,255,0.3)" }}>
+              Session Notes
+            </p>
+            <div
+              className="flex-1 rounded-xl border overflow-y-auto"
+              style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)", maxHeight: "200px" }}
+            >
+              {notes.length === 0 ? (
+                <p className="text-sm text-white/25 p-4 text-center">
+                  Notes captured via Jarvis or the mic below will appear here
+                </p>
+              ) : (
+                <div className="p-3 space-y-2">
+                  {notes.map((n, i) => (
+                    <div
+                      key={i}
+                      className="flex gap-3 py-2 px-3 rounded-lg"
+                      style={{ background: "rgba(255,255,255,0.03)" }}
+                    >
+                      <span
+                        className="text-xs font-mono mt-0.5 shrink-0"
+                        style={{ color: n.type === "timestamp" ? "#f59e0b" : "#4ade80" }}
+                      >
+                        {n.ts}
+                      </span>
+                      <p className="text-sm text-white/70 leading-snug">{n.text}</p>
+                    </div>
+                  ))}
+                  <div ref={notesEndRef} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Mic input bar */}
+          <div
+            className="shrink-0 px-4 pt-3"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 20px) + 16px)" }}
           >
-            {isTranscribing ? (
-              <Loader2 size={16} className="animate-spin" style={{ color: "rgba(255,255,255,0.6)" }} />
-            ) : isRecording ? (
-              <MicOff size={16} style={{ color: "#ef4444" }} />
-            ) : (
-              <Mic size={16} style={{ color: "rgba(255,255,255,0.45)" }} />
+            {recordingError && (
+              <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
             )}
-          </button>
+            <div className="flex gap-2 items-center">
+              <button
+                type="button"
+                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+                style={{
+                  background: isRecording ? "#ef444422" : isTranscribing ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
+                  border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)"}`,
+                  opacity: isTranscribing ? 0.5 : 1,
+                  cursor: isTranscribing ? "not-allowed" : "pointer",
+                }}
+                onPointerDown={handleVoiceHoldStart}
+                onPointerUp={handleVoiceHoldEnd}
+                onPointerLeave={handleVoiceHoldEnd}
+                data-testid="button-voice"
+              >
+                {isTranscribing ? (
+                  <Loader2 size={16} className="animate-spin" style={{ color: "rgba(255,255,255,0.6)" }} />
+                ) : isRecording ? (
+                  <MicOff size={16} style={{ color: "#ef4444" }} />
+                ) : (
+                  <Mic size={16} style={{ color: "rgba(255,255,255,0.45)" }} />
+                )}
+              </button>
 
-          {/* Text input */}
-          <input
-            ref={noteInputRef}
-            value={noteText}
-            onChange={(e) => setNoteText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleNoteSubmit()}
-            placeholder="Drop a session note…"
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
-          />
+              <input
+                ref={noteInputRef}
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleNoteSubmit()}
+                placeholder="Drop a session note…"
+                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+              />
 
-          {/* Send */}
-          <button
-            type="button"
-            onClick={handleNoteSubmit}
-            className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
-            style={{ background: "#4ade80", color: "#000" }}
-          >
-            Send
-          </button>
+              <button
+                type="button"
+                onClick={handleNoteSubmit}
+                className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+                style={{ background: "#4ade80", color: "#000" }}
+              >
+                Send
+              </button>
 
-          {/* Right mic — hold-to-send, auto-sends transcription immediately */}
-          <button
-            type="button"
-            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
-            style={{
-              background: isRecording ? "#ef444422" : isTranscribing ? "#f59e0b18" : "#f59e0b14",
-              border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
-              opacity: isTranscribing ? 0.5 : 1,
-              cursor: isTranscribing ? "not-allowed" : "pointer",
-              marginRight: "16px",
-            }}
-            onPointerDown={handleHoldDown}
-            onPointerUp={handleVoiceHoldEnd}
-            onPointerLeave={handleVoiceHoldEnd}
-            data-testid="button-voice-hold"
-          >
-            {isTranscribing ? (
-              <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
-            ) : isRecording ? (
-              <MicOff size={16} style={{ color: "#ef4444" }} />
-            ) : (
-              <Mic size={16} style={{ color: "#f59e0b" }} />
-            )}
-          </button>
-        </div>
-      </div>
+              <button
+                type="button"
+                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+                style={{
+                  background: isRecording ? "#ef444422" : isTranscribing ? "#f59e0b18" : "#f59e0b14",
+                  border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+                  opacity: isTranscribing ? 0.5 : 1,
+                  cursor: isTranscribing ? "not-allowed" : "pointer",
+                  marginRight: "16px",
+                }}
+                onPointerDown={handleHoldDown}
+                onPointerUp={handleVoiceHoldEnd}
+                onPointerLeave={handleVoiceHoldEnd}
+                data-testid="button-voice-hold"
+              >
+                {isTranscribing ? (
+                  <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+                ) : isRecording ? (
+                  <MicOff size={16} style={{ color: "#ef4444" }} />
+                ) : (
+                  <Mic size={16} style={{ color: "#f59e0b" }} />
+                )}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
