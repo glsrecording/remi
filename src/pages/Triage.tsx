@@ -229,6 +229,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); micDown(); }}
         onPointerUp={micUp}
         onPointerLeave={micUp}
+        onTouchEnd={micUp}
       >
         {transcribing
           ? <Loader2 size={11} className="animate-spin" style={{ color: "#f59e0b" }} />
@@ -259,6 +260,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         onPointerDown={holdDown}
         onPointerUp={micUp}
         onPointerLeave={micUp}
+        onTouchEnd={micUp}
       >
         {transcribing
           ? <Loader2 size={11} className="animate-spin" style={{ color: "#f59e0b" }} />

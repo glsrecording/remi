@@ -82,12 +82,21 @@ export default function Session() {
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const holdToSendRef = useRef(false);
+  const holdStopFiredRef = useRef(false);
   const noteInputRef = useRef<HTMLInputElement>(null);
 
   const refetchSession = useCallback(() => {
     fetch(`${JARVIS_URL}/session`, { headers: AUTH_HEADERS })
       .then((r) => r.json())
-      .then((data: SessionState) => setSession(data))
+      .then((data: SessionState) => {
+        if (!data || !data.active || (!data.artist && !data.song)) {
+          setSession({ active: false });
+          setStarting(false);
+        } else {
+          setSession(data);
+          setStarting(false);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -249,6 +258,13 @@ export default function Session() {
     holdToSendRef.current = true;
     handleVoiceHoldStart();
   }, [handleVoiceHoldStart]);
+
+  const handleHoldStop = useCallback(() => {
+    if (holdStopFiredRef.current) return;
+    holdStopFiredRef.current = true;
+    handleVoiceHoldEnd();
+    setTimeout(() => { holdStopFiredRef.current = false; }, 400);
+  }, [handleVoiceHoldEnd]);
 
   // Safety: reset form after 30s if session never activates after a successful start
   useEffect(() => {
@@ -647,10 +663,20 @@ export default function Session() {
             </div>
           </div>
 
-          {/* Mic input bar */}
+          {/* Spacer for fixed bottom bar */}
+          <div className="shrink-0" style={{ height: 120 }} />
+
+          {/* Mic input bar — fixed to bottom */}
           <div
-            className="shrink-0 px-4 pt-3"
-            style={{ paddingBottom: "max(env(safe-area-inset-bottom, 80px), 80px)" }}
+            style={{
+              position: "fixed",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              background: "#1a1a1a",
+              zIndex: 10,
+              padding: "12px 16px 80px",
+            }}
           >
             {recordingError && (
               <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
@@ -668,6 +694,7 @@ export default function Session() {
                 onPointerDown={handleVoiceHoldStart}
                 onPointerUp={handleVoiceHoldEnd}
                 onPointerLeave={handleVoiceHoldEnd}
+                onTouchEnd={handleVoiceHoldEnd}
                 data-testid="button-voice"
               >
                 {isTranscribing ? (
@@ -708,8 +735,9 @@ export default function Session() {
                   marginRight: "16px",
                 }}
                 onPointerDown={handleHoldDown}
-                onPointerUp={handleVoiceHoldEnd}
-                onPointerLeave={handleVoiceHoldEnd}
+                onPointerUp={handleHoldStop}
+                onPointerLeave={handleHoldStop}
+                onTouchEnd={handleHoldStop}
                 data-testid="button-voice-hold"
               >
                 {isTranscribing ? (

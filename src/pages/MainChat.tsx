@@ -451,6 +451,8 @@ export default function MainChat() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const holdToSendRef = useRef(false);
+  const holdStopFiredRef = useRef(false);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -635,8 +637,13 @@ export default function MainChat() {
       try {
         const transcript = await transcribeAudio(blob);
         if (transcript) {
-          setInputText(transcript);
-          sendMessage(transcript, true);
+          const autoSend = holdToSendRef.current;
+          holdToSendRef.current = false;
+          if (autoSend) {
+            sendMessage(transcript, true);
+          } else {
+            setInputText(transcript);
+          }
         } else setRecordingError("Nothing captured — try again.");
       } catch {
         setRecordingError("Transcription failed — check connection.");
@@ -692,6 +699,20 @@ export default function MainChat() {
     mediaRecorderRef.current = null;
     setIsRecording(false);
   }, []);
+
+  const handleHoldDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    holdToSendRef.current = true;
+    handleVoiceHoldStart();
+  }, [handleVoiceHoldStart]);
+
+  const handleHoldStop = useCallback(() => {
+    if (holdStopFiredRef.current) return;
+    holdStopFiredRef.current = true;
+    handleVoiceHoldEnd();
+    setTimeout(() => { holdStopFiredRef.current = false; }, 400);
+  }, [handleVoiceHoldEnd]);
   // ─────────────────────────────────────────────────────────────────────────
 
   const togglePicker = (side: "user" | "remi") =>
@@ -1037,14 +1058,20 @@ export default function MainChat() {
             </div>
           </div>
         )}
+        <div style={{ height: 160 }} />
         <div ref={messagesEndRef} />
         </div>
       </div>
 
       <div
-        className="shrink-0 px-4 pt-2"
         style={{
-          paddingBottom: "max(env(safe-area-inset-bottom, 80px), 80px)",
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: "#000000",
+          zIndex: 10,
+          padding: "8px 16px 80px",
         }}
       >
         {/* Recording / transcribing state above the input row */}
@@ -1133,7 +1160,7 @@ export default function MainChat() {
           </div>
         )}
 
-        {/* Input row: [text input] [mic] [send] */}
+        {/* Input row: [gray mic] [text input] [Send] [amber hold-to-send mic] */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -1141,15 +1168,7 @@ export default function MainChat() {
           }}
           className="w-full flex gap-2 items-center"
         >
-          <input
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder='Try "Mix note for [song] — [note]"'
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
-            data-testid="input-text-command"
-          />
-
-          {/* Inline mic button */}
+          {/* Gray mic — hold to record, releases transcript into input field */}
           <button
             type="button"
             className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
@@ -1166,6 +1185,7 @@ export default function MainChat() {
             onPointerDown={handleVoiceHoldStart}
             onPointerUp={handleVoiceHoldEnd}
             onPointerLeave={handleVoiceHoldEnd}
+            onTouchEnd={handleVoiceHoldEnd}
             data-testid="button-voice"
           >
             {isTranscribing ? (
@@ -1177,6 +1197,14 @@ export default function MainChat() {
             )}
           </button>
 
+          <input
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            placeholder='Try "Mix note for [song] — [note]"'
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+            data-testid="input-text-command"
+          />
+
           <button
             type="submit"
             className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
@@ -1186,7 +1214,7 @@ export default function MainChat() {
             Send
           </button>
 
-          {/* Hold-to-send mic — right thumb position, auto-sends on release */}
+          {/* Amber mic — hold to record, auto-sends on release */}
           <button
             type="button"
             className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
@@ -1197,9 +1225,10 @@ export default function MainChat() {
               cursor: isTranscribing ? "not-allowed" : "pointer",
               marginRight: "16px",
             }}
-            onPointerDown={handleVoiceHoldStart}
-            onPointerUp={handleVoiceHoldEnd}
-            onPointerLeave={handleVoiceHoldEnd}
+            onPointerDown={handleHoldDown}
+            onPointerUp={handleHoldStop}
+            onPointerLeave={handleHoldStop}
+            onTouchEnd={handleHoldStop}
             data-testid="button-voice-hold"
           >
             {isTranscribing ? (

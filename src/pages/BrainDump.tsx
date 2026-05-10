@@ -420,6 +420,7 @@ export default function BrainDump() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const holdStopFiredRef = useRef(false);
 
   const buckets: {
     key: BucketType;
@@ -516,6 +517,13 @@ export default function BrainDump() {
     mediaRecorderRef.current = null;
     setIsRecording(false);
   }, []);
+
+  const handleHoldStop = useCallback(() => {
+    if (holdStopFiredRef.current) return;
+    holdStopFiredRef.current = true;
+    handleVoiceHoldEnd();
+    setTimeout(() => { holdStopFiredRef.current = false; }, 400);
+  }, [handleVoiceHoldEnd]);
 
   const deleteItem = (id: string) =>
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -765,6 +773,7 @@ export default function BrainDump() {
             onPointerDown={handleVoiceHoldStart}
             onPointerUp={handleVoiceHoldEnd}
             onPointerLeave={handleVoiceHoldEnd}
+            onTouchEnd={handleVoiceHoldEnd}
             disabled={!selectedBucket || isTranscribing}
             data-testid="button-voice-record"
           >
@@ -797,8 +806,9 @@ export default function BrainDump() {
               marginRight: "16px",
             }}
             onPointerDown={handleVoiceHoldStart}
-            onPointerUp={handleVoiceHoldEnd}
-            onPointerLeave={handleVoiceHoldEnd}
+            onPointerUp={handleHoldStop}
+            onPointerLeave={handleHoldStop}
+            onTouchEnd={handleHoldStop}
             disabled={!selectedBucket || isTranscribing}
             data-testid="button-voice-hold"
           >
