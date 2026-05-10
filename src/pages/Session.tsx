@@ -7,6 +7,16 @@ const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 const AUTH_HEADERS = { Authorization: `Bearer ${REMI_API_KEY}` };
 const HOURLY_RATE_KEY = "remi_session_hourly_rate";
+const DAY_RATE_KEY    = "remi_session_day_rate";
+const RATE_TYPE_KEY   = "remi_session_rate_type";
+
+type RateType = "hourly" | "day_rate" | "project_rate" | "no_charge";
+const RATE_TYPE_LABELS: Record<RateType, string> = {
+  hourly: "Hourly",
+  day_rate: "Day Rate",
+  project_rate: "Project",
+  no_charge: "No Charge",
+};
 
 interface SessionState {
   active: boolean;
@@ -42,6 +52,17 @@ export default function Session() {
   });
   const [rateInput, setRateInput] = useState(String(hourlyRate));
   const [editingRate, setEditingRate] = useState(false);
+  const [rateType, setRateType] = useState<RateType>(() =>
+    (localStorage.getItem(RATE_TYPE_KEY) as RateType) || "hourly"
+  );
+  const [dayRateAmount, setDayRateAmount] = useState<number>(() => {
+    const saved = localStorage.getItem(DAY_RATE_KEY);
+    return saved ? parseFloat(saved) : 400;
+  });
+  const [dayRateInput, setDayRateInput] = useState(() =>
+    String(parseFloat(localStorage.getItem(DAY_RATE_KEY) || "400"))
+  );
+  const [editingDayRate, setEditingDayRate] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -227,12 +248,27 @@ export default function Session() {
     setOnBreak(false);
     if (timerRef.current) clearInterval(timerRef.current);
 
-    const hours = elapsed / 3600;
-    const earnings = hours * hourlyRate;
+    const totalMins = Math.round(elapsed / 60);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    const durationStr = h > 0 && m > 0 ? `${h}h ${m}m` : h > 0 ? `${h}h` : `${m}m`;
+
     const label = session.artist && session.song
       ? `${session.artist} / ${session.song}`
       : session.song || session.artist || "session";
-    const logMsg = `session log: ${label} — ${fmt(elapsed)} at $${hourlyRate}/hr = $${earnings.toFixed(2)}`;
+
+    let logRatePart: string;
+    if (rateType === "hourly") {
+      const earningsAmt = (elapsed / 3600) * hourlyRate;
+      logRatePart = `at hourly: $${hourlyRate}/hr = $${earningsAmt.toFixed(2)}`;
+    } else if (rateType === "day_rate") {
+      logRatePart = `at day rate: $${dayRateAmount}`;
+    } else if (rateType === "project_rate") {
+      logRatePart = `at project rate: $0`;
+    } else {
+      logRatePart = `at no charge: $0`;
+    }
+    const logMsg = `session log: ${label} — ${durationStr} ${logRatePart}`;
 
     try {
       await fetch(`${JARVIS_URL}/remi`, {
@@ -244,8 +280,8 @@ export default function Session() {
       // non-fatal
     }
     setStopping(false);
-    navigate("/");
-  }, [running, elapsed, hourlyRate, session, navigate]);
+    navigate("/", { replace: true });
+  }, [running, elapsed, hourlyRate, rateType, dayRateAmount, session, navigate]);
 
   const saveRate = useCallback(() => {
     const v = parseFloat(rateInput);
@@ -258,7 +294,20 @@ export default function Session() {
     setEditingRate(false);
   }, [rateInput, hourlyRate]);
 
-  const earnings = (elapsed / 3600) * hourlyRate;
+  const saveDayRate = useCallback(() => {
+    const v = parseFloat(dayRateInput);
+    if (!isNaN(v) && v > 0) {
+      setDayRateAmount(v);
+      localStorage.setItem(DAY_RATE_KEY, String(v));
+    } else {
+      setDayRateInput(String(dayRateAmount));
+    }
+    setEditingDayRate(false);
+  }, [dayRateInput, dayRateAmount]);
+
+  const earnings =
+    rateType === "hourly" ? (elapsed / 3600) * hourlyRate :
+    rateType === "day_rate" ? dayRateAmount : 0;
 
   const banner = session.active && (session.artist || session.song)
     ? `🎵 ${session.artist && session.song ? `${session.artist} — ${session.song}` : session.song || session.artist}`
@@ -365,8 +414,32 @@ export default function Session() {
         </div>
       </div>
 
-      {/* Earnings */}
+      {/* Rate type + Earnings */}
       <div className="px-5 pb-3">
+        {/* Rate type selector */}
+        <div className="flex gap-1.5 mb-2">
+          {(["hourly", "day_rate", "project_rate", "no_charge"] as RateType[]).map((type) => (
+            <button
+              key={type}
+              onClick={() => {
+                setRateType(type);
+                localStorage.setItem(RATE_TYPE_KEY, type);
+                setEditingRate(false);
+                setEditingDayRate(false);
+              }}
+              className="flex-1 py-1.5 text-xs rounded-lg font-medium transition-all"
+              style={{
+                background: rateType === type ? "rgba(74,222,128,0.12)" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${rateType === type ? "rgba(74,222,128,0.6)" : "rgba(255,255,255,0.08)"}`,
+                color: rateType === type ? "#4ade80" : "rgba(255,255,255,0.35)",
+              }}
+            >
+              {RATE_TYPE_LABELS[type]}
+            </button>
+          ))}
+        </div>
+
+        {/* Earnings card */}
         <div
           className="rounded-xl px-4 py-3 border flex items-center justify-between"
           style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)" }}
@@ -375,31 +448,69 @@ export default function Session() {
             <DollarSign size={15} style={{ color: "#4ade80" }} />
             <span className="text-sm text-white/50">Earnings</span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-lg font-semibold font-mono" style={{ color: "#4ade80" }}>
-              ${earnings.toFixed(2)}
-            </span>
-            <span className="text-xs text-white/30">@</span>
-            {editingRate ? (
-              <input
-                type="number"
-                value={rateInput}
-                onChange={(e) => setRateInput(e.target.value)}
-                onBlur={saveRate}
-                onKeyDown={(e) => e.key === "Enter" && saveRate()}
-                className="w-16 bg-transparent border-b text-sm text-right outline-none"
-                style={{ borderColor: "#4ade80", color: "#4ade80" }}
-                autoFocus
-              />
-            ) : (
-              <button
-                onClick={() => { setRateInput(String(hourlyRate)); setEditingRate(true); }}
-                className="text-sm text-white/40 hover:text-white/70 transition-colors"
-              >
-                ${hourlyRate}/hr
-              </button>
-            )}
-          </div>
+
+          {rateType === "hourly" && (
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-semibold font-mono" style={{ color: "#4ade80" }}>
+                ${earnings.toFixed(2)}
+              </span>
+              <span className="text-xs text-white/30">@</span>
+              {editingRate ? (
+                <input
+                  type="number"
+                  value={rateInput}
+                  onChange={(e) => setRateInput(e.target.value)}
+                  onBlur={saveRate}
+                  onKeyDown={(e) => e.key === "Enter" && saveRate()}
+                  className="w-16 bg-transparent border-b text-sm text-right outline-none"
+                  style={{ borderColor: "#4ade80", color: "#4ade80" }}
+                  autoFocus
+                />
+              ) : (
+                <button
+                  onClick={() => { setRateInput(String(hourlyRate)); setEditingRate(true); }}
+                  className="text-sm text-white/40 hover:text-white/70 transition-colors"
+                >
+                  ${hourlyRate}/hr
+                </button>
+              )}
+            </div>
+          )}
+
+          {rateType === "day_rate" && (
+            <div className="flex items-center gap-3">
+              {editingDayRate ? (
+                <input
+                  type="number"
+                  value={dayRateInput}
+                  onChange={(e) => setDayRateInput(e.target.value)}
+                  onBlur={saveDayRate}
+                  onKeyDown={(e) => e.key === "Enter" && saveDayRate()}
+                  className="w-20 bg-transparent border-b text-lg text-right outline-none font-mono font-semibold"
+                  style={{ borderColor: "#4ade80", color: "#4ade80" }}
+                  autoFocus
+                />
+              ) : (
+                <button
+                  onClick={() => { setDayRateInput(String(dayRateAmount)); setEditingDayRate(true); }}
+                  className="text-lg font-semibold font-mono"
+                  style={{ color: "#4ade80" }}
+                >
+                  ${dayRateAmount}
+                </button>
+              )}
+              <span className="text-xs text-white/30">flat</span>
+            </div>
+          )}
+
+          {(rateType === "project_rate" || rateType === "no_charge") && (
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-semibold font-mono" style={{ color: "rgba(255,255,255,0.25)" }}>$0</span>
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+                {rateType === "project_rate" ? "Project rate" : "No charge"}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
