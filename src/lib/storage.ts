@@ -47,6 +47,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   isVoice?: boolean;
+  pages?: Array<{ title: string; url: string | null }>;
 }
 
 /** Parse "mix note for [song] — [note body]" from a user message. Returns null if not a mix-note command. */

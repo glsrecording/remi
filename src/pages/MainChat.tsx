@@ -445,6 +445,7 @@ export default function MainChat() {
   // Mic state
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isJarvisLoading, setIsJarvisLoading] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [retryBlob, setRetryBlob] = useState<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -497,7 +498,7 @@ export default function MainChat() {
   }, [openPicker]);
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isJarvisLoading]);
   // On mount: pull shared history from server; fall back to localStorage silently
   useEffect(() => {
     fetch(`${JARVIS_URL}/remi/history`, {
@@ -567,6 +568,7 @@ export default function MainChat() {
       setInputText("");
       const match = findBestMatch(text.trim(), 0.3);
       if (match) recordRecentCommand(match.command.trigger);
+      setIsJarvisLoading(true);
       fetch(`${JARVIS_URL}/remi`, {
         method: "POST",
         headers: {
@@ -577,6 +579,7 @@ export default function MainChat() {
       })
         .then((r) => r.json())
         .then((data) => {
+          setIsJarvisLoading(false);
           if (data.type === "triage_redirect" && Array.isArray(data.items)) {
             sessionStorage.setItem("triage_preload", JSON.stringify(data.items));
             navigate("/triage");
@@ -598,10 +601,14 @@ export default function MainChat() {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
+              ...(Array.isArray(data.pages) && data.pages.length > 0
+                ? { pages: data.pages as Array<{ title: string; url: string | null }> }
+                : {}),
             },
           ]);
         })
         .catch(() => {
+          setIsJarvisLoading(false);
           setMessages((prev) => [
             ...prev,
             {
@@ -955,11 +962,55 @@ export default function MainChat() {
               }
             >
               {msg.role === "ai" ? (
-                <div className="prose-dark leading-relaxed whitespace-pre-wrap" style={{ fontSize: "inherit" }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {formatAiText(msg.text)}
-                  </ReactMarkdown>
-                </div>
+                <>
+                  <div className="prose-dark leading-relaxed whitespace-pre-wrap" style={{ fontSize: "inherit" }}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {formatAiText(msg.text)}
+                    </ReactMarkdown>
+                  </div>
+                  {msg.pages && msg.pages.length > 0 && (
+                    <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "5px" }}>
+                      {msg.pages.map((page, i) =>
+                        page.url ? (
+                          <a
+                            key={i}
+                            href={page.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: "block",
+                              padding: "5px 10px",
+                              borderRadius: "7px",
+                              background: "rgba(255,255,255,0.06)",
+                              border: "1px solid rgba(255,255,255,0.11)",
+                              color: "rgba(255,255,255,0.7)",
+                              fontSize: "0.78em",
+                              textDecoration: "none",
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            {page.title}
+                          </a>
+                        ) : (
+                          <div
+                            key={i}
+                            style={{
+                              padding: "5px 10px",
+                              borderRadius: "7px",
+                              background: "rgba(255,60,0,0.08)",
+                              border: "1px solid rgba(255,60,0,0.2)",
+                              color: "rgba(255,255,255,0.4)",
+                              fontSize: "0.78em",
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            ⚠️ {page.title}
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
+                </>
               ) : (
                 <p>{msg.text}</p>
               )}
@@ -969,6 +1020,23 @@ export default function MainChat() {
             </div>
           </div>
         ))}
+        {isJarvisLoading && (
+          <div className="flex justify-start bubble-in">
+            <div
+              className="px-4 py-3"
+              style={{
+                ...remiBubbleStyles(remiColor, bubbleStyle),
+                borderRadius: "1rem 1rem 1rem 0.25rem",
+              }}
+            >
+              <div className="flex gap-1.5 items-end" style={{ height: "16px" }}>
+                <div className="rounded-full animate-bounce" style={{ width: "6px", height: "6px", background: "rgba(255,255,255,0.35)", animationDelay: "0ms" }} />
+                <div className="rounded-full animate-bounce" style={{ width: "6px", height: "6px", background: "rgba(255,255,255,0.35)", animationDelay: "150ms" }} />
+                <div className="rounded-full animate-bounce" style={{ width: "6px", height: "6px", background: "rgba(255,255,255,0.35)", animationDelay: "300ms" }} />
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={messagesEndRef} />
         </div>
       </div>
