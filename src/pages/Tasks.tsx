@@ -72,13 +72,45 @@ async function applyTaskAction(pageId: string, action: SwipeAction): Promise<voi
   });
 }
 
-async function fetchTasks(): Promise<TaskBuckets> {
-  const res = await fetch(`${JARVIS_URL}/tasks`, {
-    headers: { Authorization: `Bearer ${REMI_API_KEY}` },
-  });
+async function fetchTasks(priorityOnly = false): Promise<TaskBuckets> {
+  const url = priorityOnly ? `${JARVIS_URL}/tasks?priority=urgent` : `${JARVIS_URL}/tasks`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } });
   if (!res.ok) throw new Error(`${res.status}`);
   const data = await res.json();
   return data.tasks as TaskBuckets;
+}
+
+// ── Daily cache ─────────────────────────────────────────────────────────────
+
+const CACHE_KEY = "remi_tasks_cache";
+
+interface TaskCache {
+  tasks: TaskBuckets;
+  date: string;
+  fetchedAt: number;
+}
+
+function loadCache(): TaskCache | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as TaskCache;
+  } catch { return null; }
+}
+
+function saveCache(tasks: TaskBuckets): void {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ tasks, date: today, fetchedAt: Date.now() }));
+  } catch { /* storage full — skip */ }
+}
+
+function clearCache(): void {
+  localStorage.removeItem(CACHE_KEY);
+}
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function createTaskDirect(title: string, bucket: Bucket): void {
@@ -657,48 +689,81 @@ function BucketSection({
 
 export default function Tasks() {
   const [, navigate] = useLocation();
-  const [loading, setLoading]   = useState(true);
-  const [error,   setError]     = useState<string | null>(null);
-  const [buckets, setBuckets]   = useState<TaskBuckets>({
+  const [loading,   setLoading]   = useState(true);
+  const [bgLoading, setBgLoading] = useState(false);
+  const [cacheHit,  setCacheHit]  = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
+  const [buckets,   setBuckets]   = useState<TaskBuckets>({
     today: [], tonight: [], tomorrow: [], someday: [],
   });
   const [undoState, setUndoState] = useState<UndoState | null>(null);
-  // True after first successful fetch — suppresses the full-page spinner on subsequent load() calls
   const initialLoaded = useRef(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
+    // ── Cache check ────────────────────────────────────────────────────────
+    if (!forceRefresh) {
+      const cached = loadCache();
+      if (cached && cached.date === todayISO()) {
+        setBuckets(cached.tasks);
+        setLoading(false);
+        setCacheHit(true);
+        initialLoaded.current = true;
+        // Background refresh — silent, updates cache when done
+        setBgLoading(true);
+        try {
+          const fresh = await fetchTasks();
+          setBuckets(fresh);
+          saveCache(fresh);
+          setCacheHit(false);
+        } catch { /* leave cached data visible */ }
+        setBgLoading(false);
+        return;
+      }
+    }
+
+    // ── Progressive load ───────────────────────────────────────────────────
+    setCacheHit(false);
     setLoading(true);
     setError(null);
+    if (forceRefresh) clearCache();
+
     try {
-      setBuckets(await fetchTasks());
+      // Fetch 1: today + tonight + tomorrow (3 Notion calls)
+      const priority = await fetchTasks(true);
+      setBuckets(priority);
+      setLoading(false);
       initialLoaded.current = true;
+
+      // Fetch 2: full list including Someday (1 more Notion call)
+      setBgLoading(true);
+      try {
+        const full = await fetchTasks();
+        setBuckets(full);
+        saveCache(full);
+      } catch { /* leave priority data — Someday will be empty */ }
+      setBgLoading(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load tasks");
-    } finally {
       setLoading(false);
-    }
-  }, []);
-
-  // Background refresh — no spinner, no error state change
-  const silentLoad = useCallback(async () => {
-    try {
-      setBuckets(await fetchTasks());
-    } catch {
-      // silent — leave existing state intact
+      setBgLoading(false);
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  // Optimistically add task, then silently refresh after 2s to get the real page_id
+  // Optimistically add task, then refresh + re-cache after 2s to get the real page_id
   const handleTaskAdded = useCallback((title: string, bucket: Bucket) => {
     const tempTask: Task = { id: `temp-${Date.now()}`, title, url: "" };
-    setBuckets((prev) => ({
-      ...prev,
-      [bucket]: [tempTask, ...prev[bucket]],
-    }));
-    setTimeout(silentLoad, 2000);
-  }, [silentLoad]);
+    setBuckets((prev) => ({ ...prev, [bucket]: [tempTask, ...prev[bucket]] }));
+    setTimeout(async () => {
+      try {
+        const fresh = await fetchTasks();
+        setBuckets(fresh);
+        saveCache(fresh);
+        setCacheHit(false);
+      } catch { /* silent — leave optimistic state */ }
+    }, 2000);
+  }, []);
 
   const handleMoved = useCallback((task: Task, fromBucket: Bucket, action: SwipeAction) => {
     applyTaskAction(task.id, action);
@@ -752,14 +817,14 @@ export default function Tasks() {
         )}
         <button
           className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-colors"
-          onClick={load}
+          onClick={() => load(true)}
           disabled={loading}
         >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          <RefreshCw size={16} className={loading || bgLoading ? "animate-spin" : ""} />
         </button>
       </div>
 
-      {/* Swipe legend */}
+      {/* Swipe legend + cache status */}
       <div className="px-4 py-2 border-b border-white/5 shrink-0">
         <div className="flex items-center justify-center gap-5">
           {SWIPE_TARGETS.map((s) => (
@@ -772,6 +837,11 @@ export default function Tasks() {
             </span>
           ))}
         </div>
+        {(cacheHit || bgLoading) && (
+          <p className="text-center mt-1" style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)" }}>
+            {bgLoading ? (cacheHit ? "Cached · refreshing…" : "Loading rest…") : "Cached"}
+          </p>
+        )}
       </div>
 
       {/* Task list */}
