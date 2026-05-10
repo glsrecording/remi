@@ -675,15 +675,17 @@ export default function MainChat() {
       recorder.onstop = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        const tooShort = Date.now() - micStartTimeRef.current < 500;
         // 800ms flush delay: Safari delivers dataavailable after onstop (out of spec order).
         // Delay blob assembly until pending chunks have arrived.
         setTimeout(() => {
           const blob = new Blob(audioChunksRef.current, { type: mimeType });
           audioChunksRef.current = [];
-          if (blob.size > 0) handleTranscribe(blob);
+          if (blob.size > 0 && !tooShort) handleTranscribe(blob);
         }, 800);
       };
       recorder.start(100);
+      micStartTimeRef.current = Date.now();
       setIsRecording(true);
     } catch {
       setRecordingError("Microphone permission is blocked or unavailable.");
@@ -706,7 +708,6 @@ export default function MainChat() {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     micStartYRef.current = e.clientY;
     micCancelledRef.current = false;
-    micStartTimeRef.current = Date.now();
     setMicLocked(false);
     handleVoiceHoldStart();
   }, [isRecording, isTranscribing, handleVoiceHoldStart]);
@@ -726,9 +727,6 @@ export default function MainChat() {
 
   const handleMicPointerUp = useCallback(() => {
     if (!isRecording || micLocked) return;
-    if (Date.now() - micStartTimeRef.current < 500) {
-      micCancelledRef.current = true;
-    }
     handleVoiceHoldEnd();
   }, [isRecording, micLocked, handleVoiceHoldEnd]);
 

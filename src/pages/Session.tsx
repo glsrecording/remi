@@ -236,15 +236,17 @@ export default function Session() {
       recorder.onstop = async () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
+        const tooShort = Date.now() - micStartTimeRef.current < 500;
         await new Promise<void>((resolve) => setTimeout(resolve, 800));
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         audioChunksRef.current = [];
-        if (blob.size > 0) await handleTranscribe(blob);
+        if (blob.size > 0 && !tooShort) await handleTranscribe(blob);
         setIsRecording(false);
         mediaRecorderRef.current = null;
       };
       mediaRecorderRef.current = recorder;
       recorder.start();
+      micStartTimeRef.current = Date.now();
       setIsRecording(true);
       setRecordingError(null);
     } catch {
@@ -262,7 +264,6 @@ export default function Session() {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     micStartYRef.current = e.clientY;
     micCancelledRef.current = false;
-    micStartTimeRef.current = Date.now();
     setMicLocked(false);
     handleVoiceHoldStart();
   }, [isRecording, isTranscribing, handleVoiceHoldStart]);
@@ -282,9 +283,6 @@ export default function Session() {
 
   const handleMicPointerUp = useCallback(() => {
     if (!isRecording || micLocked) return;
-    if (Date.now() - micStartTimeRef.current < 500) {
-      micCancelledRef.current = true;
-    }
     handleVoiceHoldEnd();
   }, [isRecording, micLocked, handleVoiceHoldEnd]);
 
