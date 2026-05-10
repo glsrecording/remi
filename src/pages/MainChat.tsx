@@ -455,6 +455,7 @@ export default function MainChat() {
   const [micLocked, setMicLocked] = useState(false);
   const micStartYRef = useRef<number | null>(null);
   const micCancelledRef = useRef(false);
+  const micStartTimeRef = useRef<number>(0);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -705,6 +706,7 @@ export default function MainChat() {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     micStartYRef.current = e.clientY;
     micCancelledRef.current = false;
+    micStartTimeRef.current = Date.now();
     setMicLocked(false);
     handleVoiceHoldStart();
   }, [isRecording, isTranscribing, handleVoiceHoldStart]);
@@ -724,6 +726,9 @@ export default function MainChat() {
 
   const handleMicPointerUp = useCallback(() => {
     if (!isRecording || micLocked) return;
+    if (Date.now() - micStartTimeRef.current < 500) {
+      micCancelledRef.current = true;
+    }
     handleVoiceHoldEnd();
   }, [isRecording, micLocked, handleVoiceHoldEnd]);
 
@@ -1188,7 +1193,7 @@ export default function MainChat() {
           </div>
         )}
 
-        {/* Input row: [gray mic] [text input] [Send] [amber hold-to-send mic] */}
+        {/* Input row: [text input] [Send] [amber mic] */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -1196,32 +1201,6 @@ export default function MainChat() {
           }}
           className="w-full flex gap-2 items-center"
         >
-          {/* Hold-to-record mic: hold=record, slide-up=lock, release=send, swipe-down=cancel */}
-          <button
-            type="button"
-            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 ${isRecording && !micLocked ? "voice-button-recording" : ""}`}
-            style={{
-              background: isRecording ? "#ef444422" : isTranscribing ? userColor + "18" : "rgba(255,255,255,0.06)",
-              border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? userColor + "50" : "rgba(255,255,255,0.1)"}`,
-              touchAction: "none",
-            }}
-            onPointerDown={handleMicPointerDown}
-            onPointerMove={handleMicPointerMove}
-            onPointerUp={handleMicPointerUp}
-            onPointerCancel={handleMicCancel}
-            data-testid="button-voice"
-          >
-            {isTranscribing ? (
-              <Loader2 size={16} className="animate-spin" style={{ color: userColor }} />
-            ) : isRecording && micLocked ? (
-              <Lock size={16} style={{ color: "#f59e0b" }} />
-            ) : isRecording ? (
-              <MicOff size={16} style={{ color: "#ef4444" }} />
-            ) : (
-              <Mic size={16} style={{ color: "rgba(255,255,255,0.45)" }} />
-            )}
-          </button>
-
           <input
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -1237,6 +1216,33 @@ export default function MainChat() {
             data-testid="button-send"
           >
             Send
+          </button>
+
+          {/* Hold-to-record mic: hold=record, slide-up=lock, release=send, swipe-down=cancel */}
+          <button
+            type="button"
+            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 ${isRecording && !micLocked ? "voice-button-recording" : ""}`}
+            style={{
+              background: isRecording ? "#ef444422" : isTranscribing ? "#f59e0b18" : "#f59e0b14",
+              border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? "#f59e0b50" : "#f59e0b50"}`,
+              marginRight: "20px",
+              touchAction: "none",
+            }}
+            onPointerDown={handleMicPointerDown}
+            onPointerMove={handleMicPointerMove}
+            onPointerUp={handleMicPointerUp}
+            onPointerCancel={handleMicCancel}
+            data-testid="button-voice"
+          >
+            {isTranscribing ? (
+              <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+            ) : isRecording && micLocked ? (
+              <Lock size={16} style={{ color: "#f59e0b" }} />
+            ) : isRecording ? (
+              <MicOff size={16} style={{ color: "#ef4444" }} />
+            ) : (
+              <Mic size={16} style={{ color: "#f59e0b" }} />
+            )}
           </button>
 
         </form>
