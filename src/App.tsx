@@ -18,6 +18,7 @@ import SessionHistory from "@/pages/SessionHistory";
 import DataExport from "@/pages/DataExport";
 import Triage from "@/pages/Triage";
 import Session from "@/pages/Session";
+import Journal from "@/pages/Journal";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/data-export" component={DataExport} />
       <Route path="/triage" component={Triage} />
       <Route path="/session" component={Session} />
+      <Route path="/journal" component={Journal} />
       <Route component={NotFound} />
     </Switch>
   );
