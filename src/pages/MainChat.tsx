@@ -1223,7 +1223,7 @@ export default function MainChat() {
               border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
               opacity: isTranscribing ? 0.5 : 1,
               cursor: isTranscribing ? "not-allowed" : "pointer",
-              marginRight: "16px",
+              marginRight: "12px",
             }}
             onPointerDown={handleHoldDown}
             onPointerUp={handleHoldStop}

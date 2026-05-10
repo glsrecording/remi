@@ -255,7 +255,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         style={{
           background: recording ? "#ef444420" : "#f59e0b14",
           border: `1px solid ${recording ? "#ef4444" : "#f59e0b50"}`,
-          marginRight: "16px",
+          marginRight: "12px",
         }}
         onPointerDown={holdDown}
         onPointerUp={micUp}

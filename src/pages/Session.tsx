@@ -302,6 +302,18 @@ export default function Session() {
     }
   }, [startArtist, startSong, refetchSession]);
 
+  const handleEndSession = useCallback(async () => {
+    try {
+      await fetch(`${JARVIS_URL}/session_end`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
+      });
+    } catch {
+      // non-fatal
+    }
+    navigate("/", { replace: true });
+  }, [navigate]);
+
   const handleStop = useCallback(async () => {
     if (!running) return;
     setStopping(true);
@@ -336,6 +348,14 @@ export default function Session() {
         method: "POST",
         headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify({ message: logMsg, user_id: "remi" }),
+      });
+    } catch {
+      // non-fatal
+    }
+    try {
+      await fetch(`${JARVIS_URL}/session_end`, {
+        method: "POST",
+        headers: AUTH_HEADERS,
       });
     } catch {
       // non-fatal
@@ -492,14 +512,23 @@ export default function Session() {
               {/* Controls */}
               <div className="flex gap-3 justify-center mt-5">
                 {!running ? (
-                  <button
-                    onClick={handleStart}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
-                    style={{ background: "#4ade80", color: "#000" }}
-                  >
-                    <Play size={16} />
-                    Start
-                  </button>
+                  <>
+                    <button
+                      onClick={handleStart}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
+                      style={{ background: "#4ade80", color: "#000" }}
+                    >
+                      <Play size={16} />
+                      Start
+                    </button>
+                    <button
+                      onClick={handleEndSession}
+                      className="px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
+                      style={{ background: "transparent", borderColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.35)" }}
+                    >
+                      End Session
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button
@@ -732,7 +761,7 @@ export default function Session() {
                   border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
                   opacity: isTranscribing ? 0.5 : 1,
                   cursor: isTranscribing ? "not-allowed" : "pointer",
-                  marginRight: "16px",
+                  marginRight: "12px",
                 }}
                 onPointerDown={handleHoldDown}
                 onPointerUp={handleHoldStop}
