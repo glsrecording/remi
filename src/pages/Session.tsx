@@ -68,6 +68,11 @@ export default function Session() {
   const [startSong, setStartSong] = useState("");
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  type MatchState = "idle" | "suggest" | "not_found";
+  const [matchState, setMatchState] = useState<MatchState>("idle");
+  const [suggestionTitle, setSuggestionTitle] = useState("");
+  const [suggestionPageId, setSuggestionPageId] = useState("");
+  const [notFoundPrompt, setNotFoundPrompt] = useState("");
   const [noteText, setNoteText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -311,18 +316,83 @@ export default function Session() {
         body: JSON.stringify({ artist, song }),
       });
       const data = await resp.json();
+      if (data.status === "suggest") {
+        setSuggestionTitle(data.suggestion || "");
+        setSuggestionPageId(data.page_id || "");
+        setMatchState("suggest");
+        setStarting(false);
+        return;
+      }
+      if (data.status === "not_found") {
+        setNotFoundPrompt(`No match found for "${data.query}". Create a new page?`);
+        setMatchState("not_found");
+        setStarting(false);
+        return;
+      }
       if (!resp.ok || data.error) {
         setStartError(data.error || "Failed to start session");
         setStarting(false);
         return;
       }
-      // Success — Jarvis set session state; poll immediately
       refetchSession();
     } catch {
       setStartError("Connection error — check Jarvis is running");
       setStarting(false);
     }
   }, [startArtist, startSong, refetchSession]);
+
+  const handleConfirmSuggestion = useCallback(async () => {
+    setMatchState("idle");
+    setStarting(true);
+    setStartError(null);
+    try {
+      const resp = await fetch(`${JARVIS_URL}/session_start`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ page_id: suggestionPageId }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        setStartError(data.error || "Failed to start session");
+        setStarting(false);
+        return;
+      }
+      refetchSession();
+    } catch {
+      setStartError("Connection error — check Jarvis is running");
+      setStarting(false);
+    }
+  }, [suggestionPageId, refetchSession]);
+
+  const handleForceCreate = useCallback(async () => {
+    setMatchState("idle");
+    setStarting(true);
+    setStartError(null);
+    try {
+      const resp = await fetch(`${JARVIS_URL}/session_start`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ artist: startArtist.trim(), song: startSong.trim(), force_create: true }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        setStartError(data.error || "Failed to start session");
+        setStarting(false);
+        return;
+      }
+      refetchSession();
+    } catch {
+      setStartError("Connection error — check Jarvis is running");
+      setStarting(false);
+    }
+  }, [startArtist, startSong, refetchSession]);
+
+  const handleMatchCancel = useCallback(() => {
+    setMatchState("idle");
+    setSuggestionTitle("");
+    setSuggestionPageId("");
+    setNotFoundPrompt("");
+  }, []);
 
   const handleEndSession = useCallback(async () => {
     try {
@@ -449,6 +519,74 @@ export default function Session() {
             <div className="flex flex-col items-center gap-3">
               <Loader2 size={24} className="animate-spin" style={{ color: "#4ade80" }} />
               <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>Starting session…</p>
+            </div>
+          ) : matchState === "suggest" ? (
+            <div className="w-full max-w-xs space-y-3">
+              <p className="text-center text-xs uppercase tracking-widest mb-4"
+                style={{ color: "rgba(255,255,255,0.25)" }}>
+                Song Match
+              </p>
+              <div
+                className="rounded-xl px-4 py-4 text-center border"
+                style={{ background: "#111", borderColor: "rgba(74,222,128,0.3)" }}
+              >
+                <p className="text-xs mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Did you mean</p>
+                <p className="text-sm font-semibold" style={{ color: "#e5e5e5" }}>{suggestionTitle}</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleConfirmSuggestion}
+                  className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95"
+                  style={{ background: "#4ade80", color: "#000" }}
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={() => {
+                    setNotFoundPrompt(`Create new page for "${startSong.trim()}"?`);
+                    setMatchState("not_found");
+                  }}
+                  className="flex-1 py-3 rounded-xl font-semibold text-sm border transition-all active:scale-95"
+                  style={{ background: "transparent", borderColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.6)" }}
+                >
+                  No
+                </button>
+              </div>
+              {startError && (
+                <p className="text-xs text-center pt-1" style={{ color: "#ef4444" }}>{startError}</p>
+              )}
+            </div>
+          ) : matchState === "not_found" ? (
+            <div className="w-full max-w-xs space-y-3">
+              <p className="text-center text-xs uppercase tracking-widest mb-4"
+                style={{ color: "rgba(255,255,255,0.25)" }}>
+                No Song Found
+              </p>
+              <div
+                className="rounded-xl px-4 py-4 text-center border"
+                style={{ background: "#111", borderColor: "rgba(255,255,255,0.1)" }}
+              >
+                <p className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>{notFoundPrompt}</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleForceCreate}
+                  className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95"
+                  style={{ background: "#4ade80", color: "#000" }}
+                >
+                  Create
+                </button>
+                <button
+                  onClick={handleMatchCancel}
+                  className="flex-1 py-3 rounded-xl font-semibold text-sm border transition-all active:scale-95"
+                  style={{ background: "transparent", borderColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.6)" }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {startError && (
+                <p className="text-xs text-center pt-1" style={{ color: "#ef4444" }}>{startError}</p>
+              )}
             </div>
           ) : (
             <div className="w-full max-w-xs space-y-3">
