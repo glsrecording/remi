@@ -803,7 +803,8 @@ export default function BrainDump() {
               border: `2px solid ${isRecording ? "#ef4444" : selectedBucket && !isTranscribing ? "#f59e0b60" : "rgba(255,255,255,0.08)"}`,
               opacity: !selectedBucket || isTranscribing ? 0.4 : 1,
               cursor: !selectedBucket || isTranscribing ? "not-allowed" : "pointer",
-              marginRight: "12px",
+              marginRight: "24px",
+              touchAction: "none",
             }}
             onPointerDown={handleVoiceHoldStart}
             onPointerUp={handleHoldStop}

@@ -169,11 +169,15 @@ export default function Session() {
   const sendNote = useCallback(async (text: string) => {
     if (!text.trim()) return;
     try {
-      await fetch(`${JARVIS_URL}/remi`, {
+      const resp = await fetch(`${JARVIS_URL}/session_note`, {
         method: "POST",
         headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text.trim(), user_id: "remi" }),
+        body: JSON.stringify({ note: text.trim() }),
       });
+      const data = await resp.json();
+      if (resp.ok && data.timestamp) {
+        setNotes((prev) => [...prev, { text: text.trim(), type: "note" as const, ts: data.timestamp }]);
+      }
     } catch {
       // non-fatal
     }
@@ -254,7 +258,6 @@ export default function Session() {
 
   const handleHoldDown = useCallback((e: React.PointerEvent) => {
     e.stopPropagation();
-    e.preventDefault();
     holdToSendRef.current = true;
     handleVoiceHoldStart();
   }, [handleVoiceHoldStart]);
@@ -704,7 +707,7 @@ export default function Session() {
               right: 0,
               background: "#1a1a1a",
               zIndex: 10,
-              padding: "12px 16px 80px",
+              padding: "12px 16px 48px",
             }}
           >
             {recordingError && (
@@ -761,7 +764,8 @@ export default function Session() {
                   border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
                   opacity: isTranscribing ? 0.5 : 1,
                   cursor: isTranscribing ? "not-allowed" : "pointer",
-                  marginRight: "12px",
+                  marginRight: "24px",
+                  touchAction: "none",
                 }}
                 onPointerDown={handleHoldDown}
                 onPointerUp={handleHoldStop}

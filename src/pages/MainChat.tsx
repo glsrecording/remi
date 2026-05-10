@@ -702,7 +702,6 @@ export default function MainChat() {
 
   const handleHoldDown = useCallback((e: React.PointerEvent) => {
     e.stopPropagation();
-    e.preventDefault();
     holdToSendRef.current = true;
     handleVoiceHoldStart();
   }, [handleVoiceHoldStart]);
@@ -1071,7 +1070,7 @@ export default function MainChat() {
           right: 0,
           background: "#000000",
           zIndex: 10,
-          padding: "8px 16px 80px",
+          padding: "8px 16px 48px",
         }}
       >
         {/* Recording / transcribing state above the input row */}
@@ -1223,7 +1222,8 @@ export default function MainChat() {
               border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
               opacity: isTranscribing ? 0.5 : 1,
               cursor: isTranscribing ? "not-allowed" : "pointer",
-              marginRight: "12px",
+              marginRight: "24px",
+              touchAction: "none",
             }}
             onPointerDown={handleHoldDown}
             onPointerUp={handleHoldStop}

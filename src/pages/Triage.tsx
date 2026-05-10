@@ -192,7 +192,6 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
 
   function holdDown(e: React.PointerEvent) {
     e.stopPropagation();
-    e.preventDefault();
     holdToSendRef.current = true;
     micDown();
   }
@@ -255,7 +254,8 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         style={{
           background: recording ? "#ef444420" : "#f59e0b14",
           border: `1px solid ${recording ? "#ef4444" : "#f59e0b50"}`,
-          marginRight: "12px",
+          marginRight: "24px",
+          touchAction: "none",
         }}
         onPointerDown={holdDown}
         onPointerUp={micUp}
