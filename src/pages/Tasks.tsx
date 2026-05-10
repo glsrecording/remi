@@ -335,6 +335,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
         style={{
           background: isRecording ? "#ef444420" : "#f59e0b14",
           border: `1px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+          marginRight: "16px",
         }}
         onPointerDown={handleHoldDown}
         onPointerUp={handleMicUp}

@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Menu, Square, Coffee, Play, DollarSign } from "lucide-react";
+import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2 } from "lucide-react";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
-
+const AUTH_HEADERS = { Authorization: `Bearer ${REMI_API_KEY}` };
 const HOURLY_RATE_KEY = "remi_session_hourly_rate";
 
 interface SessionState {
@@ -43,29 +43,42 @@ export default function Session() {
   const [rateInput, setRateInput] = useState(String(hourlyRate));
   const [editingRate, setEditingRate] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
   const breakAccumRef = useRef<number>(0);
   const breakStartRef = useRef<number>(0);
   const notesEndRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const holdToSendRef = useRef(false);
+  const noteInputRef = useRef<HTMLInputElement>(null);
 
-  const authHeaders = {
-    Authorization: `Bearer ${REMI_API_KEY}`,
-  };
-
-  // Fetch session state on mount
+  // Poll session state every 10 seconds
   useEffect(() => {
-    fetch(`${JARVIS_URL}/session`, { headers: authHeaders })
-      .then((r) => r.json())
-      .then((data: SessionState) => setSession(data))
-      .catch(() => {});
+    const fetchSession = () => {
+      fetch(`${JARVIS_URL}/session`, { headers: AUTH_HEADERS })
+        .then((r) => r.json())
+        .then((data: SessionState) => {
+          console.log("[Session] /session response:", data);
+          setSession(data);
+        })
+        .catch((err) => console.warn("[Session] /session fetch failed:", err));
+    };
+    fetchSession();
+    const id = setInterval(fetchSession, 10000);
+    return () => clearInterval(id);
   }, []);
 
   // Poll notes every 10 seconds
   useEffect(() => {
     const poll = () => {
-      fetch(`${JARVIS_URL}/session_notes`, { headers: authHeaders })
+      fetch(`${JARVIS_URL}/session_notes`, { headers: AUTH_HEADERS })
         .then((r) => r.json())
         .then((data: { notes: NoteEntry[] }) => {
           if (Array.isArray(data.notes)) setNotes(data.notes);
@@ -114,6 +127,99 @@ export default function Session() {
     }
   }, [running, onBreak]);
 
+  const sendNote = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    try {
+      await fetch(`${JARVIS_URL}/remi`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text.trim(), user_id: "remi" }),
+      });
+    } catch {
+      // non-fatal
+    }
+  }, []);
+
+  const handleNoteSubmit = useCallback(() => {
+    if (!noteText.trim()) return;
+    sendNote(noteText);
+    setNoteText("");
+  }, [noteText, sendNote]);
+
+  const handleTranscribe = useCallback(async (blob: Blob) => {
+    setIsTranscribing(true);
+    setRecordingError(null);
+    try {
+      const openaiKey = "";
+      const mimeType = blob.type || "audio/webm";
+      const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+      const formData = new FormData();
+      formData.append("file", blob, `audio.${ext}`);
+      formData.append("model", "whisper-1");
+      const resp = await fetch(`${JARVIS_URL}/transcribe`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+        body: formData,
+      });
+      const json = await resp.json();
+      const transcript = (json.text || "").trim();
+      if (transcript) {
+        const autoSubmit = holdToSendRef.current;
+        holdToSendRef.current = false;
+        if (autoSubmit) {
+          await sendNote(transcript);
+        } else {
+          setNoteText(transcript);
+          noteInputRef.current?.focus();
+        }
+      }
+    } catch {
+      setRecordingError("Transcription failed — check connection.");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [sendNote]);
+
+  const handleVoiceHoldStart = useCallback(async () => {
+    if (isRecording || isTranscribing) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      audioChunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        await new Promise<void>((resolve) => setTimeout(resolve, 800));
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        audioChunksRef.current = [];
+        if (blob.size > 0) await handleTranscribe(blob);
+        setIsRecording(false);
+        mediaRecorderRef.current = null;
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setRecordingError(null);
+    } catch {
+      setRecordingError("Microphone permission is blocked or unavailable.");
+    }
+  }, [isRecording, isTranscribing, handleTranscribe]);
+
+  const handleVoiceHoldEnd = useCallback(() => {
+    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") return;
+    mediaRecorderRef.current.stop();
+  }, []);
+
+  const handleHoldDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    holdToSendRef.current = true;
+    handleVoiceHoldStart();
+  }, [handleVoiceHoldStart]);
+
   const handleStop = useCallback(async () => {
     if (!running) return;
     setStopping(true);
@@ -131,7 +237,7 @@ export default function Session() {
     try {
       await fetch(`${JARVIS_URL}/remi`, {
         method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
         body: JSON.stringify({ message: logMsg, user_id: "remi" }),
       });
     } catch {
@@ -154,9 +260,9 @@ export default function Session() {
 
   const earnings = (elapsed / 3600) * hourlyRate;
 
-  const banner = session.artist && session.song
-    ? `${session.artist} / ${session.song}`
-    : session.song || session.artist || "No active session";
+  const banner = session.active && (session.artist || session.song)
+    ? `🎵 ${session.artist && session.song ? `${session.artist} — ${session.song}` : session.song || session.artist}`
+    : "No active session";
 
   return (
     <div
@@ -190,12 +296,14 @@ export default function Session() {
       <div className="px-5 pt-5 pb-2">
         <div
           className="rounded-xl px-4 py-3 border"
-          style={{ background: "#111", borderColor: "rgba(74,222,128,0.2)" }}
+          style={{ background: "#111", borderColor: session.active ? "rgba(74,222,128,0.35)" : "rgba(255,255,255,0.06)" }}
         >
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: "#4ade80" }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: session.active ? "#4ade80" : "rgba(255,255,255,0.3)" }}>
             {session.active ? "Active" : "Idle"}
           </p>
-          <p className="text-base font-semibold truncate">{banner}</p>
+          <p className="text-base font-semibold truncate" style={{ color: session.active ? "#e5e5e5" : "rgba(255,255,255,0.3)" }}>
+            {banner}
+          </p>
         </div>
       </div>
 
@@ -302,11 +410,11 @@ export default function Session() {
         </p>
         <div
           className="flex-1 rounded-xl border overflow-y-auto"
-          style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)", maxHeight: "280px" }}
+          style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)", maxHeight: "200px" }}
         >
           {notes.length === 0 ? (
             <p className="text-sm text-white/25 p-4 text-center">
-              Notes captured via Jarvis will appear here
+              Notes captured via Jarvis or the mic below will appear here
             </p>
           ) : (
             <div className="p-3 space-y-2">
@@ -331,7 +439,85 @@ export default function Session() {
         </div>
       </div>
 
-      <div style={{ height: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }} />
+      {/* Mic input bar */}
+      <div
+        className="shrink-0 px-4 pt-3"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}
+      >
+        {recordingError && (
+          <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
+        )}
+        <div className="flex gap-2 items-center">
+          {/* Left mic — always-on, sends transcription to text field */}
+          <button
+            type="button"
+            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+            style={{
+              background: isRecording ? "#ef444422" : isTranscribing ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
+              border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)"}`,
+              opacity: isTranscribing ? 0.5 : 1,
+              cursor: isTranscribing ? "not-allowed" : "pointer",
+            }}
+            onPointerDown={handleVoiceHoldStart}
+            onPointerUp={handleVoiceHoldEnd}
+            onPointerLeave={handleVoiceHoldEnd}
+            data-testid="button-voice"
+          >
+            {isTranscribing ? (
+              <Loader2 size={16} className="animate-spin" style={{ color: "rgba(255,255,255,0.6)" }} />
+            ) : isRecording ? (
+              <MicOff size={16} style={{ color: "#ef4444" }} />
+            ) : (
+              <Mic size={16} style={{ color: "rgba(255,255,255,0.45)" }} />
+            )}
+          </button>
+
+          {/* Text input */}
+          <input
+            ref={noteInputRef}
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleNoteSubmit()}
+            placeholder="Drop a session note…"
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+          />
+
+          {/* Send */}
+          <button
+            type="button"
+            onClick={handleNoteSubmit}
+            className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+            style={{ background: "#4ade80", color: "#000" }}
+          >
+            Send
+          </button>
+
+          {/* Right mic — hold-to-send, auto-sends transcription immediately */}
+          <button
+            type="button"
+            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+            style={{
+              background: isRecording ? "#ef444422" : isTranscribing ? "#f59e0b18" : "#f59e0b14",
+              border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+              opacity: isTranscribing ? 0.5 : 1,
+              cursor: isTranscribing ? "not-allowed" : "pointer",
+              marginRight: "16px",
+            }}
+            onPointerDown={handleHoldDown}
+            onPointerUp={handleVoiceHoldEnd}
+            onPointerLeave={handleVoiceHoldEnd}
+            data-testid="button-voice-hold"
+          >
+            {isTranscribing ? (
+              <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+            ) : isRecording ? (
+              <MicOff size={16} style={{ color: "#ef4444" }} />
+            ) : (
+              <Mic size={16} style={{ color: "#f59e0b" }} />
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
