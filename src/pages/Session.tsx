@@ -266,7 +266,13 @@ export default function Session() {
     if (holdStopFiredRef.current) return;
     holdStopFiredRef.current = true;
     handleVoiceHoldEnd();
-    setTimeout(() => { holdStopFiredRef.current = false; }, 400);
+    setTimeout(() => {
+      holdStopFiredRef.current = false;
+      // Race-condition guard: if getUserMedia resolved after our stop call, stop the leaked recording
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+    }, 500);
   }, [handleVoiceHoldEnd]);
 
   // Safety: reset form after 30s if session never activates after a successful start
@@ -770,6 +776,7 @@ export default function Session() {
                 onPointerDown={handleHoldDown}
                 onPointerUp={handleHoldStop}
                 onPointerLeave={handleHoldStop}
+                onPointerCancel={handleHoldStop}
                 onTouchEnd={handleHoldStop}
                 data-testid="button-voice-hold"
               >

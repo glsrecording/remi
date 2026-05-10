@@ -710,7 +710,12 @@ export default function MainChat() {
     if (holdStopFiredRef.current) return;
     holdStopFiredRef.current = true;
     handleVoiceHoldEnd();
-    setTimeout(() => { holdStopFiredRef.current = false; }, 400);
+    setTimeout(() => {
+      holdStopFiredRef.current = false;
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+    }, 500);
   }, [handleVoiceHoldEnd]);
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1228,6 +1233,7 @@ export default function MainChat() {
             onPointerDown={handleHoldDown}
             onPointerUp={handleHoldStop}
             onPointerLeave={handleHoldStop}
+            onPointerCancel={handleHoldStop}
             onTouchEnd={handleHoldStop}
             data-testid="button-voice-hold"
           >
