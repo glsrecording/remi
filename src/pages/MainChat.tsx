@@ -723,6 +723,10 @@ export default function MainChat() {
                 navigate("/triage");
                 return;
               }
+              if (data.type === "session_redirect") {
+                navigate("/session");
+                return;
+              }
               setMessages((prev) => [
                 ...prev,
                 {
