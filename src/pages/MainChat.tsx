@@ -565,209 +565,58 @@ export default function MainChat() {
       };
       setMessages((prev) => [...prev, userMsg]);
       setInputText("");
-      const mixMatch = parseMixNoteCommand(text.trim());
-      if (mixMatch) {
-        recordRecentCommand("Mix note for [song]");
-        const mixId = (Date.now() + 1).toString();
-        const mixEntry: MixNote = {
-          id: mixId,
-          song: mixMatch.song,
-          note: mixMatch.note,
-          timestamp: now,
-          date: todayLabel(),
-        };
-        setMixNotes((prev) => [mixEntry, ...prev]);
-        setUndoAction({
-          message: `Mix note for "${mixMatch.song}" saved`,
-          onUndo: () =>
-            setMixNotes((prev) => prev.filter((n) => n.id !== mixId)),
+      const match = findBestMatch(text.trim(), 0.3);
+      if (match) recordRecentCommand(match.command.trigger);
+      fetch(`${JARVIS_URL}/remi`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${REMI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message: text.trim(), user_id: "remi" }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.type === "triage_redirect" && Array.isArray(data.items)) {
+            sessionStorage.setItem("triage_preload", JSON.stringify(data.items));
+            navigate("/triage");
+            return;
+          }
+          if (data.type === "session_redirect") {
+            navigate("/session");
+            return;
+          }
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: (Date.now() + 2).toString(),
+              role: "ai",
+              text: data.response
+                ? (data.response as string).replace(/•/g, "\n•")
+                : "Didn't land. Try again.",
+              timestamp: new Date().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            },
+          ]);
+        })
+        .catch(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: (Date.now() + 2).toString(),
+              role: "ai",
+              text: "Didn't land. Try again.",
+              timestamp: new Date().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            },
+          ]);
         });
-        setTimeout(() => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: (Date.now() + 2).toString(),
-              role: "ai",
-              text: buildMixNoteReply(mixMatch.song, mixMatch.note),
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            },
-          ]);
-        }, 700);
-      } else if (/^focus:\s*.+/i.test(text.trim())) {
-        const focus = text
-          .trim()
-          .replace(/^focus:\s*/i, "")
-          .trim();
-        setOneThing(focus);
-        setTimeout(() => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: (Date.now() + 2).toString(),
-              role: "ai",
-              text: `**Focus set** ✓\n\n> ${focus}\n\n_Pinned to the top of chat. Clear it any time with the × button._`,
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            },
-          ]);
-        }, 500);
-      } else if (isWrapUpCommand(text.trim())) {
-        recordRecentCommand("Brain dump");
-        const todayItems = brainItems.filter((i) => i.bucket === "today");
-        const tomorrowItems = brainItems.filter((i) => i.bucket === "tomorrow");
-        const today = todayLabel();
-        const todayMixCount = mixNotes.filter((n) => n.date === today).length;
-        const logEntry: SessionLog = {
-          id: Date.now().toString(),
-          date: today,
-          completedItems: todayItems.map((i) => i.text),
-          mixNoteCount: todayMixCount,
-          timestamp: now,
-        };
-        setBrainItems((prev) => prev.filter((i) => i.bucket !== "today"));
-        setSessionLog((prev) => [logEntry, ...prev]);
-        setUndoAction({
-          message: `Today cleared — ${todayItems.length} item${todayItems.length !== 1 ? "s" : ""} wrapped`,
-          onUndo: () => {
-            setBrainItems((prev) => [...todayItems, ...prev]);
-            setSessionLog((prev) => prev.filter((e) => e.id !== logEntry.id));
-          },
-        });
-        setTimeout(() => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: (Date.now() + 2).toString(),
-              role: "ai",
-              text: buildWrapUpReply(todayItems, tomorrowItems, todayMixCount),
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            },
-          ]);
-        }, 800);
-      } else if (isMorningBriefingCommand(text.trim())) {
-        recordRecentCommand("Brain dump");
-        setTimeout(() => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: (Date.now() + 2).toString(),
-              role: "ai",
-              text: buildMorningBriefingReply(
-                brainItems.filter((i) => i.bucket === "today"),
-                brainItems.filter((i) => i.bucket === "someday"),
-                mixNotes[0] ?? null,
-              ),
-              timestamp: new Date().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            },
-          ]);
-        }, 800);
-      } else {
-        const quickMatch = parseQuickAddCommand(text.trim());
-        if (quickMatch) {
-          const itemId = (Date.now() + 1).toString();
-          setBrainItems((prev) => [
-            {
-              id: itemId,
-              text: quickMatch.task,
-              bucket: quickMatch.bucket,
-              timestamp: now,
-              date: todayLabel(),
-            },
-            ...prev,
-          ]);
-          setUndoAction({
-            message: `"${quickMatch.task}" added to ${BUCKET_LABELS[quickMatch.bucket]}`,
-            onUndo: () =>
-              setBrainItems((prev) => prev.filter((i) => i.id !== itemId)),
-          });
-          setTimeout(() => {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: (Date.now() + 2).toString(),
-                role: "ai",
-                text: buildQuickAddReply(quickMatch.bucket, quickMatch.task),
-                timestamp: new Date().toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }),
-              },
-            ]);
-          }, 600);
-        } else {
-          const match = findBestMatch(text.trim(), 0.3);
-          if (match) recordRecentCommand(match.command.trigger);
-          fetch(`${JARVIS_URL}/remi`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${REMI_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ message: text.trim(), user_id: "remi" }),
-          })
-            .then((r) => r.json())
-            .then((data) => {
-              if (data.type === "triage_redirect" && Array.isArray(data.items)) {
-                sessionStorage.setItem("triage_preload", JSON.stringify(data.items));
-                navigate("/triage");
-                return;
-              }
-              if (data.type === "session_redirect") {
-                navigate("/session");
-                return;
-              }
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: (Date.now() + 2).toString(),
-                  role: "ai",
-                  text: (data.response ?? "").replace(/•/g, "\n•"),
-                  timestamp: new Date().toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }),
-                },
-              ]);
-            })
-            .catch(() => {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: (Date.now() + 2).toString(),
-                  role: "ai",
-                  text: "Sorry, I couldn't reach Jarvis right now.",
-                  timestamp: new Date().toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }),
-                },
-              ]);
-            });
-        }
-      }
     },
-    [
-      setMessages,
-      setMixNotes,
-      mixNotes,
-      setBrainItems,
-      brainItems,
-      setSessionLog,
-      setOneThing,
-      recordRecentCommand,
-      navigate,
-    ],
+    [setMessages, recordRecentCommand, navigate],
   );
 
   // ─── Whisper: hold = record raw audio, release = send to Whisper ──────────
