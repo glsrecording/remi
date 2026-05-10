@@ -453,6 +453,7 @@ export default function MainChat() {
   const streamRef = useRef<MediaStream | null>(null);
   const holdToSendRef = useRef(false);
   const holdStopFiredRef = useRef(false);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -703,19 +704,29 @@ export default function MainChat() {
   const handleHoldDown = useCallback((e: React.PointerEvent) => {
     e.stopPropagation();
     holdToSendRef.current = true;
-    handleVoiceHoldStart();
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null;
+      handleVoiceHoldStart();
+    }, 150);
   }, [handleVoiceHoldStart]);
 
   const handleHoldStop = useCallback(() => {
     if (holdStopFiredRef.current) return;
     holdStopFiredRef.current = true;
+    if (holdTimerRef.current !== null) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+      holdToSendRef.current = false;
+      holdStopFiredRef.current = false;
+      return;
+    }
     handleVoiceHoldEnd();
     setTimeout(() => {
       holdStopFiredRef.current = false;
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
       }
-    }, 500);
+    }, 1000);
   }, [handleVoiceHoldEnd]);
   // ─────────────────────────────────────────────────────────────────────────
 

@@ -83,6 +83,7 @@ export default function Session() {
   const streamRef = useRef<MediaStream | null>(null);
   const holdToSendRef = useRef(false);
   const holdStopFiredRef = useRef(false);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteInputRef = useRef<HTMLInputElement>(null);
 
   const refetchSession = useCallback(() => {
@@ -259,20 +260,32 @@ export default function Session() {
   const handleHoldDown = useCallback((e: React.PointerEvent) => {
     e.stopPropagation();
     holdToSendRef.current = true;
-    handleVoiceHoldStart();
+    // Delay start by 150ms — if user releases before then (quick tap), cancel without ever starting
+    holdTimerRef.current = setTimeout(() => {
+      holdTimerRef.current = null;
+      handleVoiceHoldStart();
+    }, 150);
   }, [handleVoiceHoldStart]);
 
   const handleHoldStop = useCallback(() => {
     if (holdStopFiredRef.current) return;
     holdStopFiredRef.current = true;
+    // Cancel the delayed start if it hasn't fired yet (quick tap — never started)
+    if (holdTimerRef.current !== null) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+      holdToSendRef.current = false;
+      holdStopFiredRef.current = false;
+      return;
+    }
     handleVoiceHoldEnd();
     setTimeout(() => {
       holdStopFiredRef.current = false;
-      // Race-condition guard: if getUserMedia resolved after our stop call, stop the leaked recording
+      // Safety: stop any recording that leaked past the getUserMedia timing gap
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
       }
-    }, 500);
+    }, 1000);
   }, [handleVoiceHoldEnd]);
 
   // Safety: reset form after 30s if session never activates after a successful start
