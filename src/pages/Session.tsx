@@ -385,7 +385,7 @@ export default function Session() {
       {/* ── IDLE: start form ─────────────────────────────────────────── */}
       {!session.active && (
         <div className="flex-1 flex flex-col items-center justify-center px-6"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 20px) + 24px)" }}
+          style={{ paddingBottom: "max(env(safe-area-inset-bottom, 80px), 80px)" }}
         >
           {starting ? (
             <div className="flex flex-col items-center gap-3">
@@ -650,7 +650,7 @@ export default function Session() {
           {/* Mic input bar */}
           <div
             className="shrink-0 px-4 pt-3"
-            style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 20px) + 16px)" }}
+            style={{ paddingBottom: "max(env(safe-area-inset-bottom, 80px), 80px)" }}
           >
             {recordingError && (
               <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>

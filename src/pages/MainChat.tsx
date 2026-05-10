@@ -1044,7 +1044,7 @@ export default function MainChat() {
       <div
         className="shrink-0 px-4 pt-2"
         style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom, 20px) + 16px)",
+          paddingBottom: "max(env(safe-area-inset-bottom, 80px), 80px)",
         }}
       >
         {/* Recording / transcribing state above the input row */}
