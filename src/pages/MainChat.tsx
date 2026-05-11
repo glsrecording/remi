@@ -630,7 +630,7 @@ export default function MainChat() {
 
   // ─── Mic: 150ms hold-to-record ───────────────────────────────────────────
   function handleMicDown() {
-    if (isRecording || isTranscribing) return;
+    if (isRecording) return;
     holdActiveRef.current = false;
     setRecordingError(null);
     holdTimerRef.current = setTimeout(async () => {
@@ -648,19 +648,18 @@ export default function MainChat() {
           streamRef.current?.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
           setIsRecording(false);
+          setIsLocked(false);
           // 800ms flush: Safari delivers dataavailable after onstop.
           setTimeout(() => {
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
             audioChunksRef.current = [];
             if (blob.size === 0) return;
-            setIsTranscribing(true);
             transcribeAudio(blob)
               .then((transcript) => {
                 if (transcript) sendMessage(transcript, true);
                 else setRecordingError("Nothing captured — try again.");
               })
-              .catch(() => setRecordingError("Transcription failed — check connection."))
-              .finally(() => setIsTranscribing(false));
+              .catch(() => setRecordingError("Transcription failed — check connection."));
           }, 800);
         };
         recorder.start(100);

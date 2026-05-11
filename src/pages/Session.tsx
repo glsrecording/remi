@@ -198,7 +198,7 @@ export default function Session() {
 
   // ─── Mic: 150ms hold-to-record ───────────────────────────────────────────
   function handleMicDown() {
-    if (isRecording || isTranscribing) return;
+    if (isRecording) return;
     holdActiveRef.current = false;
     setRecordingError(null);
     holdTimerRef.current = setTimeout(async () => {
@@ -216,12 +216,12 @@ export default function Session() {
           streamRef.current?.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
           setIsRecording(false);
+          setIsLocked(false);
           // 800ms flush: Safari delivers dataavailable after onstop.
           setTimeout(async () => {
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
             audioChunksRef.current = [];
             if (blob.size === 0) return;
-            setIsTranscribing(true);
             try {
               const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
               const formData = new FormData();
@@ -238,8 +238,6 @@ export default function Session() {
               else setRecordingError("Nothing captured — try again.");
             } catch {
               setRecordingError("Transcription failed — check connection.");
-            } finally {
-              setIsTranscribing(false);
             }
           }, 800);
         };
