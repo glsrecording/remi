@@ -68,7 +68,10 @@ function saveMemory(text: string, type: Pass2Action): void {
 
 async function transcribeAudio(blob: Blob): Promise<string> {
   const fd = new FormData();
-  fd.append("file", blob, "recording.webm");
+  const blobType = blob.type || "";
+  const ext = blobType.includes("mp4") || blobType.includes("m4a") ? "mp4"
+    : blobType.includes("ogg") ? "ogg" : "webm";
+  fd.append("file", blob, `recording.${ext}`);
   fd.append("model", "whisper-1");
   fd.append("language", "en");
   const r = await fetch(`${JARVIS_URL}/transcribe`, {
@@ -162,7 +165,8 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunks.current = [];
-      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
+      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm"
+        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/ogg";
       const rec = new MediaRecorder(stream, { mimeType: mime });
       recRef.current = rec;
       rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.current.push(ev.data); };

@@ -44,7 +44,10 @@ const SWIPE_TARGETS: Array<{ action: SwipeAction; label: string; color: string; 
 
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
   const formData = new FormData();
-  formData.append("file", audioBlob, "recording.webm");
+  const blobType = audioBlob.type || "";
+  const ext = blobType.includes("mp4") || blobType.includes("m4a") ? "mp4"
+    : blobType.includes("ogg") ? "ogg" : "webm";
+  formData.append("file", audioBlob, `recording.${ext}`);
   formData.append("model", "whisper-1");
   formData.append("language", "en");
   const response = await fetch(`${JARVIS_URL}/transcribe`, {
@@ -251,7 +254,8 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       audioChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm"
+        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/ogg";
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };

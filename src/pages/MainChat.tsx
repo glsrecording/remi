@@ -388,7 +388,12 @@ function SuggestionBar({ command, onUse, onDismiss }: SuggestionBarProps) {
 // ─── Whisper transcription ────────────────────────────────────────────────────
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
   const formData = new FormData();
-  formData.append("file", audioBlob, "recording.webm");
+  // Use the correct extension so OpenAI can detect the format
+  const blobType = audioBlob.type || "";
+  const ext = blobType.includes("mp4") || blobType.includes("m4a") ? "mp4"
+    : blobType.includes("ogg") ? "ogg"
+    : "webm";
+  formData.append("file", audioBlob, `recording.${ext}`);
   formData.append("model", "whisper-1");
   formData.append("language", "en");
   const response = await fetch(`${JARVIS_URL}/transcribe`, {
@@ -707,7 +712,13 @@ export default function MainChat() {
         if (!holdActiveRef.current) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
         audioChunksRef.current = [];
-        const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : MediaRecorder.isTypeSupported("audio/mp4")
+          ? "audio/mp4"
+          : "audio/ogg";
         const recorder = new MediaRecorder(stream, { mimeType });
         mediaRecorderRef.current = recorder;
         recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
