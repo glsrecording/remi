@@ -611,9 +611,9 @@ export default function MainChat() {
     (text: string, isVoice = false) => {
       if (!text.trim()) return;
       // Deep link: "mix note[s] session [for] [artist] [song]" → navigate only, never send to Jarvis
-      const _mixMatch = text.trim().match(/^mix\s+notes?\s+session[\s,;.]*(.*)/i);
-      if (_mixMatch && _mixMatch[1].trim()) {
-        const _rest = _mixMatch[1].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
+      const _mixMatch = text.match(/\b(mixed?\s*notes?|mixnode)\s*session[\s,;.:]*(.+)/i);
+      if (_mixMatch) {
+        const _rest = _mixMatch[2].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
         const { artist: _artist, song: _song } = _resolveMixArtist(_rest);
         sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));
         setInputText("");
@@ -723,8 +723,17 @@ export default function MainChat() {
             if (blob.size === 0) return;
             transcribeAudio(blob)
               .then((transcript) => {
-                if (transcript) sendMessage(transcript, true);
-                else setRecordingError("Nothing captured — try again.");
+                if (transcript) {
+                  const _vm = transcript.match(/\b(mixed?\s*notes?|mixnode)\s*session[\s,;.:]*(.+)/i);
+                  if (_vm) {
+                    const _rest = _vm[2].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
+                    const { artist: _a, song: _s } = _resolveMixArtist(_rest);
+                    sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _a, song: _s }));
+                    navigate("/mix-notes");
+                    return;
+                  }
+                  sendMessage(transcript, true);
+                } else setRecordingError("Nothing captured — try again.");
               })
               .catch(() => setRecordingError("Transcription failed — check connection."));
           }, 800);
