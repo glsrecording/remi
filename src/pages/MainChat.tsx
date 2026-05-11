@@ -610,15 +610,15 @@ export default function MainChat() {
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
       if (!text.trim()) return;
-      // Deep link: "mix note[s] session [for] [artist] [song]" → navigate to Mix Notes page
-      const _mixMatch = text.trim().match(/^mix\s+notes?\s+session\s+(.+)/i);
-      if (_mixMatch) {
-        const _rest = _mixMatch[1].trim().replace(/^for\s+/i, "").replace(/[.!?]+$/, "").trim();
+      // Deep link: "mix note[s] session [for] [artist] [song]" → navigate only, never send to Jarvis
+      const _mixMatch = text.trim().match(/^mix\s+notes?\s+session[\s,;.]*(.*)/i);
+      if (_mixMatch && _mixMatch[1].trim()) {
+        const _rest = _mixMatch[1].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
         const { artist: _artist, song: _song } = _resolveMixArtist(_rest);
         sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));
         setInputText("");
         navigate("/mix-notes");
-        return;
+        return; // do not fall through — Jarvis never sees this message
       }
       setSuggestion(null);
       setDismissedTrigger(null);
