@@ -9,7 +9,6 @@ import {
   Pin,
   X,
   Loader2,
-  RotateCcw,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -445,17 +444,17 @@ export default function MainChat() {
 
   // Mic state
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [isJarvisLoading, setIsJarvisLoading] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
-  const [retryBlob, setRetryBlob] = useState<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const [micLocked, setMicLocked] = useState(false);
-  const micStartYRef = useRef<number | null>(null);
-  const micCancelledRef = useRef(false);
   const micStartTimeRef = useRef<number>(0);
+  const touchStartYRef = useRef<number | null>(null);
+  const micCancelledRef = useRef(false);
+  const touchEndedRef = useRef(false);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -631,116 +630,101 @@ export default function MainChat() {
     [setMessages, recordRecentCommand, navigate],
   );
 
-  // ─── Whisper: hold = record raw audio, release = send to Whisper ──────────
-  const handleTranscribe = useCallback(
-    async (blob: Blob) => {
-      if (micCancelledRef.current) {
-        micCancelledRef.current = false;
-        return;
-      }
-      setIsTranscribing(true);
-      setRecordingError(null);
-      setRetryBlob(null);
-      try {
-        const transcript = await transcribeAudio(blob);
-        if (transcript) {
-          sendMessage(transcript, true);
-        } else setRecordingError("Nothing captured — try again.");
-      } catch {
-        setRecordingError("Transcription failed — check connection.");
-        setRetryBlob(blob);
-      } finally {
-        setIsTranscribing(false);
-      }
-    },
-    [sendMessage],
-  );
+  // ─── Mic: touchstart/touchend (Telegram pattern) ──────────────────────────
+  const stopRecorder = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+  }, []);
 
-  const handleVoiceHoldStart = useCallback(async () => {
-    if (isRecording || isTranscribing) return;
+  const handleMicTouchStart = useCallback(async (e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isRecording) return;
+    touchStartYRef.current = e.touches[0].clientY;
+    micCancelledRef.current = false;
+    touchEndedRef.current = false;
+    setIsLocked(false);
+    setRecordingError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       audioChunksRef.current = [];
-      setRecordingError(null);
-      setRetryBlob(null);
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "audio/ogg";
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
       };
       recorder.onstop = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        const tooShort = Date.now() - micStartTimeRef.current < 500;
-        // 800ms flush delay: Safari delivers dataavailable after onstop (out of spec order).
-        // Delay blob assembly until pending chunks have arrived.
+        const duration = Date.now() - micStartTimeRef.current;
+        const cancelled = micCancelledRef.current;
+        micCancelledRef.current = false;
+        setIsRecording(false);
+        if (cancelled || duration < 500) return;
+        setIsProcessing(true);
+        // 800ms flush: Safari delivers dataavailable after onstop (out of spec).
         setTimeout(() => {
           const blob = new Blob(audioChunksRef.current, { type: mimeType });
           audioChunksRef.current = [];
-          if (blob.size > 0 && !tooShort) handleTranscribe(blob);
+          if (blob.size === 0) { setIsProcessing(false); return; }
+          transcribeAudio(blob)
+            .then((transcript) => {
+              if (transcript) sendMessage(transcript, true);
+              else setRecordingError("Nothing captured — try again.");
+            })
+            .catch(() => setRecordingError("Transcription failed — check connection."))
+            .finally(() => setIsProcessing(false));
         }, 800);
       };
       recorder.start(100);
       micStartTimeRef.current = Date.now();
+      if (touchEndedRef.current) {
+        micCancelledRef.current = true;
+        recorder.stop();
+        mediaRecorderRef.current = null;
+        return;
+      }
       setIsRecording(true);
     } catch {
       setRecordingError("Microphone permission is blocked or unavailable.");
     }
-  }, [isRecording, isTranscribing, handleTranscribe]);
+  }, [isRecording, sendMessage]);
 
-  const handleVoiceHoldEnd = useCallback(() => {
-    if (
-      !mediaRecorderRef.current ||
-      mediaRecorderRef.current.state === "inactive"
-    )
-      return;
-    mediaRecorderRef.current.stop();
-    mediaRecorderRef.current = null;
-    setIsRecording(false);
-  }, []);
-
-  const handleMicPointerDown = useCallback((e: React.PointerEvent) => {
-    if (isRecording || isTranscribing) return;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    micStartYRef.current = e.clientY;
-    micCancelledRef.current = false;
-    setMicLocked(false);
-    handleVoiceHoldStart();
-  }, [isRecording, isTranscribing, handleVoiceHoldStart]);
-
-  const handleMicPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!isRecording || micLocked || micStartYRef.current === null) return;
-    const dy = micStartYRef.current - e.clientY;
-    const dyDown = e.clientY - micStartYRef.current;
-    if (dy >= 60) {
-      setMicLocked(true);
-    } else if (dyDown >= 60) {
+  const handleMicTouchMove = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (!isRecording || isLocked || touchStartYRef.current === null) return;
+    const deltaY = touchStartYRef.current - e.touches[0].clientY;
+    if (deltaY > 60) {
+      setIsLocked(true);
+    } else if (deltaY < -60) {
       micCancelledRef.current = true;
-      setMicLocked(false);
-      handleVoiceHoldEnd();
+      setIsLocked(false);
+      stopRecorder();
     }
-  }, [isRecording, micLocked, handleVoiceHoldEnd]);
+  }, [isRecording, isLocked, stopRecorder]);
 
-  const handleMicPointerUp = useCallback(() => {
-    if (!isRecording || micLocked) return;
-    handleVoiceHoldEnd();
-  }, [isRecording, micLocked, handleVoiceHoldEnd]);
+  const handleMicTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (isLocked) return;
+    if (!isRecording) { touchEndedRef.current = true; return; }
+    stopRecorder();
+  }, [isRecording, isLocked, stopRecorder]);
 
   const handleMicCancel = useCallback(() => {
     micCancelledRef.current = true;
-    setMicLocked(false);
-    if (isRecording) handleVoiceHoldEnd();
-  }, [isRecording, handleVoiceHoldEnd]);
+    setIsLocked(false);
+    stopRecorder();
+  }, [stopRecorder]);
 
   const handleMicSend = useCallback(() => {
-    setMicLocked(false);
-    handleVoiceHoldEnd();
-  }, [handleVoiceHoldEnd]);
-  // ─────────────────────────────────────────────────────────────────────────
+    setIsLocked(false);
+    stopRecorder();
+  }, [stopRecorder]);
+  // ──────────────────────────────────────────────────────────────────────────
 
   const togglePicker = (side: "user" | "remi") =>
     setOpenPicker((p) => (p === side ? null : side));
@@ -1095,8 +1079,8 @@ export default function MainChat() {
           padding: "8px 16px 48px",
         }}
       >
-        {/* Locked mode bar / recording hint / transcribing indicator */}
-        {micLocked ? (
+        {/* Locked mode bar / recording hint / processing indicator */}
+        {isLocked ? (
           <div className="flex items-center justify-between gap-3 mb-2 px-1">
             <button
               type="button"
@@ -1121,7 +1105,7 @@ export default function MainChat() {
               Send ↑
             </button>
           </div>
-        ) : (isRecording || isTranscribing) ? (
+        ) : (isRecording || isProcessing) ? (
           <div className="flex items-center justify-center gap-2 mb-2 h-5">
             {isRecording && (
               <>
@@ -1132,7 +1116,7 @@ export default function MainChat() {
                 <span className="text-xs text-white/25 ml-2">↑ slide to lock</span>
               </>
             )}
-            {isTranscribing && (
+            {isProcessing && (
               <>
                 <Loader2 size={13} className="animate-spin" style={{ color: userColor }} />
                 <span className="text-xs" style={{ color: userColor }}>Transcribing...</span>
@@ -1144,15 +1128,6 @@ export default function MainChat() {
         {recordingError && (
           <div className="flex items-center gap-2 mb-1.5">
             <p className="text-xs text-red-400/80 flex-1">{recordingError}</p>
-            {retryBlob && (
-              <button
-                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold transition-all active:scale-95 shrink-0"
-                style={{ background: userColor + "20", color: userColor }}
-                onClick={() => handleTranscribe(retryBlob)}
-              >
-                <RotateCcw size={10} /> Retry
-              </button>
-            )}
           </div>
         )}
 
@@ -1219,22 +1194,22 @@ export default function MainChat() {
           {/* Hold-to-record mic: hold=record, slide-up=lock, release=send, swipe-down=cancel */}
           <button
             type="button"
-            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 ${isRecording && !micLocked ? "voice-button-recording" : ""}`}
+            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
             style={{
-              background: isRecording ? "#ef444422" : isTranscribing ? "#f59e0b18" : "#f59e0b14",
-              border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? "#f59e0b50" : "#f59e0b50"}`,
+              background: isRecording ? "#ef444422" : isProcessing ? "#f59e0b18" : "#f59e0b14",
+              border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
               marginRight: "20px",
               touchAction: "none",
             }}
-            onPointerDown={handleMicPointerDown}
-            onPointerMove={handleMicPointerMove}
-            onPointerUp={handleMicPointerUp}
-            onPointerCancel={handleMicCancel}
+            onTouchStart={handleMicTouchStart}
+            onTouchMove={handleMicTouchMove}
+            onTouchEnd={handleMicTouchEnd}
+            onTouchCancel={handleMicCancel}
             data-testid="button-voice"
           >
-            {isTranscribing ? (
+            {isProcessing ? (
               <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
-            ) : isRecording && micLocked ? (
+            ) : isRecording && isLocked ? (
               <Lock size={16} style={{ color: "#f59e0b" }} />
             ) : isRecording ? (
               <MicOff size={16} style={{ color: "#ef4444" }} />

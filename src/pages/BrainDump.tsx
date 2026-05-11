@@ -9,7 +9,8 @@ import {
   ArrowRight,
   Pin,
   Loader2,
-  RotateCcw,
+  Lock,
+  X,
 } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS, BrainItem, BucketType, todayLabel } from "@/lib/storage";
@@ -379,6 +380,12 @@ function SwipeableSomedayItem({
   );
 }
 
+const BUCKETS: { key: BucketType; label: string; emoji: string; color: string }[] = [
+  { key: "today", label: "Today", emoji: "⚡", color: "#f59e0b" },
+  { key: "tomorrow", label: "Tomorrow", emoji: "🌅", color: "#3b82f6" },
+  { key: "someday", label: "Someday", emoji: "🌙", color: "#a855f7" },
+];
+
 export default function BrainDump() {
   const [, navigate] = useLocation();
   const [ACCENT] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
@@ -414,26 +421,21 @@ export default function BrainDump() {
   } | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
-  const [retryBlob, setRetryBlob] = useState<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const holdStopFiredRef = useRef(false);
+  const micStartTimeRef = useRef<number>(0);
+  const touchStartYRef = useRef<number>(0);
+  const micCancelledRef = useRef(false);
+  const touchEndedRef = useRef(false);
+  const holdToSendRef = useRef(false);
 
-  const buckets: {
-    key: BucketType;
-    label: string;
-    emoji: string;
-    color: string;
-  }[] = [
-    { key: "today", label: "Today", emoji: "⚡", color: "#f59e0b" },
-    { key: "tomorrow", label: "Tomorrow", emoji: "🌅", color: "#3b82f6" },
-    { key: "someday", label: "Someday", emoji: "🌙", color: "#a855f7" },
-  ];
+  const buckets = BUCKETS;
 
-  const addItem = (text: string, bucket: BucketType) => {
+  const addItem = useCallback((text: string, bucket: BucketType) => {
     const id = Date.now().toString();
     const newItem: BrainItem = {
       id,
@@ -447,83 +449,130 @@ export default function BrainDump() {
     };
     setItems((prev) => [newItem, ...prev]);
     setInputText("");
-    const bucketLabel = buckets.find((b) => b.key === bucket)?.label ?? bucket;
+    const bucketLabel = BUCKETS.find((b) => b.key === bucket)?.label ?? bucket;
     setUndoAction({
       message: `Added to ${bucketLabel}`,
       onUndo: () => setItems((prev) => prev.filter((i) => i.id !== id)),
     });
-  };
+  }, [setItems, setUndoAction]);
 
-  const handleTranscribe = useCallback(
-    async (blob: Blob) => {
-      if (!selectedBucket) return;
-      setIsTranscribing(true);
-      setRecordingError(null);
-      setRetryBlob(null);
-      try {
-        const transcript = await transcribeAudio(blob);
-        if (transcript) addItem(transcript, selectedBucket);
-        else setRecordingError("Nothing captured — try again.");
-      } catch {
-        setRecordingError("Transcription failed — check connection.");
-        setRetryBlob(blob);
-      } finally {
-        setIsTranscribing(false);
-      }
-    },
-    [selectedBucket],
-  );
+  const stopRecorder = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+  }, []);
 
-  const handleVoiceHoldStart = useCallback(async () => {
-    if (!selectedBucket || isRecording || isTranscribing) return;
+  const startRecording = useCallback(async (autoSubmit: boolean) => {
+    if (isRecording || !selectedBucket) return;
+    micCancelledRef.current = false;
+    touchEndedRef.current = false;
+    holdToSendRef.current = autoSubmit;
+    setRecordingError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       audioChunksRef.current = [];
-      setRecordingError(null);
-      setRetryBlob(null);
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "audio/ogg";
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      recorder.ondataavailable = (ev) => {
+        if (ev.data.size > 0) audioChunksRef.current.push(ev.data);
       };
       recorder.onstop = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        // 800ms flush delay: Safari delivers dataavailable after onstop (out of spec order).
-        setTimeout(() => {
+        const duration = Date.now() - micStartTimeRef.current;
+        const cancelled = micCancelledRef.current;
+        const autoSub = holdToSendRef.current;
+        micCancelledRef.current = false;
+        holdToSendRef.current = false;
+        setIsRecording(false);
+        setIsLocked(false);
+        if (cancelled || duration < 500) return;
+        setIsProcessing(true);
+        setTimeout(async () => {
           const blob = new Blob(audioChunksRef.current, { type: mimeType });
           audioChunksRef.current = [];
-          if (blob.size > 0) handleTranscribe(blob);
+          if (blob.size === 0) { setIsProcessing(false); return; }
+          try {
+            const transcript = await transcribeAudio(blob);
+            if (transcript) {
+              if (autoSub) addItem(transcript, selectedBucket);
+              else setInputText(transcript);
+            } else {
+              setRecordingError("Nothing captured — try again.");
+            }
+          } catch {
+            setRecordingError("Transcription failed — check connection.");
+          } finally {
+            setIsProcessing(false);
+          }
         }, 800);
       };
       recorder.start(100);
+      micStartTimeRef.current = Date.now();
+      if (touchEndedRef.current) {
+        micCancelledRef.current = true;
+        recorder.stop();
+        mediaRecorderRef.current = null;
+        return;
+      }
       setIsRecording(true);
     } catch {
       setRecordingError("Microphone permission is blocked or unavailable.");
     }
-  }, [selectedBucket, isRecording, isTranscribing, handleTranscribe]);
+  }, [isRecording, selectedBucket, addItem]);
 
-  const handleVoiceHoldEnd = useCallback(() => {
-    if (
-      !mediaRecorderRef.current ||
-      mediaRecorderRef.current.state === "inactive"
-    )
-      return;
-    mediaRecorderRef.current.stop();
-    mediaRecorderRef.current = null;
-    setIsRecording(false);
-  }, []);
+  const handleLeftTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startRecording(false);
+  }, [startRecording]);
 
-  const handleHoldStop = useCallback(() => {
-    if (holdStopFiredRef.current) return;
-    holdStopFiredRef.current = true;
-    handleVoiceHoldEnd();
-    setTimeout(() => { holdStopFiredRef.current = false; }, 400);
-  }, [handleVoiceHoldEnd]);
+  const handleLeftTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (!isRecording) { touchEndedRef.current = true; return; }
+    stopRecorder();
+  }, [isRecording, stopRecorder]);
+
+  const handleRightTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    touchStartYRef.current = e.touches[0].clientY;
+    setIsLocked(false);
+    startRecording(true);
+  }, [startRecording]);
+
+  const handleRightTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isRecording) return;
+    const deltaY = touchStartYRef.current - e.touches[0].clientY;
+    if (deltaY > 60) {
+      setIsLocked(true);
+    } else if (deltaY < -60) {
+      micCancelledRef.current = true;
+      setIsLocked(false);
+      stopRecorder();
+    }
+  }, [isRecording, stopRecorder]);
+
+  const handleRightTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (!isRecording) { touchEndedRef.current = true; return; }
+    if (isLocked) return;
+    stopRecorder();
+  }, [isRecording, isLocked, stopRecorder]);
+
+  const handleMicCancel = useCallback(() => {
+    micCancelledRef.current = true;
+    setIsLocked(false);
+    stopRecorder();
+  }, [stopRecorder]);
+
+  const handleMicSend = useCallback(() => {
+    setIsLocked(false);
+    stopRecorder();
+  }, [stopRecorder]);
 
   const deleteItem = (id: string) =>
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -571,10 +620,10 @@ export default function BrainDump() {
   };
   const getBucketItems = (bucket: BucketType) =>
     items.filter((i) => i.bucket === bucket);
-  const micLabel = isTranscribing
+  const micLabel = isProcessing
     ? "Transcribing..."
     : isRecording
-      ? "Release to send"
+      ? isLocked ? "Locked — swipe down to cancel" : "Release to send"
       : selectedBucket
         ? "Hold to record"
         : "Select a bucket first";
@@ -728,7 +777,33 @@ export default function BrainDump() {
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
         }}
       >
-        {isRecording && (
+        {isLocked && (
+          <div className="flex items-center justify-between w-full px-2 mb-3">
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold active:scale-95 transition-all"
+              style={{ background: "#ef444420", color: "#ef4444" }}
+              onTouchStart={(e) => { e.preventDefault(); handleMicCancel(); }}
+              onClick={handleMicCancel}
+            >
+              <X size={13} /> Cancel
+            </button>
+            <div className="flex items-center gap-1.5">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="wave-bar w-1 rounded-full" style={{ height: "14px", background: "#f59e0b", animationDelay: `${(i - 1) * 0.1}s` }} />
+              ))}
+              <Lock size={13} style={{ color: "#f59e0b", marginLeft: 4 }} />
+            </div>
+            <button
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold active:scale-95 transition-all"
+              style={{ background: "#f59e0b20", color: "#f59e0b" }}
+              onTouchStart={(e) => { e.preventDefault(); handleMicSend(); }}
+              onClick={handleMicSend}
+            >
+              Send ↑
+            </button>
+          </div>
+        )}
+        {isRecording && !isLocked && (
           <div className="flex items-center gap-1 mb-3 h-6">
             {[1, 2, 3, 4, 5].map((i) => (
               <div
@@ -743,7 +818,7 @@ export default function BrainDump() {
             ))}
           </div>
         )}
-        {isTranscribing && (
+        {isProcessing && (
           <div className="flex items-center gap-2 mb-3">
             <Loader2
               size={14}
@@ -756,65 +831,51 @@ export default function BrainDump() {
           </div>
         )}
         <div className="flex items-center gap-5">
-          {/* Existing mic — left side */}
+          {/* Left mic — transcribe to input field */}
           <button
-            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 ${isRecording ? "voice-button-recording" : ""}`}
+            type="button"
+            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
             style={{
-              background: isRecording
-                ? "#ef444415"
-                : selectedBucket && !isTranscribing
-                  ? ACCENT + "15"
-                  : "#333333",
-              border: `2px solid ${isRecording ? "#ef4444" : selectedBucket && !isTranscribing ? ACCENT + "60" : "rgba(255,255,255,0.08)"}`,
-              opacity: !selectedBucket || isTranscribing ? 0.4 : 1,
-              cursor:
-                !selectedBucket || isTranscribing ? "not-allowed" : "pointer",
+              background: isRecording ? "#ef444415" : selectedBucket ? ACCENT + "15" : "#333333",
+              border: `2px solid ${isRecording ? "#ef4444" : selectedBucket ? ACCENT + "60" : "rgba(255,255,255,0.08)"}`,
+              opacity: !selectedBucket ? 0.4 : 1,
+              touchAction: "none",
             }}
-            onPointerDown={handleVoiceHoldStart}
-            onPointerUp={handleVoiceHoldEnd}
-            onPointerLeave={handleVoiceHoldEnd}
-            onTouchEnd={handleVoiceHoldEnd}
-            disabled={!selectedBucket || isTranscribing}
+            onTouchStart={handleLeftTouchStart}
+            onTouchEnd={handleLeftTouchEnd}
+            onTouchCancel={handleMicCancel}
             data-testid="button-voice-record"
           >
-            {isTranscribing ? (
-              <Loader2
-                size={22}
-                className="animate-spin"
-                style={{ color: ACCENT }}
-              />
+            {isProcessing ? (
+              <Loader2 size={22} className="animate-spin" style={{ color: ACCENT }} />
             ) : isRecording ? (
               <MicOff size={22} style={{ color: "#ef4444" }} />
             ) : (
-              <Mic
-                size={22}
-                style={{
-                  color: selectedBucket ? ACCENT : "rgba(255,255,255,0.3)",
-                }}
-              />
+              <Mic size={22} style={{ color: selectedBucket ? ACCENT : "rgba(255,255,255,0.3)" }} />
             )}
           </button>
 
-          {/* Hold-to-send mic — right thumb position, auto-saves on release */}
+          {/* Right amber mic — hold to record, slide-up to lock, release to auto-add */}
           <button
-            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 ${isRecording ? "voice-button-recording" : ""}`}
+            type="button"
+            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
             style={{
-              background: isRecording ? "#ef444415" : selectedBucket && !isTranscribing ? "#f59e0b15" : "#333333",
-              border: `2px solid ${isRecording ? "#ef4444" : selectedBucket && !isTranscribing ? "#f59e0b60" : "rgba(255,255,255,0.08)"}`,
-              opacity: !selectedBucket || isTranscribing ? 0.4 : 1,
-              cursor: !selectedBucket || isTranscribing ? "not-allowed" : "pointer",
+              background: isRecording ? "#ef444415" : selectedBucket ? "#f59e0b15" : "#333333",
+              border: `2px solid ${isRecording ? "#ef4444" : selectedBucket ? "#f59e0b60" : "rgba(255,255,255,0.08)"}`,
+              opacity: !selectedBucket ? 0.4 : 1,
               marginRight: "24px",
               touchAction: "none",
             }}
-            onPointerDown={handleVoiceHoldStart}
-            onPointerUp={handleHoldStop}
-            onPointerLeave={handleHoldStop}
-            onTouchEnd={handleHoldStop}
-            disabled={!selectedBucket || isTranscribing}
+            onTouchStart={handleRightTouchStart}
+            onTouchMove={handleRightTouchMove}
+            onTouchEnd={handleRightTouchEnd}
+            onTouchCancel={handleMicCancel}
             data-testid="button-voice-hold"
           >
-            {isTranscribing ? (
+            {isProcessing ? (
               <Loader2 size={22} className="animate-spin" style={{ color: "#f59e0b" }} />
+            ) : isRecording && isLocked ? (
+              <Lock size={22} style={{ color: "#f59e0b" }} />
             ) : isRecording ? (
               <MicOff size={22} style={{ color: "#ef4444" }} />
             ) : (
@@ -824,18 +885,7 @@ export default function BrainDump() {
         </div>
         <p className="text-xs text-white/25 mt-2">{micLabel}</p>
         {recordingError && (
-          <div className="flex items-center gap-2 mt-2">
-            <p className="text-xs text-red-400/80">{recordingError}</p>
-            {retryBlob && (
-              <button
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all active:scale-95"
-                style={{ background: ACCENT + "20", color: ACCENT }}
-                onClick={() => handleTranscribe(retryBlob)}
-              >
-                <RotateCcw size={11} /> Retry
-              </button>
-            )}
-          </div>
+          <p className="text-xs text-red-400/80 mt-2">{recordingError}</p>
         )}
       </div>
 

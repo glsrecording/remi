@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, Mic, MicOff, Loader2, Check, X } from "lucide-react";
 
@@ -117,12 +117,15 @@ function getP2Dominant(x: number, y: number) {
 
 function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
   const [text, setText] = useState("");
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const taRef         = useRef<HTMLTextAreaElement>(null);
-  const recRef        = useRef<MediaRecorder | null>(null);
-  const chunks        = useRef<BlobPart[]>([]);
-  const streamRef     = useRef<MediaStream | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const recRef = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<BlobPart[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const micStartTimeRef = useRef<number>(0);
+  const micCancelledRef = useRef(false);
+  const touchEndedRef = useRef(false);
   const holdToSendRef = useRef(false);
 
   useEffect(() => { taRef.current?.focus(); }, []);
@@ -143,32 +146,45 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
     if (e.key === "Escape") setText("");
   }
 
-  async function micDown() {
-    if (recording || transcribing) return;
-    holdToSendRef.current = false;
+  const stopRecorder = useCallback(() => {
+    if (recRef.current && recRef.current.state !== "inactive") {
+      recRef.current.stop();
+      recRef.current = null;
+    }
+  }, []);
+
+  const startRecording = useCallback(async (autoSubmit: boolean) => {
+    if (isRecording) return;
+    micCancelledRef.current = false;
+    touchEndedRef.current = false;
+    holdToSendRef.current = autoSubmit;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunks.current = [];
       const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/ogg";
-      const rec  = new MediaRecorder(stream, { mimeType: mime });
+      const rec = new MediaRecorder(stream, { mimeType: mime });
       recRef.current = rec;
-      rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.current.push(e.data); };
-      rec.onstop = async () => {
+      rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.current.push(ev.data); };
+      rec.onstop = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        const autoSubmit = holdToSendRef.current;
+        const duration = Date.now() - micStartTimeRef.current;
+        const cancelled = micCancelledRef.current;
+        const autoSub = holdToSendRef.current;
+        micCancelledRef.current = false;
         holdToSendRef.current = false;
-        await new Promise<void>((resolve) => setTimeout(resolve, 800));
-        const blob = new Blob(chunks.current, { type: mime });
-        chunks.current = [];
-        if (blob.size > 0) {
-          setTranscribing(true);
+        setIsRecording(false);
+        if (cancelled || duration < 500) return;
+        setIsProcessing(true);
+        setTimeout(async () => {
+          const blob = new Blob(chunks.current, { type: mime });
+          chunks.current = [];
+          if (blob.size === 0) { setIsProcessing(false); return; }
           try {
             const t = await transcribeAudio(blob);
             if (t) {
-              if (autoSubmit) {
-                // Hold-to-send: submit immediately without requiring Check button
+              if (autoSub) {
                 onAdd(t.trim());
                 setText("");
                 setTimeout(() => taRef.current?.focus(), 50);
@@ -178,23 +194,49 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
               }
             }
           } catch { /* silent */ }
-          finally { setTranscribing(false); }
-        }
+          finally { setIsProcessing(false); }
+        }, 800);
       };
-      rec.start(100); setRecording(true);
+      rec.start(100);
+      micStartTimeRef.current = Date.now();
+      if (touchEndedRef.current) {
+        micCancelledRef.current = true;
+        rec.stop();
+        recRef.current = null;
+        return;
+      }
+      setIsRecording(true);
     } catch { /* mic denied — silent */ }
-  }
+  }, [isRecording, onAdd]);
 
-  function micUp() {
-    if (!recRef.current || recRef.current.state === "inactive") return;
-    recRef.current.stop(); recRef.current = null; setRecording(false);
-  }
-
-  function holdDown(e: React.PointerEvent) {
+  const handleLeftTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
     e.stopPropagation();
-    holdToSendRef.current = true;
-    micDown();
-  }
+    startRecording(false);
+  }, [startRecording]);
+
+  const handleLeftTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (!isRecording) { touchEndedRef.current = true; return; }
+    stopRecorder();
+  }, [isRecording, stopRecorder]);
+
+  const handleRightTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startRecording(true);
+  }, [startRecording]);
+
+  const handleRightTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (!isRecording) { touchEndedRef.current = true; return; }
+    stopRecorder();
+  }, [isRecording, stopRecorder]);
+
+  const handleMicCancel = useCallback(() => {
+    micCancelledRef.current = true;
+    stopRecorder();
+  }, [stopRecorder]);
 
   const canSubmit = text.trim().length > 0;
 
@@ -219,24 +261,30 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         className="flex-1 bg-transparent text-lg text-white/85 outline-none min-w-0 placeholder:text-white/25 resize-none overflow-hidden"
         style={{ lineHeight: "1.4" }}
       />
+
+      {/* Left mic — transcribe to input field */}
       <button
+        type="button"
         className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
         style={{
-          background: recording ? "#ef444420" : "transparent",
-          border: `1px solid ${recording ? "#ef4444" : transcribing ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.1)"}`,
+          background: isRecording ? "#ef444420" : "transparent",
+          border: `1px solid ${isRecording ? "#ef4444" : isProcessing ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.1)"}`,
+          touchAction: "none",
         }}
-        onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); micDown(); }}
-        onPointerUp={micUp}
-        onPointerLeave={micUp}
-        onTouchEnd={micUp}
+        onTouchStart={handleLeftTouchStart}
+        onTouchEnd={handleLeftTouchEnd}
+        onTouchCancel={handleMicCancel}
       >
-        {transcribing
+        {isProcessing
           ? <Loader2 size={11} className="animate-spin" style={{ color: "#f59e0b" }} />
-          : recording
+          : isRecording
           ? <MicOff size={11} style={{ color: "#ef4444" }} />
           : <Mic size={11} style={{ color: "rgba(255,255,255,0.35)" }} />}
       </button>
+
+      {/* Confirm */}
       <button
+        type="button"
         className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
         style={{
           background: canSubmit ? "#f59e0b22" : "transparent",
@@ -248,23 +296,23 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         <Check size={11} style={{ color: canSubmit ? "#f59e0b" : "rgba(255,255,255,0.2)" }} />
       </button>
 
-      {/* Hold-to-send mic — right thumb position, auto-submits on release */}
+      {/* Right amber mic — auto-submits on release */}
       <button
-        className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90 ${recording ? "voice-button-recording" : ""}`}
+        type="button"
+        className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
         style={{
-          background: recording ? "#ef444420" : "#f59e0b14",
-          border: `1px solid ${recording ? "#ef4444" : "#f59e0b50"}`,
+          background: isRecording ? "#ef444420" : "#f59e0b14",
+          border: `1px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
           marginRight: "24px",
           touchAction: "none",
         }}
-        onPointerDown={holdDown}
-        onPointerUp={micUp}
-        onPointerLeave={micUp}
-        onTouchEnd={micUp}
+        onTouchStart={handleRightTouchStart}
+        onTouchEnd={handleRightTouchEnd}
+        onTouchCancel={handleMicCancel}
       >
-        {transcribing
+        {isProcessing
           ? <Loader2 size={11} className="animate-spin" style={{ color: "#f59e0b" }} />
-          : recording
+          : isRecording
           ? <MicOff size={11} style={{ color: "#ef4444" }} />
           : <Mic size={11} style={{ color: "#f59e0b" }} />}
       </button>

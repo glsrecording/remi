@@ -138,7 +138,8 @@ export default function Journal() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -146,6 +147,10 @@ export default function Journal() {
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const holdToSendRef = useRef(false);
+  const micStartTimeRef = useRef<number>(0);
+  const touchStartYRef = useRef<number | null>(null);
+  const micCancelledRef = useRef(false);
+  const touchEndedRef = useRef(false);
 
   const fetchEntries = useCallback(async () => {
     setLoadingEntries(true);
@@ -203,78 +208,129 @@ export default function Journal() {
     }
   }, [pin, analyzing]);
 
-  const handleTranscribe = useCallback(async (blob: Blob) => {
-    setIsTranscribing(true);
-    setRecordingError(null);
-    try {
-      const mimeType = blob.type || "audio/webm";
-      const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
-      const formData = new FormData();
-      formData.append("file", blob, `audio.${ext}`);
-      formData.append("model", "whisper-1");
-      const resp = await fetch(`${JARVIS_URL}/transcribe`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${REMI_API_KEY}` },
-        body: formData,
-      });
-      const json = await resp.json();
-      const transcript = (json.text || "").trim();
-      if (transcript) {
-        const autoSubmit = holdToSendRef.current;
-        holdToSendRef.current = false;
-        if (autoSubmit) {
-          await handleSubmit(transcript);
-        } else {
-          setText(transcript);
-          inputRef.current?.focus();
-        }
-      }
-    } catch {
-      setRecordingError("Transcription failed — check connection.");
-    } finally {
-      setIsTranscribing(false);
+  const stopRecorder = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
     }
-  }, [handleSubmit]);
+  }, []);
 
-  const handleVoiceHoldStart = useCallback(async () => {
-    if (isRecording || isTranscribing) return;
+  const startRecording = useCallback(async (autoSubmit: boolean) => {
+    if (isRecording) return;
+    micCancelledRef.current = false;
+    touchEndedRef.current = false;
+    holdToSendRef.current = autoSubmit;
+    setRecordingError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       audioChunksRef.current = [];
       const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
       const recorder = new MediaRecorder(stream, { mimeType });
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
+      recorder.onstop = () => {
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
-        await new Promise<void>((resolve) => setTimeout(resolve, 800));
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        audioChunksRef.current = [];
-        if (blob.size > 0) await handleTranscribe(blob);
+        const duration = Date.now() - micStartTimeRef.current;
+        const cancelled = micCancelledRef.current;
+        const autoSub = holdToSendRef.current;
+        micCancelledRef.current = false;
+        holdToSendRef.current = false;
         setIsRecording(false);
-        mediaRecorderRef.current = null;
+        if (cancelled || duration < 500) return;
+        setIsProcessing(true);
+        // 800ms flush: Safari delivers dataavailable after onstop (out of spec).
+        setTimeout(async () => {
+          const blob = new Blob(audioChunksRef.current, { type: mimeType });
+          audioChunksRef.current = [];
+          if (blob.size === 0) { setIsProcessing(false); return; }
+          try {
+            const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+            const formData = new FormData();
+            formData.append("file", blob, `audio.${ext}`);
+            formData.append("model", "whisper-1");
+            const resp = await fetch(`${JARVIS_URL}/transcribe`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+              body: formData,
+            });
+            const json = await resp.json();
+            const transcript = (json.text || "").trim();
+            if (transcript) {
+              if (autoSub) await handleSubmit(transcript);
+              else { setText(transcript); inputRef.current?.focus(); }
+            } else {
+              setRecordingError("Nothing captured — try again.");
+            }
+          } catch {
+            setRecordingError("Transcription failed — check connection.");
+          } finally {
+            setIsProcessing(false);
+          }
+        }, 800);
       };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
+      recorder.start(100);
+      micStartTimeRef.current = Date.now();
+      if (touchEndedRef.current) {
+        micCancelledRef.current = true;
+        recorder.stop();
+        mediaRecorderRef.current = null;
+        return;
+      }
       setIsRecording(true);
-      setRecordingError(null);
     } catch {
       setRecordingError("Microphone permission blocked or unavailable.");
     }
-  }, [isRecording, isTranscribing, handleTranscribe]);
+  }, [isRecording, handleSubmit]);
 
-  const handleVoiceHoldEnd = useCallback(() => {
-    if (!mediaRecorderRef.current || mediaRecorderRef.current.state === "inactive") return;
-    mediaRecorderRef.current.stop();
-  }, []);
+  const handleLeftTouchStart = useCallback(async (e: React.TouchEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    await startRecording(false);
+  }, [startRecording]);
 
-  const handleHoldDown = useCallback((e: React.PointerEvent) => {
-    e.stopPropagation();
+  const handleLeftTouchEnd = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
-    holdToSendRef.current = true;
-    handleVoiceHoldStart();
-  }, [handleVoiceHoldStart]);
+    if (!isRecording) { touchEndedRef.current = true; return; }
+    stopRecorder();
+  }, [isRecording, stopRecorder]);
+
+  const handleRightTouchStart = useCallback(async (e: React.TouchEvent) => {
+    e.preventDefault(); e.stopPropagation();
+    touchStartYRef.current = e.touches[0].clientY;
+    setIsLocked(false);
+    await startRecording(true);
+  }, [startRecording]);
+
+  const handleRightTouchMove = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (!isRecording || isLocked || touchStartYRef.current === null) return;
+    const deltaY = touchStartYRef.current - e.touches[0].clientY;
+    if (deltaY > 60) setIsLocked(true);
+    else if (deltaY < -60) {
+      micCancelledRef.current = true;
+      setIsLocked(false);
+      stopRecorder();
+    }
+  }, [isRecording, isLocked, stopRecorder]);
+
+  const handleRightTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (isLocked) return;
+    if (!isRecording) { touchEndedRef.current = true; return; }
+    stopRecorder();
+  }, [isRecording, isLocked, stopRecorder]);
+
+  const handleMicCancel = useCallback(() => {
+    micCancelledRef.current = true;
+    setIsLocked(false);
+    stopRecorder();
+  }, [stopRecorder]);
+
+  const handleMicSend = useCallback(() => {
+    setIsLocked(false);
+    stopRecorder();
+  }, [stopRecorder]);
 
   if (!pin) {
     return <PinGate onUnlock={(p) => setPin(p)} />;
@@ -346,22 +402,50 @@ export default function Journal() {
         {recordingError && (
           <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
         )}
+        {isLocked && (
+          <div className="flex items-center justify-between gap-3 mb-2 px-1">
+            <button type="button" onClick={handleMicCancel}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95"
+              style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444" }}>
+              <X size={12} /> Cancel
+            </button>
+            <div className="flex items-center gap-1.5">
+              {[1,2,3,4,5].map((i) => (
+                <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i-1)*0.1}s` }} />
+              ))}
+              <Lock size={12} className="ml-1" style={{ color: "#f59e0b" }} />
+            </div>
+            <button type="button" onClick={handleMicSend}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95"
+              style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.4)", color: "#4ade80" }}>
+              Send ↑
+            </button>
+          </div>
+        )}
+        {(isRecording && !isLocked) && (
+          <div className="flex items-center justify-center gap-2 mb-2 h-5">
+            {[1,2,3,4,5].map((i) => (
+              <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i-1)*0.1}s` }} />
+            ))}
+            <span className="text-xs ml-1" style={{ color: "#ef4444" }}>Recording</span>
+            <span className="text-xs text-white/25 ml-2">↑ slide to lock</span>
+          </div>
+        )}
         <div className="flex gap-2 items-center">
           {/* Left mic — tap to record, places transcript in field */}
           <button
             type="button"
             className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
             style={{
-              background: isRecording ? "#ef444422" : isTranscribing ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
-              border: `1.5px solid ${isRecording ? "#ef4444" : isTranscribing ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.1)"}`,
-              opacity: isTranscribing ? 0.5 : 1,
-              cursor: isTranscribing ? "not-allowed" : "pointer",
+              background: isRecording ? "#ef444422" : isProcessing ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
+              border: `1.5px solid ${isRecording ? "#ef4444" : "rgba(255,255,255,0.1)"}`,
+              touchAction: "none",
             }}
-            onPointerDown={handleVoiceHoldStart}
-            onPointerUp={handleVoiceHoldEnd}
-            onPointerLeave={handleVoiceHoldEnd}
+            onTouchStart={handleLeftTouchStart}
+            onTouchEnd={handleLeftTouchEnd}
+            onTouchCancel={handleMicCancel}
           >
-            {isTranscribing ? (
+            {isProcessing ? (
               <Loader2 size={16} className="animate-spin" style={{ color: "rgba(255,255,255,0.6)" }} />
             ) : isRecording ? (
               <MicOff size={16} style={{ color: "#ef4444" }} />
@@ -395,23 +479,25 @@ export default function Journal() {
             {submitting ? "…" : "Send"}
           </button>
 
-          {/* Right amber mic — hold-to-send */}
+          {/* Right amber mic — hold-to-send, slide-up=lock */}
           <button
             type="button"
-            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
+            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
             style={{
-              background: isRecording ? "#ef444422" : isTranscribing ? "#f59e0b18" : "#f59e0b14",
+              background: isRecording ? "#ef444422" : isProcessing ? "#f59e0b18" : "#f59e0b14",
               border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
-              opacity: isTranscribing ? 0.5 : 1,
-              cursor: isTranscribing ? "not-allowed" : "pointer",
               marginRight: "16px",
+              touchAction: "none",
             }}
-            onPointerDown={handleHoldDown}
-            onPointerUp={handleVoiceHoldEnd}
-            onPointerLeave={handleVoiceHoldEnd}
+            onTouchStart={handleRightTouchStart}
+            onTouchMove={handleRightTouchMove}
+            onTouchEnd={handleRightTouchEnd}
+            onTouchCancel={handleMicCancel}
           >
-            {isTranscribing ? (
+            {isProcessing ? (
               <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+            ) : isRecording && isLocked ? (
+              <Lock size={16} style={{ color: "#f59e0b" }} />
             ) : isRecording ? (
               <MicOff size={16} style={{ color: "#ef4444" }} />
             ) : (
