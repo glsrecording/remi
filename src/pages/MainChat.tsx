@@ -553,6 +553,17 @@ export default function MainChat() {
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
       if (!text.trim()) return;
+      // Deep link: "mix note session [artist] [song]" → navigate to Mix Notes page
+      const _mixMatch = text.trim().match(/^mix\s+note\s+session\s+(.+)/i);
+      if (_mixMatch) {
+        const _tokens = _mixMatch[1].trim().split(/\s+/);
+        const _artist = _tokens[0] || "";
+        const _song = _tokens.slice(1).join(" ");
+        sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));
+        setInputText("");
+        navigate("/mix-notes");
+        return;
+      }
       setSuggestion(null);
       setDismissedTrigger(null);
       const now = new Date().toLocaleTimeString([], {
