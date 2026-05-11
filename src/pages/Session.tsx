@@ -86,11 +86,10 @@ export default function Session() {
   const notesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
   const micStartTimeRef = useRef<number>(0);
   const touchStartYRef = useRef<number | null>(null);
   const micCancelledRef = useRef(false);
-  const touchEndedRef = useRef(false);
   const noteInputRef = useRef<HTMLInputElement>(null);
 
   const refetchSession = useCallback(() => {
@@ -141,6 +140,16 @@ export default function Session() {
   useEffect(() => {
     notesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [notes]);
+  // Request mic once at mount so touchstart can create MediaRecorder synchronously.
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((stream) => { micStreamRef.current = stream; })
+      .catch(() => {});
+    return () => {
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+    };
+  }, []);
 
   // Timer tick
   useEffect(() => {
@@ -204,70 +213,59 @@ export default function Session() {
     }
   }, []);
 
-  const handleMicTouchStart = useCallback(async (e: React.TouchEvent) => {
+  const handleMicTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (isRecording) return;
+    if (!micStreamRef.current) {
+      setRecordingError("Microphone permission is blocked or unavailable.");
+      return;
+    }
     touchStartYRef.current = e.touches[0].clientY;
     micCancelledRef.current = false;
-    touchEndedRef.current = false;
     setIsLocked(false);
     setRecordingError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      audioChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
-      recorder.onstop = () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        const duration = Date.now() - micStartTimeRef.current;
-        const cancelled = micCancelledRef.current;
-        micCancelledRef.current = false;
-        setIsRecording(false);
-        if (cancelled || duration < 500) return;
-        setIsProcessing(true);
-        // 800ms flush: Safari delivers dataavailable after onstop (out of spec).
-        setTimeout(async () => {
-          const blob = new Blob(audioChunksRef.current, { type: mimeType });
-          audioChunksRef.current = [];
-          if (blob.size === 0) { setIsProcessing(false); return; }
-          try {
-            const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
-            const formData = new FormData();
-            formData.append("file", blob, `audio.${ext}`);
-            formData.append("model", "whisper-1");
-            const resp = await fetch(`${JARVIS_URL}/transcribe`, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${REMI_API_KEY}` },
-              body: formData,
-            });
-            const json = await resp.json();
-            const transcript = (json.text || "").trim();
-            if (transcript) await sendNote(transcript);
-            else setRecordingError("Nothing captured — try again.");
-          } catch {
-            setRecordingError("Transcription failed — check connection.");
-          } finally {
-            setIsProcessing(false);
-          }
-        }, 800);
-      };
-      recorder.start(100);
-      micStartTimeRef.current = Date.now();
-      if (touchEndedRef.current) {
-        micCancelledRef.current = true;
-        recorder.stop();
-        mediaRecorderRef.current = null;
-        return;
-      }
-      setIsRecording(true);
-    } catch {
-      setRecordingError("Microphone permission is blocked or unavailable.");
-    }
+    audioChunksRef.current = [];
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+    const recorder = new MediaRecorder(micStreamRef.current, { mimeType });
+    mediaRecorderRef.current = recorder;
+    recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
+    recorder.onstop = () => {
+      const duration = Date.now() - micStartTimeRef.current;
+      const cancelled = micCancelledRef.current;
+      micCancelledRef.current = false;
+      setIsRecording(false);
+      if (cancelled || duration < 500) return;
+      setIsProcessing(true);
+      // 800ms flush: Safari delivers dataavailable after onstop (out of spec).
+      setTimeout(async () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        audioChunksRef.current = [];
+        if (blob.size === 0) { setIsProcessing(false); return; }
+        try {
+          const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+          const formData = new FormData();
+          formData.append("file", blob, `audio.${ext}`);
+          formData.append("model", "whisper-1");
+          const resp = await fetch(`${JARVIS_URL}/transcribe`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+            body: formData,
+          });
+          const json = await resp.json();
+          const transcript = (json.text || "").trim();
+          if (transcript) await sendNote(transcript);
+          else setRecordingError("Nothing captured — try again.");
+        } catch {
+          setRecordingError("Transcription failed — check connection.");
+        } finally {
+          setIsProcessing(false);
+        }
+      }, 800);
+    };
+    recorder.start(100);
+    micStartTimeRef.current = Date.now();
+    setIsRecording(true);
   }, [isRecording, sendNote]);
 
   const handleMicTouchMove = useCallback((e: React.TouchEvent) => {
@@ -286,7 +284,7 @@ export default function Session() {
   const handleMicTouchEnd = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
     if (isLocked) return;
-    if (!isRecording) { touchEndedRef.current = true; return; }
+    if (!isRecording) return;
     stopRecorder();
   }, [isRecording, isLocked, stopRecorder]);
 
