@@ -15,6 +15,61 @@ interface SessionNote {
   timestamp: string;
 }
 
+// Mirrors MainChat.tsx — sorted longest-first for prefix match
+const _MIX_ALIASES: [string, string][] = ([
+  ["all but denied",      "All But Denied"],
+  ["allbutdenied",        "All But Denied"],
+  ["abd",                 "All But Denied"],
+  ["ophidian breeze",     "Ophidian Breeze"],
+  ["phidian breeze",      "Ophidian Breeze"],
+  ["offidian breeze",     "Ophidian Breeze"],
+  ["opidian breeze",      "Ophidian Breeze"],
+  ["aphidia breeze",      "Ophidian Breeze"],
+  ["aphidian breeze",     "Ophidian Breeze"],
+  ["aphidia and breeze",  "Ophidian Breeze"],
+  ["aphidian and breeze", "Ophidian Breeze"],
+  ["a fit and breeze",    "Ophidian Breeze"],
+  ["a fit in breeze",     "Ophidian Breeze"],
+  ["a feed and breeze",   "Ophidian Breeze"],
+  ["affinity and breeze", "Ophidian Breeze"],
+  ["affinity breeze",     "Ophidian Breeze"],
+  ["affinity in breeze",  "Ophidian Breeze"],
+  ["fideon breeze",       "Ophidian Breeze"],
+  ["fidian breeze",       "Ophidian Breeze"],
+  ["fidean breeze",       "Ophidian Breeze"],
+  ["fideo and breeze",    "Ophidian Breeze"],
+  ["ophidian",            "Ophidian Breeze"],
+  ["phidian",             "Ophidian Breeze"],
+  ["offidian",            "Ophidian Breeze"],
+  ["opidian",             "Ophidian Breeze"],
+  ["aphidia",             "Ophidian Breeze"],
+  ["aphidian",            "Ophidian Breeze"],
+  ["chasing wind",        "Chasing Wind"],
+  ["chasing win",         "Chasing Wind"],
+  ["jen lindstrom",       "Jim Lindstrom"],
+  ["gym lindstrom",       "Jim Lindstrom"],
+  ["jen marcotte",        "Jim Marcotte"],
+  ["gym marcotte",        "Jim Marcotte"],
+  ["j michaels",          "J. Michaels"],
+  ["j. michaels",         "J. Michaels"],
+  ["jmichaels",           "J. Michaels"],
+  ["cw",                  "Chasing Wind"],
+  ["spades",              "Spades"],
+  ["cynthia",             "Cynthia"],
+] as [string, string][]).sort((a, b) => b[0].length - a[0].length);
+
+function _resolveMixArtist(rest: string): { artist: string; song: string } {
+  const lower = rest.toLowerCase();
+  for (const [alias, full] of _MIX_ALIASES) {
+    if (lower.startsWith(alias) && (lower.length === alias.length || !/[a-z]/i.test(lower[alias.length]))) {
+      const song = rest.slice(alias.length).replace(/^[\s,.:;]+/, "").trim();
+      return { artist: full, song };
+    }
+  }
+  const tokens = rest.split(/\s+/);
+  return { artist: tokens[0] || "", song: tokens.slice(1).join(" ") };
+}
+
 export default function MixNotes() {
   const [, navigate] = useLocation();
   const [ACCENT] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
@@ -104,8 +159,26 @@ export default function MixNotes() {
               });
               const json = await resp.json();
               const transcript = (json.text || "").trim();
-              if (transcript) await postMixNote(transcript);
-              else setRecordingError("Nothing captured — try again.");
+              if (transcript) {
+                const _chg = transcript.match(/^(change|switch)\s+(song\s+to|song|to)\s+(.+)/i);
+                if (_chg) {
+                  const _rest = _chg[3].replace(/[.!?]+$/, "").trim();
+                  const { artist: _a, song: _s } = _resolveMixArtist(_rest);
+                  setArtist(_a);
+                  setSong(_s);
+                  const _label = [_a, _s].filter(Boolean).join(" — ");
+                  const _ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                  setSessionNotes((prev) => [{
+                    id: Date.now().toString(),
+                    artist: "",
+                    song: "",
+                    note: `Switched to: ${_label}`,
+                    timestamp: _ts,
+                  }, ...prev]);
+                } else {
+                  await postMixNote(transcript);
+                }
+              } else setRecordingError("Nothing captured — try again.");
             } catch {
               setRecordingError("Transcription failed — check connection.");
             }
