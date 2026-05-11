@@ -448,8 +448,10 @@ const _MIX_ALIASES: [string, string][] = ([
 function _resolveMixArtist(rest: string): { artist: string; song: string } {
   const lower = rest.toLowerCase();
   for (const [alias, full] of _MIX_ALIASES) {
-    if (lower.startsWith(alias) && (lower.length === alias.length || lower[alias.length] === " ")) {
-      return { artist: full, song: rest.slice(alias.length).trim() };
+    // Boundary: alias must be followed by end-of-string or a non-letter (space, comma, etc.)
+    if (lower.startsWith(alias) && (lower.length === alias.length || !/[a-z]/i.test(lower[alias.length]))) {
+      const song = rest.slice(alias.length).replace(/^[\s,.:;]+/, "").trim();
+      return { artist: full, song };
     }
   }
   const tokens = rest.split(/\s+/);
@@ -608,10 +610,10 @@ export default function MainChat() {
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
       if (!text.trim()) return;
-      // Deep link: "mix note session [for] [artist] [song]" → navigate to Mix Notes page
-      const _mixMatch = text.trim().match(/^mix\s+note\s+session\s+(.+)/i);
+      // Deep link: "mix note[s] session [for] [artist] [song]" → navigate to Mix Notes page
+      const _mixMatch = text.trim().match(/^mix\s+notes?\s+session\s+(.+)/i);
       if (_mixMatch) {
-        const _rest = _mixMatch[1].trim().replace(/^for\s+/i, "");
+        const _rest = _mixMatch[1].trim().replace(/^for\s+/i, "").replace(/[.!?]+$/, "").trim();
         const { artist: _artist, song: _song } = _resolveMixArtist(_rest);
         sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));
         setInputText("");

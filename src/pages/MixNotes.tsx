@@ -43,6 +43,7 @@ export default function MixNotes() {
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdActiveRef = useRef(false);
   const pointerStartYRef = useRef<number>(0);
+  const micStartTimeRef = useRef<number>(0);
 
   async function postMixNote(noteText: string) {
     const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -85,6 +86,7 @@ export default function MixNotes() {
           streamRef.current = null;
           setIsRecording(false);
           setIsLocked(false);
+          if (Date.now() - micStartTimeRef.current < 500) { audioChunksRef.current = []; return; }
           // 800ms flush: Safari delivers dataavailable after onstop.
           setTimeout(async () => {
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
@@ -110,6 +112,7 @@ export default function MixNotes() {
           }, 800);
         };
         recorder.start(100);
+        micStartTimeRef.current = Date.now();
         setIsRecording(true);
       } catch {
         setRecordingError("Microphone permission is blocked or unavailable.");
