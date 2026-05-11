@@ -611,8 +611,8 @@ export default function MainChat() {
     (text: string, isVoice = false) => {
       if (!text.trim()) return;
       // Deep link: "mix note[s] session [for] [artist] [song]" → navigate only, never send to Jarvis
-      const _mixMatch = text.trim().match(/^mix\s+notes?\s+session[\s,;.]*(.*)/i);
-      if (_mixMatch && _mixMatch[1].trim()) {
+      const _mixMatch = text.match(/\bmixed?\s*notes?\s*session[\s,;.:]*(.+)/i);
+      if (_mixMatch) {
         const _rest = _mixMatch[1].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
         const { artist: _artist, song: _song } = _resolveMixArtist(_rest);
         sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));

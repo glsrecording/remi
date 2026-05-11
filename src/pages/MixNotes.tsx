@@ -160,7 +160,7 @@ export default function MixNotes() {
               const json = await resp.json();
               const transcript = (json.text || "").trim();
               if (transcript) {
-                const _chg = transcript.match(/^(change|switch)\s+(song\s+to|song|to)\s+(.+)/i);
+                const _chg = transcript.match(/^(changed?|switched?)\s*(song\s*to|song|to)[\s,;.:]*(.+)/i);
                 if (_chg) {
                   const _rest = _chg[3].replace(/[.!?]+$/, "").trim();
                   const { artist: _a, song: _s } = _resolveMixArtist(_rest);
