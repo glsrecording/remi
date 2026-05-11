@@ -400,6 +400,61 @@ async function transcribeAudio(audioBlob: Blob): Promise<string> {
   const data = await response.json();
   return (data.text ?? "").trim();
 }
+
+// ─── Mix note deep-link helpers ───────────────────────────────────────────────
+// Mirrors telegram_bot.py _ARTIST_ALIASES (sorted longest-first for prefix match)
+const _MIX_ALIASES: [string, string][] = ([
+  ["all but denied",      "All But Denied"],
+  ["allbutdenied",        "All But Denied"],
+  ["abd",                 "All But Denied"],
+  ["ophidian breeze",     "Ophidian Breeze"],
+  ["phidian breeze",      "Ophidian Breeze"],
+  ["offidian breeze",     "Ophidian Breeze"],
+  ["opidian breeze",      "Ophidian Breeze"],
+  ["aphidia breeze",      "Ophidian Breeze"],
+  ["aphidian breeze",     "Ophidian Breeze"],
+  ["aphidia and breeze",  "Ophidian Breeze"],
+  ["aphidian and breeze", "Ophidian Breeze"],
+  ["a fit and breeze",    "Ophidian Breeze"],
+  ["a fit in breeze",     "Ophidian Breeze"],
+  ["a feed and breeze",   "Ophidian Breeze"],
+  ["affinity and breeze", "Ophidian Breeze"],
+  ["affinity breeze",     "Ophidian Breeze"],
+  ["affinity in breeze",  "Ophidian Breeze"],
+  ["fideon breeze",       "Ophidian Breeze"],
+  ["fidian breeze",       "Ophidian Breeze"],
+  ["fidean breeze",       "Ophidian Breeze"],
+  ["fideo and breeze",    "Ophidian Breeze"],
+  ["ophidian",            "Ophidian Breeze"],
+  ["phidian",             "Ophidian Breeze"],
+  ["offidian",            "Ophidian Breeze"],
+  ["opidian",             "Ophidian Breeze"],
+  ["aphidia",             "Ophidian Breeze"],
+  ["aphidian",            "Ophidian Breeze"],
+  ["chasing wind",        "Chasing Wind"],
+  ["chasing win",         "Chasing Wind"],
+  ["jen lindstrom",       "Jim Lindstrom"],
+  ["gym lindstrom",       "Jim Lindstrom"],
+  ["jen marcotte",        "Jim Marcotte"],
+  ["gym marcotte",        "Jim Marcotte"],
+  ["j michaels",          "J. Michaels"],
+  ["j. michaels",         "J. Michaels"],
+  ["jmichaels",           "J. Michaels"],
+  ["cw",                  "Chasing Wind"],
+  ["spades",              "Spades"],
+  ["cynthia",             "Cynthia"],
+] as [string, string][]).sort((a, b) => b[0].length - a[0].length);
+
+function _resolveMixArtist(rest: string): { artist: string; song: string } {
+  const lower = rest.toLowerCase();
+  for (const [alias, full] of _MIX_ALIASES) {
+    if (lower.startsWith(alias) && (lower.length === alias.length || lower[alias.length] === " ")) {
+      return { artist: full, song: rest.slice(alias.length).trim() };
+    }
+  }
+  const tokens = rest.split(/\s+/);
+  return { artist: tokens[0] || "", song: tokens.slice(1).join(" ") };
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MainChat() {
@@ -553,12 +608,11 @@ export default function MainChat() {
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
       if (!text.trim()) return;
-      // Deep link: "mix note session [artist] [song]" → navigate to Mix Notes page
+      // Deep link: "mix note session [for] [artist] [song]" → navigate to Mix Notes page
       const _mixMatch = text.trim().match(/^mix\s+note\s+session\s+(.+)/i);
       if (_mixMatch) {
-        const _tokens = _mixMatch[1].trim().split(/\s+/);
-        const _artist = _tokens[0] || "";
-        const _song = _tokens.slice(1).join(" ");
+        const _rest = _mixMatch[1].trim().replace(/^for\s+/i, "");
+        const { artist: _artist, song: _song } = _resolveMixArtist(_rest);
         sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));
         setInputText("");
         navigate("/mix-notes");
