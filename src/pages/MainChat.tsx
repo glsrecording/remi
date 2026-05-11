@@ -451,6 +451,8 @@ export default function MainChat() {
   const streamRef = useRef<MediaStream | null>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdActiveRef = useRef(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const pointerStartYRef = useRef<number>(0);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -670,6 +672,7 @@ export default function MainChat() {
   }
 
   function handleMicUp() {
+    if (isLocked) return;
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     holdActiveRef.current = false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -677,6 +680,29 @@ export default function MainChat() {
       mediaRecorderRef.current = null;
     }
     setIsRecording(false);
+  }
+
+  function handleCancelLocked() {
+    setIsLocked(false);
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    holdActiveRef.current = false;
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.onstop = null;
+      if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    audioChunksRef.current = [];
+    setIsRecording(false);
+  }
+
+  function handleSendLocked() {
+    setIsLocked(false);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1033,8 +1059,30 @@ export default function MainChat() {
           padding: "8px 16px 48px",
         }}
       >
+        {/* Lock bar: visible when user slides up to lock recording */}
+        {isLocked && (
+          <div className="flex items-center justify-between mb-2 px-1">
+            <button
+              type="button"
+              onClick={handleCancelLocked}
+              className="text-xs px-3 py-1.5 rounded-lg"
+              style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}
+            >
+              ✕ Cancel
+            </button>
+            <span className="text-xs" style={{ color: "#ef4444" }}>🔒 Recording</span>
+            <button
+              type="button"
+              onClick={handleSendLocked}
+              className="text-xs px-3 py-1.5 rounded-lg"
+              style={{ background: "#22c55e20", border: "1px solid #22c55e40", color: "#22c55e" }}
+            >
+              Send ↑
+            </button>
+          </div>
+        )}
         {/* Recording / transcribing indicator */}
-        {(isRecording || isTranscribing) && (
+        {(isRecording || isTranscribing) && !isLocked && (
           <div className="flex items-center justify-center gap-2 mb-2 h-5">
             {isTranscribing
               ? <><Loader2 size={13} className="animate-spin" style={{ color: userColor }} /><span className="text-xs" style={{ color: userColor }}>Transcribing...</span></>
@@ -1118,7 +1166,8 @@ export default function MainChat() {
               marginRight: "20px",
               touchAction: "none",
             }}
-            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); handleMicDown(); }}
+            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); pointerStartYRef.current = e.clientY; handleMicDown(); }}
+            onPointerMove={(e) => { if (!isRecording || isLocked) return; if (pointerStartYRef.current - e.clientY > 60) setIsLocked(true); }}
             onPointerUp={handleMicUp}
             onPointerLeave={handleMicUp}
             data-testid="button-voice"

@@ -88,6 +88,8 @@ export default function Session() {
   const streamRef = useRef<MediaStream | null>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdActiveRef = useRef(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const pointerStartYRef = useRef<number>(0);
   const noteInputRef = useRef<HTMLInputElement>(null);
 
   const refetchSession = useCallback(() => {
@@ -250,6 +252,7 @@ export default function Session() {
   }
 
   function handleMicUp() {
+    if (isLocked) return;
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     holdActiveRef.current = false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -257,6 +260,29 @@ export default function Session() {
       mediaRecorderRef.current = null;
     }
     setIsRecording(false);
+  }
+
+  function handleCancelLocked() {
+    setIsLocked(false);
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    holdActiveRef.current = false;
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.onstop = null;
+      if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    audioChunksRef.current = [];
+    setIsRecording(false);
+  }
+
+  function handleSendLocked() {
+    setIsLocked(false);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -837,7 +863,28 @@ export default function Session() {
             {recordingError && (
               <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
             )}
-            {(isRecording || isTranscribing) && (
+            {isLocked && (
+              <div className="flex items-center justify-between mb-2 px-1">
+                <button
+                  type="button"
+                  onClick={handleCancelLocked}
+                  className="text-xs px-3 py-1.5 rounded-lg"
+                  style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}
+                >
+                  ✕ Cancel
+                </button>
+                <span className="text-xs" style={{ color: "#ef4444" }}>🔒 Recording</span>
+                <button
+                  type="button"
+                  onClick={handleSendLocked}
+                  className="text-xs px-3 py-1.5 rounded-lg"
+                  style={{ background: "#22c55e20", border: "1px solid #22c55e40", color: "#22c55e" }}
+                >
+                  Send ↑
+                </button>
+              </div>
+            )}
+            {(isRecording || isTranscribing) && !isLocked && (
               <div className="flex items-center justify-center gap-2 mb-2 h-5">
                 {isTranscribing
                   ? <><Loader2 size={13} className="animate-spin" style={{ color: "#f59e0b" }} /><span className="text-xs" style={{ color: "#f59e0b" }}>Transcribing...</span></>
@@ -873,7 +920,8 @@ export default function Session() {
                   marginRight: "20px",
                   touchAction: "none",
                 }}
-                onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); handleMicDown(); }}
+                onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); pointerStartYRef.current = e.clientY; handleMicDown(); }}
+                onPointerMove={(e) => { if (!isRecording || isLocked) return; if (pointerStartYRef.current - e.clientY > 60) setIsLocked(true); }}
                 onPointerUp={handleMicUp}
                 onPointerLeave={handleMicUp}
                 data-testid="button-voice"
