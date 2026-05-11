@@ -873,7 +873,7 @@ export default function Session() {
                   marginRight: "20px",
                   touchAction: "none",
                 }}
-                onPointerDown={(e) => { e.preventDefault(); handleMicDown(); }}
+                onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); handleMicDown(); }}
                 onPointerUp={handleMicUp}
                 onPointerLeave={handleMicUp}
                 data-testid="button-voice"
