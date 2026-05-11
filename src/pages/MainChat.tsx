@@ -607,19 +607,23 @@ export default function MainChat() {
     setDismissedTrigger(null);
   }, []);
 
+  function _handleDeepLink(text: string): boolean {
+    const _mixMatch = text.match(/\bmixed?\s*notes?\s*session[\s,;.:]*(.+)/i);
+    if (_mixMatch) {
+      const _rest = _mixMatch[1].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
+      const { artist: _artist, song: _song } = _resolveMixArtist(_rest);
+      sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));
+      setInputText("");
+      navigate("/mix-notes");
+      return true;
+    }
+    return false;
+  }
+
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
       if (!text.trim()) return;
-      // Deep link: "mix note[s] session [for] [artist] [song]" → navigate only, never send to Jarvis
-      const _mixMatch = text.match(/\bmixed?\s*notes?\s*session[\s,;.:]*(.+)/i);
-      if (_mixMatch) {
-        const _rest = _mixMatch[1].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
-        const { artist: _artist, song: _song } = _resolveMixArtist(_rest);
-        sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));
-        setInputText("");
-        navigate("/mix-notes");
-        return; // do not fall through — Jarvis never sees this message
-      }
+      if (_handleDeepLink(text)) return;
       setSuggestion(null);
       setDismissedTrigger(null);
       const now = new Date().toLocaleTimeString([], {
@@ -723,8 +727,10 @@ export default function MainChat() {
             if (blob.size === 0) return;
             transcribeAudio(blob)
               .then((transcript) => {
-                if (transcript) sendMessage(transcript, true);
-                else setRecordingError("Nothing captured — try again.");
+                if (transcript) {
+                  if (_handleDeepLink(transcript)) return;
+                  sendMessage(transcript, true);
+                } else setRecordingError("Nothing captured — try again.");
               })
               .catch(() => setRecordingError("Transcription failed — check connection."));
           }, 800);
