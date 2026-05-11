@@ -112,7 +112,7 @@ export default function HamburgerMenu({ open, onClose, onClearSession }: Hamburg
               data-testid="button-clear-session"
             >
               <RotateCcw size={16} className="shrink-0" style={{ color: "rgba(239,68,68,0.5)" }} />
-              <span className="text-sm font-medium tracking-wide">Clear session</span>
+              <span className="text-sm font-medium tracking-wide">Reset Jarvis context</span>
             </button>
           </div>
         )}
