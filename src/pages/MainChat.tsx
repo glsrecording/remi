@@ -1267,7 +1267,18 @@ export default function MainChat() {
         )}
       </div>
 
-      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <HamburgerMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onClearSession={() => {
+          setMessages(SEED_MESSAGES);
+          fetch(`${JARVIS_URL}/remi/reset`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ user_id: "remi" }),
+          }).catch(() => {});
+        }}
+      />
       {undoAction && (
         <UndoBar
           message={undoAction.message}

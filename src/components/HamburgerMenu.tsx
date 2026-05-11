@@ -1,10 +1,11 @@
 import { useLocation } from "wouter";
-import { X, Sun, Brain, Music, Clock, CheckSquare, BarChart2, MessageCircle, Terminal, Archive, History, Download, Shuffle, Radio, BookOpen } from "lucide-react";
+import { X, Sun, Brain, Music, Clock, CheckSquare, BarChart2, MessageCircle, Terminal, Archive, History, Download, Shuffle, Radio, BookOpen, RotateCcw } from "lucide-react";
 import { useEffect } from "react";
 
 interface HamburgerMenuProps {
   open: boolean;
   onClose: () => void;
+  onClearSession?: () => void;
 }
 
 const menuItems = [
@@ -24,7 +25,7 @@ const menuItems = [
   { label: "Commands", icon: Terminal, path: "/commands" },
 ];
 
-export default function HamburgerMenu({ open, onClose }: HamburgerMenuProps) {
+export default function HamburgerMenu({ open, onClose, onClearSession }: HamburgerMenuProps) {
   const [location, navigate] = useLocation();
 
   useEffect(() => {
@@ -100,6 +101,21 @@ export default function HamburgerMenu({ open, onClose }: HamburgerMenuProps) {
             );
           })}
         </nav>
+
+        {/* Clear session */}
+        {onClearSession && (
+          <div className="px-3 pb-2 border-t border-white/5 pt-2">
+            <button
+              className="w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-150 text-left"
+              style={{ color: "rgba(239,68,68,0.7)" }}
+              onClick={() => { onClearSession(); onClose(); }}
+              data-testid="button-clear-session"
+            >
+              <RotateCcw size={16} className="shrink-0" style={{ color: "rgba(239,68,68,0.5)" }} />
+              <span className="text-sm font-medium tracking-wide">Clear session</span>
+            </button>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-white/5">
