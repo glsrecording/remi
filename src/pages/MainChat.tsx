@@ -607,23 +607,19 @@ export default function MainChat() {
     setDismissedTrigger(null);
   }, []);
 
-  function _handleDeepLink(text: string): boolean {
-    const _mixMatch = text.match(/\bmixed?\s*notes?\s*session[\s,;.:]*(.+)/i);
-    if (_mixMatch) {
-      const _rest = _mixMatch[1].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
-      const { artist: _artist, song: _song } = _resolveMixArtist(_rest);
-      sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));
-      setInputText("");
-      navigate("/mix-notes");
-      return true;
-    }
-    return false;
-  }
-
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
       if (!text.trim()) return;
-      if (_handleDeepLink(text)) return;
+      // Deep link: "mix note[s] session [for] [artist] [song]" → navigate only, never send to Jarvis
+      const _mixMatch = text.match(/\bmixed?\s*notes?\s*session[\s,;.:]*(.+)/i);
+      if (_mixMatch) {
+        const _rest = _mixMatch[1].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
+        const { artist: _artist, song: _song } = _resolveMixArtist(_rest);
+        sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _artist, song: _song }));
+        setInputText("");
+        navigate("/mix-notes");
+        return;
+      }
       setSuggestion(null);
       setDismissedTrigger(null);
       const now = new Date().toLocaleTimeString([], {
@@ -728,7 +724,14 @@ export default function MainChat() {
             transcribeAudio(blob)
               .then((transcript) => {
                 if (transcript) {
-                  if (_handleDeepLink(transcript)) return;
+                  const _m = transcript.match(/\bmixed?\s*notes?\s*session[\s,;.:]*(.+)/i);
+                  if (_m) {
+                    const _rest = (_m[1] || "").replace(/^for[\s,;.]+/i, "").replace(/[.,!?]+$/, "").trim();
+                    const { artist: _a, song: _s } = _resolveMixArtist(_rest);
+                    sessionStorage.setItem("mix_notes_prefill", JSON.stringify({ artist: _a, song: _s }));
+                    navigate("/mix-notes");
+                    return;
+                  }
                   sendMessage(transcript, true);
                 } else setRecordingError("Nothing captured — try again.");
               })
