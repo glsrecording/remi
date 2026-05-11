@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Lock, Loader2, X } from "lucide-react";
+import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X } from "lucide-react";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
@@ -75,8 +75,7 @@ export default function Session() {
   const [notFoundPrompt, setNotFoundPrompt] = useState("");
   const [noteText, setNoteText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,10 +85,9 @@ export default function Session() {
   const notesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const micStartTimeRef = useRef<number>(0);
-  const touchStartYRef = useRef<number | null>(null);
-  const micCancelledRef = useRef(false);
+  const streamRef = useRef<MediaStream | null>(null);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdActiveRef = useRef(false);
   const noteInputRef = useRef<HTMLInputElement>(null);
 
   const refetchSession = useCallback(() => {
@@ -140,16 +138,6 @@ export default function Session() {
   useEffect(() => {
     notesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [notes]);
-  // Request mic once at mount so touchstart can create MediaRecorder synchronously.
-  useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then((stream) => { micStreamRef.current = stream; })
-      .catch(() => {});
-    return () => {
-      micStreamRef.current?.getTracks().forEach((t) => t.stop());
-      micStreamRef.current = null;
-    };
-  }, []);
 
   // Timer tick
   useEffect(() => {
@@ -206,98 +194,71 @@ export default function Session() {
     setNoteText("");
   }, [noteText, sendNote]);
 
-  const stopRecorder = useCallback(() => {
+  // ─── Mic: 150ms hold-to-record ───────────────────────────────────────────
+  function handleMicDown() {
+    if (isRecording || isTranscribing) return;
+    holdActiveRef.current = false;
+    setRecordingError(null);
+    holdTimerRef.current = setTimeout(async () => {
+      holdActiveRef.current = true;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (!holdActiveRef.current) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        audioChunksRef.current = [];
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+        const recorder = new MediaRecorder(stream, { mimeType });
+        mediaRecorderRef.current = recorder;
+        recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
+        recorder.onstop = () => {
+          streamRef.current?.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+          setIsRecording(false);
+          // 800ms flush: Safari delivers dataavailable after onstop.
+          setTimeout(async () => {
+            const blob = new Blob(audioChunksRef.current, { type: mimeType });
+            audioChunksRef.current = [];
+            if (blob.size === 0) return;
+            setIsTranscribing(true);
+            try {
+              const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+              const formData = new FormData();
+              formData.append("file", blob, `audio.${ext}`);
+              formData.append("model", "whisper-1");
+              const resp = await fetch(`${JARVIS_URL}/transcribe`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+                body: formData,
+              });
+              const json = await resp.json();
+              const transcript = (json.text || "").trim();
+              if (transcript) await sendNote(transcript);
+              else setRecordingError("Nothing captured — try again.");
+            } catch {
+              setRecordingError("Transcription failed — check connection.");
+            } finally {
+              setIsTranscribing(false);
+            }
+          }, 800);
+        };
+        recorder.start(100);
+        setIsRecording(true);
+      } catch {
+        setRecordingError("Microphone permission is blocked or unavailable.");
+      }
+    }, 150);
+  }
+
+  function handleMicUp() {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    holdActiveRef.current = false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current = null;
     }
-  }, []);
-
-  const handleMicTouchStart = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (isRecording) return;
-    if (!micStreamRef.current) {
-      setRecordingError("Microphone permission is blocked or unavailable.");
-      return;
-    }
-    touchStartYRef.current = e.touches[0].clientY;
-    micCancelledRef.current = false;
-    setIsLocked(false);
-    setRecordingError(null);
-    audioChunksRef.current = [];
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-    const recorder = new MediaRecorder(micStreamRef.current, { mimeType });
-    mediaRecorderRef.current = recorder;
-    recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
-    recorder.onstop = () => {
-      const duration = Date.now() - micStartTimeRef.current;
-      const cancelled = micCancelledRef.current;
-      micCancelledRef.current = false;
-      setIsRecording(false);
-      if (cancelled || duration < 500) return;
-      setIsProcessing(true);
-      // 800ms flush: Safari delivers dataavailable after onstop (out of spec).
-      setTimeout(async () => {
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        audioChunksRef.current = [];
-        if (blob.size === 0) { setIsProcessing(false); return; }
-        try {
-          const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
-          const formData = new FormData();
-          formData.append("file", blob, `audio.${ext}`);
-          formData.append("model", "whisper-1");
-          const resp = await fetch(`${JARVIS_URL}/transcribe`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${REMI_API_KEY}` },
-            body: formData,
-          });
-          const json = await resp.json();
-          const transcript = (json.text || "").trim();
-          if (transcript) await sendNote(transcript);
-          else setRecordingError("Nothing captured — try again.");
-        } catch {
-          setRecordingError("Transcription failed — check connection.");
-        } finally {
-          setIsProcessing(false);
-        }
-      }, 800);
-    };
-    recorder.start(100);
-    micStartTimeRef.current = Date.now();
-    setIsRecording(true);
-  }, [isRecording, sendNote]);
-
-  const handleMicTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (!isRecording || isLocked || touchStartYRef.current === null) return;
-    const deltaY = touchStartYRef.current - e.touches[0].clientY;
-    if (deltaY > 60) {
-      setIsLocked(true);
-    } else if (deltaY < -60) {
-      micCancelledRef.current = true;
-      setIsLocked(false);
-      stopRecorder();
-    }
-  }, [isRecording, isLocked, stopRecorder]);
-
-  const handleMicTouchEnd = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (isLocked) return;
-    if (!isRecording) return;
-    stopRecorder();
-  }, [isRecording, isLocked, stopRecorder]);
-
-  const handleMicCancel = useCallback(() => {
-    micCancelledRef.current = true;
-    setIsLocked(false);
-    stopRecorder();
-  }, [stopRecorder]);
-
-  const handleMicSend = useCallback(() => {
-    setIsLocked(false);
-    stopRecorder();
-  }, [stopRecorder]);
+    setIsRecording(false);
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Safety: reset form after 30s if session never activates after a successful start
   useEffect(() => {
@@ -876,50 +837,13 @@ export default function Session() {
             {recordingError && (
               <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
             )}
-            {isLocked ? (
-              <div className="flex items-center justify-between gap-3 mb-2 px-1">
-                <button
-                  type="button"
-                  onClick={handleMicCancel}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95"
-                  style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444" }}
-                >
-                  <X size={12} /> Cancel
-                </button>
-                <div className="flex items-center gap-1.5">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i - 1) * 0.1}s` }} />
-                  ))}
-                  <Lock size={12} className="ml-1" style={{ color: "#f59e0b" }} />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleMicSend}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95"
-                  style={{ background: "rgba(74,222,128,0.15)", border: "1px solid rgba(74,222,128,0.4)", color: "#4ade80" }}
-                >
-                  Send ↑
-                </button>
-              </div>
-            ) : (isRecording || isProcessing) ? (
+            {(isRecording || isTranscribing) && (
               <div className="flex items-center justify-center gap-2 mb-2 h-5">
-                {isRecording && (
-                  <>
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i - 1) * 0.1}s` }} />
-                    ))}
-                    <span className="text-xs ml-1" style={{ color: "#ef4444" }}>Recording</span>
-                    <span className="text-xs text-white/25 ml-2">↑ slide to lock</span>
-                  </>
-                )}
-                {isProcessing && (
-                  <>
-                    <Loader2 size={13} className="animate-spin" style={{ color: "#f59e0b" }} />
-                    <span className="text-xs" style={{ color: "#f59e0b" }}>Transcribing...</span>
-                  </>
-                )}
+                {isTranscribing
+                  ? <><Loader2 size={13} className="animate-spin" style={{ color: "#f59e0b" }} /><span className="text-xs" style={{ color: "#f59e0b" }}>Transcribing...</span></>
+                  : <span className="text-xs" style={{ color: "#ef4444" }}>Recording…</span>}
               </div>
-            ) : null}
+            )}
             <div className="flex gap-2 items-center">
               <input
                 ref={noteInputRef}
@@ -939,31 +863,26 @@ export default function Session() {
                 Send
               </button>
 
-              {/* Hold-to-record mic: hold=record, slide-up=lock, release=send, swipe-down=cancel */}
+              {/* Amber hold-to-send mic: hold 150ms → record, release → transcribe + send */}
               <button
                 type="button"
-                className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
+                className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150"
                 style={{
-                  background: isRecording ? "#ef444422" : isProcessing ? "#f59e0b18" : "#f59e0b14",
+                  background: isRecording ? "#ef444422" : "#f59e0b14",
                   border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
                   marginRight: "20px",
                   touchAction: "none",
                 }}
-                onTouchStart={handleMicTouchStart}
-                onTouchMove={handleMicTouchMove}
-                onTouchEnd={handleMicTouchEnd}
-                onTouchCancel={handleMicCancel}
+                onPointerDown={(e) => { e.preventDefault(); handleMicDown(); }}
+                onPointerUp={handleMicUp}
+                onPointerLeave={handleMicUp}
                 data-testid="button-voice"
               >
-                {isProcessing ? (
-                  <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
-                ) : isRecording && isLocked ? (
-                  <Lock size={16} style={{ color: "#f59e0b" }} />
-                ) : isRecording ? (
-                  <MicOff size={16} style={{ color: "#ef4444" }} />
-                ) : (
-                  <Mic size={16} style={{ color: "#f59e0b" }} />
-                )}
+                {isTranscribing
+                  ? <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+                  : isRecording
+                  ? <MicOff size={16} style={{ color: "#ef4444" }} />
+                  : <Mic size={16} style={{ color: "#f59e0b" }} />}
               </button>
             </div>
           </div>
