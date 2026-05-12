@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Menu, Sparkles, Mic, MicOff, Loader2, X } from "lucide-react";
+import { Menu, Sparkles, Mic, MicOff, Loader2, X, Lock } from "lucide-react";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
@@ -145,12 +145,24 @@ export default function Journal() {
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-  const holdToSendRef = useRef(false);
+  // getUserMedia called once at mount — never inside a touch/pointer handler
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdActiveRef = useRef(false);
+  const pointerStartYRef = useRef<number>(0);
   const micStartTimeRef = useRef<number>(0);
-  const touchStartYRef = useRef<number | null>(null);
-  const micCancelledRef = useRef(false);
-  const touchEndedRef = useRef(false);
+  const cancelledRef = useRef(false);
+
+  // Acquire mic permission at mount; release on unmount
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((stream) => { micStreamRef.current = stream; })
+      .catch(() => {});
+    return () => {
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+    };
+  }, []);
 
   const fetchEntries = useCallback(async () => {
     setLoadingEntries(true);
@@ -208,129 +220,83 @@ export default function Journal() {
     }
   }, [pin, analyzing]);
 
-  const stopRecorder = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current = null;
-    }
-  }, []);
-
-  const startRecording = useCallback(async (autoSubmit: boolean) => {
+  // Start recording from pre-mounted stream — synchronous, no getUserMedia call
+  function startMediaRecording(autoSubmit: boolean) {
     if (isRecording) return;
-    micCancelledRef.current = false;
-    touchEndedRef.current = false;
-    holdToSendRef.current = autoSubmit;
+    if (!micStreamRef.current) {
+      setRecordingError("Microphone not ready — try again.");
+      return;
+    }
     setRecordingError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      audioChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
-      recorder.onstop = () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        const duration = Date.now() - micStartTimeRef.current;
-        const cancelled = micCancelledRef.current;
-        const autoSub = holdToSendRef.current;
-        micCancelledRef.current = false;
-        holdToSendRef.current = false;
-        setIsRecording(false);
-        if (cancelled || duration < 500) return;
-        setIsProcessing(true);
-        // 800ms flush: Safari delivers dataavailable after onstop (out of spec).
-        setTimeout(async () => {
-          const blob = new Blob(audioChunksRef.current, { type: mimeType });
-          audioChunksRef.current = [];
-          if (blob.size === 0) { setIsProcessing(false); return; }
-          try {
-            const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
-            const formData = new FormData();
-            formData.append("file", blob, `audio.${ext}`);
-            formData.append("model", "whisper-1");
-            const resp = await fetch(`${JARVIS_URL}/transcribe`, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${REMI_API_KEY}` },
-              body: formData,
-            });
-            const json = await resp.json();
-            const transcript = (json.text || "").trim();
-            if (transcript) {
-              if (autoSub) await handleSubmit(transcript);
-              else { setText(transcript); inputRef.current?.focus(); }
-            } else {
-              setRecordingError("Nothing captured — try again.");
-            }
-          } catch {
-            setRecordingError("Transcription failed — check connection.");
-          } finally {
-            setIsProcessing(false);
-          }
-        }, 800);
-      };
-      recorder.start(100);
-      micStartTimeRef.current = Date.now();
-      if (touchEndedRef.current) {
-        micCancelledRef.current = true;
-        recorder.stop();
-        mediaRecorderRef.current = null;
-        return;
-      }
-      setIsRecording(true);
-    } catch {
-      setRecordingError("Microphone permission blocked or unavailable.");
-    }
-  }, [isRecording, handleSubmit]);
-
-  const handleLeftTouchStart = useCallback(async (e: React.TouchEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    await startRecording(false);
-  }, [startRecording]);
-
-  const handleLeftTouchEnd = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (!isRecording) { touchEndedRef.current = true; return; }
-    stopRecorder();
-  }, [isRecording, stopRecorder]);
-
-  const handleRightTouchStart = useCallback(async (e: React.TouchEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    touchStartYRef.current = e.touches[0].clientY;
-    setIsLocked(false);
-    await startRecording(true);
-  }, [startRecording]);
-
-  const handleRightTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (!isRecording || isLocked || touchStartYRef.current === null) return;
-    const deltaY = touchStartYRef.current - e.touches[0].clientY;
-    if (deltaY > 60) setIsLocked(true);
-    else if (deltaY < -60) {
-      micCancelledRef.current = true;
+    cancelledRef.current = false;
+    audioChunksRef.current = [];
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+    const recorder = new MediaRecorder(micStreamRef.current, { mimeType });
+    mediaRecorderRef.current = recorder;
+    recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
+    recorder.onstop = () => {
+      const duration = Date.now() - micStartTimeRef.current;
+      const cancelled = cancelledRef.current;
+      cancelledRef.current = false;
+      setIsRecording(false);
       setIsLocked(false);
-      stopRecorder();
-    }
-  }, [isRecording, isLocked, stopRecorder]);
-
-  const handleRightTouchEnd = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (isLocked) return;
-    if (!isRecording) { touchEndedRef.current = true; return; }
-    stopRecorder();
-  }, [isRecording, isLocked, stopRecorder]);
+      // Discard taps under 500ms or explicit cancels
+      if (cancelled || duration < 500) return;
+      setIsProcessing(true);
+      // 800ms flush: Safari delivers dataavailable after onstop (out of spec)
+      setTimeout(async () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        audioChunksRef.current = [];
+        if (blob.size === 0) { setIsProcessing(false); return; }
+        try {
+          const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+          const formData = new FormData();
+          formData.append("file", blob, `audio.${ext}`);
+          formData.append("model", "whisper-1");
+          const resp = await fetch(`${JARVIS_URL}/transcribe`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+            body: formData,
+          });
+          const json = await resp.json();
+          const transcript = (json.text || "").trim();
+          if (transcript) {
+            if (autoSubmit) await handleSubmit(transcript);
+            else { setText(transcript); inputRef.current?.focus(); }
+          } else {
+            setRecordingError("Nothing captured — try again.");
+          }
+        } catch {
+          setRecordingError("Transcription failed — check connection.");
+        } finally {
+          setIsProcessing(false);
+        }
+      }, 800);
+    };
+    recorder.start(100);
+    micStartTimeRef.current = Date.now();
+    setIsRecording(true);
+  }
 
   const handleMicCancel = useCallback(() => {
-    micCancelledRef.current = true;
+    cancelledRef.current = true;
     setIsLocked(false);
-    stopRecorder();
-  }, [stopRecorder]);
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    holdActiveRef.current = false;
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current?.stop();
+      mediaRecorderRef.current = null;
+    }
+    setIsRecording(false);
+  }, []);
 
   const handleMicSend = useCallback(() => {
     setIsLocked(false);
-    stopRecorder();
-  }, [stopRecorder]);
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current?.stop();
+      mediaRecorderRef.current = null;
+    }
+  }, []);
 
   if (!pin) {
     return <PinGate onUnlock={(p) => setPin(p)} />;
@@ -441,9 +407,16 @@ export default function Journal() {
               border: `1.5px solid ${isRecording ? "#ef4444" : "rgba(255,255,255,0.1)"}`,
               touchAction: "none",
             }}
-            onTouchStart={handleLeftTouchStart}
-            onTouchEnd={handleLeftTouchEnd}
-            onTouchCancel={handleMicCancel}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              startMediaRecording(false);
+            }}
+            onPointerUp={() => {
+              if (mediaRecorderRef.current?.state !== "inactive") {
+                mediaRecorderRef.current?.stop();
+                mediaRecorderRef.current = null;
+              }
+            }}
           >
             {isProcessing ? (
               <Loader2 size={16} className="animate-spin" style={{ color: "rgba(255,255,255,0.6)" }} />
@@ -479,20 +452,41 @@ export default function Journal() {
             {submitting ? "…" : "Send"}
           </button>
 
-          {/* Right amber mic — hold-to-send, slide-up=lock */}
+          {/* Right amber mic — hold 150ms to record, release to transcribe+send, slide up to lock */}
           <button
             type="button"
             className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
             style={{
               background: isRecording ? "#ef444422" : isProcessing ? "#f59e0b18" : "#f59e0b14",
               border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
-              marginRight: "16px",
+              marginRight: "20px",
               touchAction: "none",
             }}
-            onTouchStart={handleRightTouchStart}
-            onTouchMove={handleRightTouchMove}
-            onTouchEnd={handleRightTouchEnd}
-            onTouchCancel={handleMicCancel}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              pointerStartYRef.current = e.clientY;
+              holdActiveRef.current = false;
+              setIsLocked(false);
+              if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+              holdTimerRef.current = setTimeout(() => {
+                holdActiveRef.current = true;
+                startMediaRecording(true);
+              }, 150);
+            }}
+            onPointerMove={(e) => {
+              if (!isRecording || isLocked) return;
+              const deltaY = pointerStartYRef.current - e.clientY;
+              if (deltaY > 60) setIsLocked(true);
+            }}
+            onPointerUp={() => {
+              if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+              holdActiveRef.current = false;
+              if (isLocked) return;
+              if (mediaRecorderRef.current?.state !== "inactive") {
+                mediaRecorderRef.current?.stop();
+                mediaRecorderRef.current = null;
+              }
+            }}
           >
             {isProcessing ? (
               <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
