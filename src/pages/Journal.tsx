@@ -304,7 +304,7 @@ export default function Journal() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: "#1a1a1a", color: "#e5e5e5" }}>
+    <div className="flex flex-col" style={{ height: "100dvh", overflow: "hidden", background: "#1a1a1a", color: "#e5e5e5" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
       {/* Header */}
@@ -364,7 +364,7 @@ export default function Journal() {
       {/* Input bar */}
       <div
         className="shrink-0 px-4 pt-3 border-t border-white/5"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)", background: "#1a1a1a" }}
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 16px) + 16px)", background: "#1a1a1a" }}
       >
         {recordingError && (
           <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
