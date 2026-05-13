@@ -76,12 +76,12 @@ export default function WrapUp() {
   };
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#232323" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
         style={{
-          background: "#1a1a1a",
+          background: "var(--t-surface)",
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}
@@ -119,7 +119,7 @@ export default function WrapUp() {
         </div>
 
         {/* Voice record instruction */}
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: "#1e1e1e" }}>
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: "var(--t-card)" }}>
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
             style={{ background: remiColor + "15" }}
@@ -139,7 +139,7 @@ export default function WrapUp() {
               <div
                 key={s.id}
                 className="px-4 py-3 rounded-xl border border-white/5"
-                style={{ background: "#333333" }}
+                style={{ background: "var(--t-card)" }}
                 data-testid={`session-${s.id}`}
               >
                 <p className="text-xs text-white/25 mb-1">{s.date} · {s.timestamp}</p>

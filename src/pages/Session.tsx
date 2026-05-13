@@ -476,7 +476,7 @@ export default function Session() {
   return (
     <div
       className="flex flex-col min-h-screen"
-      style={{ background: "#1a1a1a", color: "#e5e5e5" }}
+      style={{ background: "var(--t-bg)", color: "var(--t-text)" }}
     >
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
@@ -509,20 +509,20 @@ export default function Session() {
           {starting ? (
             <div className="flex flex-col items-center gap-3">
               <Loader2 size={24} className="animate-spin" style={{ color: "#4ade80" }} />
-              <p className="text-sm" style={{ color: "rgba(255,255,255,0.4)" }}>Starting session…</p>
+              <p className="text-sm" style={{ color: "var(--t-text5)" }}>Starting session…</p>
             </div>
           ) : matchState === "suggest" ? (
             <div className="w-full max-w-xs space-y-3">
               <p className="text-center text-xs uppercase tracking-widest mb-4"
-                style={{ color: "rgba(255,255,255,0.25)" }}>
+                style={{ color: "var(--t-text7)" }}>
                 Song Match
               </p>
               <div
                 className="rounded-xl px-4 py-4 text-center border"
-                style={{ background: "#111", borderColor: "rgba(74,222,128,0.3)" }}
+                style={{ background: "var(--t-surface)", borderColor: "rgba(74,222,128,0.3)" }}
               >
-                <p className="text-xs mb-2" style={{ color: "rgba(255,255,255,0.4)" }}>Did you mean</p>
-                <p className="text-sm font-semibold" style={{ color: "#e5e5e5" }}>{suggestionTitle}</p>
+                <p className="text-xs mb-2" style={{ color: "var(--t-text5)" }}>Did you mean</p>
+                <p className="text-sm font-semibold" style={{ color: "var(--t-text)" }}>{suggestionTitle}</p>
               </div>
               <div className="flex gap-3">
                 <button
@@ -538,7 +538,7 @@ export default function Session() {
                     setMatchState("not_found");
                   }}
                   className="flex-1 py-3 rounded-xl font-semibold text-sm border transition-all active:scale-95"
-                  style={{ background: "transparent", borderColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.6)" }}
+                  style={{ background: "transparent", borderColor: "var(--t-border-lg)", color: "var(--t-text3)" }}
                 >
                   No
                 </button>
@@ -550,14 +550,14 @@ export default function Session() {
           ) : matchState === "not_found" ? (
             <div className="w-full max-w-xs space-y-3">
               <p className="text-center text-xs uppercase tracking-widest mb-4"
-                style={{ color: "rgba(255,255,255,0.25)" }}>
+                style={{ color: "var(--t-text7)" }}>
                 No Song Found
               </p>
               <div
                 className="rounded-xl px-4 py-4 text-center border"
-                style={{ background: "#111", borderColor: "rgba(255,255,255,0.1)" }}
+                style={{ background: "var(--t-surface)", borderColor: "var(--t-border-md)" }}
               >
-                <p className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>{notFoundPrompt}</p>
+                <p className="text-sm" style={{ color: "var(--t-text3)" }}>{notFoundPrompt}</p>
               </div>
               <div className="flex gap-3">
                 <button
@@ -570,7 +570,7 @@ export default function Session() {
                 <button
                   onClick={handleMatchCancel}
                   className="flex-1 py-3 rounded-xl font-semibold text-sm border transition-all active:scale-95"
-                  style={{ background: "transparent", borderColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.6)" }}
+                  style={{ background: "transparent", borderColor: "var(--t-border-lg)", color: "var(--t-text3)" }}
                 >
                   Cancel
                 </button>
@@ -582,7 +582,7 @@ export default function Session() {
           ) : (
             <div className="w-full max-w-xs space-y-3">
               <p className="text-center text-xs uppercase tracking-widest mb-4"
-                style={{ color: "rgba(255,255,255,0.25)" }}>
+                style={{ color: "var(--t-text7)" }}>
                 No active session
               </p>
               <input
@@ -627,12 +627,12 @@ export default function Session() {
           <div className="px-5 pt-5 pb-2">
             <div
               className="rounded-xl px-4 py-3 border"
-              style={{ background: "#111", borderColor: "rgba(74,222,128,0.35)" }}
+              style={{ background: "var(--t-surface)", borderColor: "rgba(74,222,128,0.35)" }}
             >
               <p className="text-xs uppercase tracking-widest mb-1" style={{ color: "#4ade80" }}>
                 Active
               </p>
-              <p className="text-base font-semibold truncate" style={{ color: "#e5e5e5" }}>
+              <p className="text-base font-semibold truncate" style={{ color: "var(--t-text)" }}>
                 {session.artist && session.song
                   ? `🎵 ${session.artist} — ${session.song}`
                   : session.song || session.artist
@@ -646,7 +646,7 @@ export default function Session() {
           <div className="px-5 py-4">
             <div
               className="rounded-2xl px-4 py-6 border text-center"
-              style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)" }}
+              style={{ background: "var(--t-surface)", borderColor: "var(--t-border)" }}
             >
               <p
                 className="font-mono text-5xl font-bold tracking-tight mb-1"
@@ -675,7 +675,7 @@ export default function Session() {
                     <button
                       onClick={handleEndSession}
                       className="px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
-                      style={{ background: "transparent", borderColor: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.35)" }}
+                      style={{ background: "transparent", borderColor: "var(--t-border-lg)", color: "var(--t-text5)" }}
                     >
                       End Session
                     </button>
@@ -723,9 +723,9 @@ export default function Session() {
                   }}
                   className="flex-1 py-1.5 text-xs rounded-lg font-medium transition-all"
                   style={{
-                    background: rateType === type ? "rgba(74,222,128,0.12)" : "rgba(255,255,255,0.04)",
-                    border: `1px solid ${rateType === type ? "rgba(74,222,128,0.6)" : "rgba(255,255,255,0.08)"}`,
-                    color: rateType === type ? "#4ade80" : "rgba(255,255,255,0.35)",
+                    background: rateType === type ? "rgba(74,222,128,0.12)" : "var(--t-el-low)",
+                    border: `1px solid ${rateType === type ? "rgba(74,222,128,0.6)" : "var(--t-border-md)"}`,
+                    color: rateType === type ? "#4ade80" : "var(--t-text5)",
                   }}
                 >
                   {RATE_TYPE_LABELS[type]}
@@ -735,7 +735,7 @@ export default function Session() {
 
             <div
               className="rounded-xl px-4 py-3 border flex items-center justify-between"
-              style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)" }}
+              style={{ background: "var(--t-surface)", borderColor: "var(--t-border)" }}
             >
               <div className="flex items-center gap-2">
                 <DollarSign size={15} style={{ color: "#4ade80" }} />
@@ -798,8 +798,8 @@ export default function Session() {
 
               {(rateType === "project_rate" || rateType === "no_charge") && (
                 <div className="flex items-center gap-2">
-                  <span className="text-lg font-semibold font-mono" style={{ color: "rgba(255,255,255,0.25)" }}>$0</span>
-                  <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>
+                  <span className="text-lg font-semibold font-mono" style={{ color: "var(--t-text7)" }}>$0</span>
+                  <span className="text-xs" style={{ color: "var(--t-text6)" }}>
                     {rateType === "project_rate" ? "Project rate" : "No charge"}
                   </span>
                 </div>
@@ -809,12 +809,12 @@ export default function Session() {
 
           {/* Session notes */}
           <div className="px-5 mb-3 flex-1 flex flex-col min-h-0">
-            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "rgba(255,255,255,0.3)" }}>
+            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--t-text6)" }}>
               Session Notes
             </p>
             <div
               className="flex-1 rounded-xl border overflow-y-auto"
-              style={{ background: "#111", borderColor: "rgba(255,255,255,0.05)", maxHeight: "200px" }}
+              style={{ background: "var(--t-surface)", borderColor: "var(--t-border)", maxHeight: "200px" }}
             >
               {notes.length === 0 ? (
                 <p className="text-sm text-white/25 p-4 text-center">
@@ -826,7 +826,7 @@ export default function Session() {
                     <div
                       key={i}
                       className="flex gap-3 py-2 px-3 rounded-lg"
-                      style={{ background: "rgba(255,255,255,0.03)" }}
+                      style={{ background: "var(--t-el-low)" }}
                     >
                       <span
                         className="text-xs font-mono mt-0.5 shrink-0"
@@ -853,7 +853,7 @@ export default function Session() {
               bottom: 0,
               left: 0,
               right: 0,
-              background: "#1a1a1a",
+              background: "var(--t-bg)",
               zIndex: 10,
               padding: "12px 16px 48px",
             }}

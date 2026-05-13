@@ -174,7 +174,7 @@ function UndoToast({
       className="fixed left-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl"
       style={{
         bottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)",
-        background: "#1e1e1e",
+        background: "var(--t-card)",
         border: `1px solid ${color}30`,
         animation: "slide-up 0.2s ease",
       }}
@@ -336,7 +336,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
     <div
       className="flex items-end gap-1.5 px-3 py-2 rounded-xl"
       style={{
-        background: "#333333",
+        background: "var(--t-card)",
         borderLeft: `3px solid ${color}70`,
         borderTop: "1px solid rgba(255,255,255,0.05)",
         borderRight: "1px solid rgba(255,255,255,0.05)",
@@ -599,7 +599,7 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
       <div
         className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
         style={{
-          background: committing ? `${commitColor}22` : "#333333",
+          background: committing ? `${commitColor}22` : "var(--t-card)",
           borderLeft: `3px solid ${BUCKET_META[sourceBucket].color}70`,
           borderTop: "1px solid rgba(255,255,255,0.05)",
           borderRight: "1px solid rgba(255,255,255,0.05)",
@@ -829,12 +829,12 @@ export default function Tasks() {
   const totalCount = Object.values(buckets).reduce((n, a) => n + a.length, 0);
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#000000" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg-deep)" }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
         style={{
-          background: "#1a1a1a",
+          background: "var(--t-surface)",
           paddingTop:    "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}

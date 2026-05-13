@@ -35,6 +35,15 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
 
+    <!-- Apply saved theme before first render — prevents flash of wrong theme -->
+    <script>
+      try {
+        if (localStorage.getItem('remi-theme') === 'light') {
+          document.documentElement.classList.add('light-mode');
+        }
+      } catch(e) {}
+    </script>
+
     <!-- Register service worker inline so it runs before any JS bundle -->
     <script>
       if ('serviceWorker' in navigator) {

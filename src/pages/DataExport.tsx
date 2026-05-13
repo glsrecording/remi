@@ -94,11 +94,11 @@ export default function DataExport() {
   ];
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#232323" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{ background: "#1a1a1a", paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)", paddingBottom: "14px" }}
+        style={{ background: "var(--t-surface)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)", paddingBottom: "14px" }}
       >
         <button
           className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1"
@@ -147,7 +147,7 @@ export default function DataExport() {
           </button>
           <button
             className="flex items-center justify-center gap-2.5 w-full py-3.5 rounded-xl font-semibold text-sm transition-all active:scale-[0.98]"
-            style={{ background: "#333333", color: "rgba(255,255,255,0.75)", border: "1px solid rgba(255,255,255,0.08)" }}
+            style={{ background: "var(--t-card)", color: "var(--t-text3)", border: "1px solid var(--t-border-md)" }}
             onClick={handleCopy}
             data-testid="button-copy"
           >
@@ -161,7 +161,7 @@ export default function DataExport() {
           <p className="text-xs text-white/25 uppercase tracking-widest mb-2">Preview</p>
           <pre
             className="text-xs text-white/40 leading-relaxed rounded-xl p-4 overflow-x-auto no-scrollbar"
-            style={{ background: "#1a1a1a", fontFamily: "'Space Mono', monospace", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "280px", overflowY: "auto" }}
+            style={{ background: "var(--t-surface)", fontFamily: "'Space Mono', monospace", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "280px", overflowY: "auto" }}
           >
             {exportText}
           </pre>

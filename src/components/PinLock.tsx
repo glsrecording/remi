@@ -51,7 +51,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
   return (
     <div
       className="fixed inset-0 flex flex-col items-center justify-center select-none"
-      style={{ background: "#1a1a1a" }}
+      style={{ background: "var(--t-bg)" }}
     >
       {/* Logo */}
       <p
@@ -75,7 +75,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
                 ? "#ef4444"
                 : i < pin.length
                   ? ACCENT
-                  : "rgba(255,255,255,0.12)",
+                  : "var(--t-el-med)",
               boxShadow:
                 i < pin.length && !error
                   ? `0 0 8px ${ACCENT}70`
@@ -122,8 +122,8 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
               key={k}
               className="h-16 rounded-2xl text-2xl font-semibold transition-all active:scale-90"
               style={{
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "var(--t-el-low)",
+                border: "1px solid var(--t-border-md)",
                 color: "rgba(255,255,255,0.85)",
                 fontFamily: "'Space Mono', monospace",
               }}

@@ -57,12 +57,12 @@ export default function MorningBriefing() {
   };
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#232323" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
         style={{
-          background: "#1a1a1a",
+          background: "var(--t-surface)",
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}
@@ -143,13 +143,13 @@ export default function MorningBriefing() {
           /* Briefing content */
           <div className="space-y-6 overlay-fade-in">
             {briefingResponse && (
-              <div className="p-4 rounded-2xl border border-white/5" style={{ background: "#1e1e1e" }}>
+              <div className="p-4 rounded-2xl border border-white/5" style={{ background: "var(--t-card)" }}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-invert max-w-none">
                   {briefingResponse}
                 </ReactMarkdown>
               </div>
             )}
-            <div className="flex items-center gap-2 px-4 py-3 rounded-xl" style={{ background: "#1e1e1e" }}>
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl" style={{ background: "var(--t-card)" }}>
               <Sparkles size={13} className="text-white/20 shrink-0" />
               <p className="text-xs text-white/25">Live briefing loaded from Jarvis</p>
             </div>
@@ -177,7 +177,7 @@ export default function MorningBriefing() {
                 <div
                   key={i}
                   className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
-                  style={{ background: "#333333" }}
+                  style={{ background: "var(--t-card)" }}
                   data-testid={`calendar-item-${i}`}
                 >
                   <span
@@ -206,7 +206,7 @@ export default function MorningBriefing() {
                 <div
                   key={i}
                   className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
-                  style={{ background: "#333333" }}
+                  style={{ background: "var(--t-card)" }}
                   data-testid={`task-item-${i}`}
                 >
                   <div
@@ -230,7 +230,7 @@ export default function MorningBriefing() {
                 <div
                   key={i}
                   className="flex items-center justify-between px-4 py-3 rounded-xl border border-white/5"
-                  style={{ background: "#333333" }}
+                  style={{ background: "var(--t-card)" }}
                   data-testid={`bill-item-${i}`}
                 >
                   <p className="text-sm text-white/80">{bill.name}</p>
@@ -243,7 +243,7 @@ export default function MorningBriefing() {
             </div>
 
             {/* Jarvis note */}
-            <div className="flex items-center gap-2 px-4 py-3 rounded-xl" style={{ background: "#1e1e1e" }}>
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl" style={{ background: "var(--t-card)" }}>
               <Sparkles size={13} className="text-white/20 shrink-0" />
               <p className="text-xs text-white/25">Sample layout — live data from Jarvis coming soon</p>
             </div>

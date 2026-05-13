@@ -33,12 +33,12 @@ export default function TimeTrack() {
   };
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#232323" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
         style={{
-          background: "#1a1a1a",
+          background: "var(--t-surface)",
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}
@@ -141,7 +141,7 @@ export default function TimeTrack() {
           ) : (
             <div
               className="px-4 py-3 rounded-xl border border-white/5 cursor-pointer"
-              style={{ background: "#333333" }}
+              style={{ background: "var(--t-card)" }}
               onClick={() => { setDraft(timerUrl); setEditing(true); }}
               data-testid="display-timer-url"
             >

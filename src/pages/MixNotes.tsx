@@ -155,11 +155,11 @@ export default function MixNotes() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#1a1a1a" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       {/* Header */}
       <div
         className="px-4 border-b border-white/5 shrink-0"
-        style={{ background: "#111111", paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)", paddingBottom: "14px" }}
+        style={{ background: "var(--t-surface)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)", paddingBottom: "14px" }}
       >
         <div className="flex items-center gap-3">
           <button
@@ -201,7 +201,7 @@ export default function MixNotes() {
           </div>
         ) : (
           sessionNotes.map((n) => (
-            <div key={n.id} className="px-4 py-3 rounded-xl border border-white/8" style={{ background: "#262626" }}>
+            <div key={n.id} className="px-4 py-3 rounded-xl border border-white/8" style={{ background: "var(--t-card)" }}>
               <p className="text-sm text-white/85 leading-snug">{n.note}</p>
               <p className="text-xs text-white/25 mt-1">
                 {n.timestamp}
@@ -215,7 +215,7 @@ export default function MixNotes() {
 
       {/* Fixed bottom bar */}
       <div
-        style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#111111", zIndex: 10, padding: "12px 16px 48px" }}
+        style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--t-surface)", zIndex: 10, padding: "12px 16px 48px" }}
       >
         {recordingError && (
           <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>

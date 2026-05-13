@@ -23,12 +23,12 @@ export default function Commands() {
   const ACCENT = "#f59e0b";
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#232323" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       {/* Header */}
       <div
         className="px-4 border-b border-white/5 shrink-0"
         style={{
-          background: "#1a1a1a",
+          background: "var(--t-surface)",
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}
@@ -83,7 +83,7 @@ export default function Commands() {
                 <div
                   key={cmd.id}
                   className="px-4 py-3.5 rounded-xl border border-white/5 flex items-start gap-3 group active:bg-white/3 transition-colors"
-                  style={{ background: "#333333" }}
+                  style={{ background: "var(--t-card)" }}
                   data-testid={`command-item-${cmd.id}`}
                 >
                   <ChevronRight size={14} className="shrink-0 mt-0.5 text-white/20 group-active:text-white/40" />

@@ -46,8 +46,8 @@ export default function UndoBar({
       className="fixed left-3 right-3 z-40 rounded-2xl overflow-hidden shadow-xl bubble-in"
       style={{
         bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
-        background: "#1e1e1e",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "var(--t-card)",
+        border: "1px solid var(--t-border-md)",
       }}
       data-testid="undo-bar"
     >

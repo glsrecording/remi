@@ -31,12 +31,12 @@ export default function Scorecard() {
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#232323" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
         style={{
-          background: "#1a1a1a",
+          background: "var(--t-surface)",
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}
@@ -70,7 +70,7 @@ export default function Scorecard() {
             <BarChart2 size={34} style={{ color: remiColor, opacity: 0.5 }} />
             <div
               className="absolute -top-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center"
-              style={{ background: "#1a1a1a", border: `1px solid rgba(255,255,255,0.1)` }}
+              style={{ background: "var(--t-bg)", border: `1px solid var(--t-border-md)` }}
             >
               <Lock size={11} className="text-white/30" />
             </div>
@@ -111,7 +111,7 @@ export default function Scorecard() {
               <div
                 key={item.label}
                 className="flex items-start gap-4 px-4 py-4 rounded-2xl border border-white/5"
-                style={{ background: "#333333" }}
+                style={{ background: "var(--t-card)" }}
                 data-testid={`preview-item-${item.label.toLowerCase().replace(/ /g, "-")}`}
               >
                 <div

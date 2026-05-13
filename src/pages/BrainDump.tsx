@@ -115,7 +115,7 @@ function SwipeableTodayItem({
       <div
         className="group relative flex items-start gap-3 px-4 py-3 border border-white/5"
         style={{
-          background: committing ? "rgba(59,130,246,0.12)" : "#333333",
+          background: committing ? "rgba(59,130,246,0.12)" : "var(--t-card)",
           borderRadius: "0.75rem",
           transform: `translateX(${offsetX}px)`,
           transition: dragging.current
@@ -238,7 +238,7 @@ function SwipeableTomorrowItem({
       <div
         className="group relative flex items-start gap-3 px-4 py-3 border border-white/5"
         style={{
-          background: committing ? "rgba(34,197,94,0.12)" : "#333333",
+          background: committing ? "rgba(34,197,94,0.12)" : "var(--t-card)",
           borderRadius: "0.75rem",
           transform: `translateX(${offsetX}px)`,
           transition: dragging.current
@@ -346,7 +346,7 @@ function SwipeableSomedayItem({
       <div
         className="group relative flex items-start gap-3 px-4 py-3 border border-white/5"
         style={{
-          background: committing ? "rgba(34,197,94,0.12)" : "#333333",
+          background: committing ? "rgba(34,197,94,0.12)" : "var(--t-card)",
           borderRadius: "0.75rem",
           transform: `translateX(${offsetX}px)`,
           transition: dragging.current
@@ -635,12 +635,12 @@ export default function BrainDump() {
   return (
     <div
       className="flex flex-col h-full w-full"
-      style={{ background: "#232323" }}
+      style={{ background: "var(--t-bg)" }}
     >
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
         style={{
-          background: "#1a1a1a",
+          background: "var(--t-surface)",
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}
@@ -677,7 +677,7 @@ export default function BrainDump() {
                 className="flex items-center justify-between w-full px-5 py-4 rounded-2xl border transition-all duration-200 active:scale-[0.98]"
                 style={{
                   background:
-                    selectedBucket === b.key ? b.color + "18" : "#333333",
+                    selectedBucket === b.key ? b.color + "18" : "var(--t-card)",
                   borderColor:
                     selectedBucket === b.key
                       ? b.color + "80"

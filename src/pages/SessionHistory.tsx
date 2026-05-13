@@ -103,7 +103,7 @@ function SessionCard({
   const [open, setOpen] = useState(false);
   const hasItems = entry.completedItems.length > 0;
   return (
-    <div className="rounded-xl border border-white/5 overflow-hidden" style={{ background: "#2e2e2e" }}>
+    <div className="rounded-xl border border-white/5 overflow-hidden" style={{ background: "var(--t-card)" }}>
       <div className="flex items-center gap-3 px-4 py-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-white/85 leading-tight" style={{ fontFamily: "'Space Mono', monospace" }}>
@@ -163,7 +163,7 @@ function WeekCard({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-xl border border-white/8 overflow-hidden" style={{ background: "#333333" }}>
+    <div className="rounded-xl border border-white/8 overflow-hidden" style={{ background: "var(--t-card)" }}>
       {/* Week header */}
       <button className="w-full text-left px-4 py-4" onClick={() => setOpen((p) => !p)}>
         <div className="flex items-start gap-3">
@@ -230,11 +230,11 @@ export default function SessionHistory() {
   const deleteEntry = (id: string) => setLog((prev) => prev.filter((e) => e.id !== id));
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#232323" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{ background: "#1a1a1a", paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)", paddingBottom: "14px" }}
+        style={{ background: "var(--t-surface)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)", paddingBottom: "14px" }}
       >
         <button className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1" onClick={() => navigate("/")} data-testid="button-back">
           <ArrowLeft size={20} />
@@ -274,14 +274,14 @@ export default function SessionHistory() {
 
       {/* Segmented control */}
       {log.length > 0 && (
-        <div className="mx-4 mt-4 flex rounded-xl p-1" style={{ background: "#1a1a1a" }}>
+        <div className="mx-4 mt-4 flex rounded-xl p-1" style={{ background: "var(--t-surface)" }}>
           {(["sessions", "weekly"] as ViewMode[]).map((mode) => (
             <button
               key={mode}
               className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all duration-200 capitalize"
               style={{
-                background: viewMode === mode ? "#333333" : "transparent",
-                color: viewMode === mode ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.3)",
+                background: viewMode === mode ? "var(--t-card)" : "transparent",
+                color: viewMode === mode ? "var(--t-text2)" : "var(--t-text6)",
                 fontFamily: "'Space Mono', monospace",
               }}
               onClick={() => setViewMode(mode)}

@@ -103,12 +103,12 @@ export default function MessageToDad() {
   const charOk = charCount > 0 && charCount <= 300;
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "#232323" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       {/* Header */}
       <div
         className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
         style={{
-          background: "#1a1a1a",
+          background: "var(--t-surface)",
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}
@@ -148,7 +148,7 @@ export default function MessageToDad() {
               <div
                 key={item.id}
                 className="px-4 py-3 rounded-xl border border-white/5 space-y-2 cursor-pointer active:scale-[0.99] transition-all"
-                style={{ background: "#333333" }}
+                style={{ background: "var(--t-card)" }}
                 onClick={() => { setCondensed(item.condensed); setInputText(item.original); setShowHistory(false); }}
                 data-testid={`history-item-${item.id}`}
               >
@@ -298,7 +298,7 @@ export default function MessageToDad() {
                 </button>
                 <button
                   className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-sm font-medium transition-all active:scale-95"
-                  style={{ background: "#333333", color: "rgba(255,255,255,0.6)" }}
+                  style={{ background: "var(--t-card)", color: "var(--t-text3)" }}
                   onClick={condense}
                   disabled={loading}
                   data-testid="button-recondense"

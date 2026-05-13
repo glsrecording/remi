@@ -248,11 +248,11 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
     <div
       className="flex items-end gap-1.5 px-3 py-2 rounded-xl"
       style={{
-        background: "#333333",
+        background: "var(--t-card)",
         borderLeft: "3px solid rgba(245,158,11,0.4)",
-        borderTop: "1px solid rgba(255,255,255,0.05)",
-        borderRight: "1px solid rgba(255,255,255,0.05)",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        borderTop: "1px solid var(--t-border)",
+        borderRight: "1px solid var(--t-border)",
+        borderBottom: "1px solid var(--t-border)",
       }}
     >
       <textarea
@@ -459,11 +459,11 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
       <div
         className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
         style={{
-          background: committing ? `${commitColorRef.current}22` : "#333333",
+          background: committing ? `${commitColorRef.current}22` : "var(--t-card)",
           borderLeft: "3px solid rgba(245,158,11,0.4)",
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          borderRight: "1px solid rgba(255,255,255,0.05)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          borderTop: "1px solid var(--t-border)",
+          borderRight: "1px solid var(--t-border)",
+          borderBottom: "1px solid var(--t-border)",
           transform: `translate(${offset.x}px, ${offset.y}px)`,
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
@@ -592,7 +592,7 @@ function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
       <div
         className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
         style={{
-          background: committing ? `${commitColorRef.current}22` : "#333333",
+          background: committing ? `${commitColorRef.current}22` : "var(--t-card)",
           borderLeft: "3px solid rgba(148,163,184,0.4)", // gray — from memory swipe in pass 1
           borderTop: "1px solid rgba(255,255,255,0.05)",
           borderRight: "1px solid rgba(255,255,255,0.05)",
@@ -632,9 +632,9 @@ function SkeletonCard() {
     <div
       className="animate-pulse px-4 py-3.5 rounded-xl"
       style={{
-        background: "#2a2a2a",
+        background: "var(--t-card)",
         borderLeft: "3px solid rgba(245,158,11,0.12)",
-        borderTop: "1px solid rgba(255,255,255,0.04)",
+        borderTop: "1px solid var(--t-border)",
         borderRight: "1px solid rgba(255,255,255,0.04)",
         borderBottom: "1px solid rgba(255,255,255,0.04)",
       }}
@@ -807,7 +807,7 @@ export default function Triage() {
     const total = counts.today + counts.tonight + counts.tomorrow + counts.someday
                 + counts.insight + counts.memory + counts.gratitude + counts.bio;
     return (
-      <div className="flex flex-col h-screen" style={{ background: "#111111" }}>
+      <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
         <Header label="Triage" accent="#f59e0b" />
         <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6">
           <div className="text-center space-y-2">
@@ -885,7 +885,7 @@ export default function Triage() {
   // ── Pass 2 screen ────────────────────────────────────────────────────────────
   if (phase === "pass2") {
     return (
-      <div className="flex flex-col h-screen" style={{ background: "#111111" }}>
+      <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
         <Header label="What type?" accent="#94a3b8" count={pass2Queue.length} />
         <div className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto">
           <HintStrip pass={2} />
@@ -906,7 +906,7 @@ export default function Triage() {
 
   // ── Capture + Pass 1 screen ──────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-screen" style={{ background: "#111111" }}>
+    <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
       <Header label="Triage" accent="#f59e0b" count={pass1Queue.length > 0 ? pass1Queue.length : undefined} />
       <div className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto">
         <TriageInputRow onAdd={addItem} />

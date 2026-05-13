@@ -175,26 +175,26 @@ function userBubbleStyles(color: string, style: UserBubbleStyle) {
     return {
       background: "transparent",
       border: `1.5px solid ${color}cc`,
-      color: "rgba(255,255,255,0.9)" as const,
+      color: "var(--t-text2)" as const,
     };
   return {
     background: color + "28",
     border: `1.5px solid ${color}30`,
-    color: "rgba(255,255,255,0.9)" as const,
+    color: "var(--t-text2)" as const,
   };
 }
 
 function remiBubbleStyles(color: string, style: UserBubbleStyle) {
   if (style === "outline")
     return {
-      background: "#000000",
+      background: "var(--t-bg-deep)",
       border: `1px solid ${color}55`,
-      color: "rgba(255,255,255,0.9)" as const,
+      color: "var(--t-text2)" as const,
     };
   return {
-    background: "#111111",
-    border: "1px solid rgba(255,255,255,0.07)",
-    color: "rgba(255,255,255,0.9)" as const,
+    background: "var(--t-surface)",
+    border: "1px solid var(--t-border)",
+    color: "var(--t-text2)" as const,
   };
 }
 
@@ -220,7 +220,7 @@ function ColorPickerPanel({
     <div
       className="absolute top-8 right-0 z-30 rounded-2xl border border-white/10 p-3 overlay-fade-in"
       style={{
-        background: "#111111",
+        background: "var(--t-surface)",
         boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
         minWidth: 180,
       }}
@@ -343,7 +343,7 @@ function SuggestionBar({ command, onUse, onDismiss }: SuggestionBarProps) {
     >
       <div
         className="flex items-center gap-2 px-3 py-2 rounded-xl"
-        style={{ background: "#1e1e1e", border: `1px solid ${accentColor}22` }}
+        style={{ background: "var(--t-card)", border: `1px solid ${accentColor}22` }}
       >
         <div
           className="w-0.5 h-7 rounded-full shrink-0"
@@ -799,17 +799,17 @@ export default function MainChat() {
     minute: "2-digit",
   });
   return (
-    <div style={{ width: "100%", height: "100dvh", overflow: "hidden", position: "relative", background: "#000000" }}>
+    <div style={{ width: "100%", height: "100dvh", overflow: "hidden", position: "relative", background: "var(--t-bg-deep)" }}>
       <div style={{ width: "100%", height: "100%", position: "relative" }}>
     <div
       className="flex flex-col h-full w-full select-none"
-      style={{ background: "#000000" }}
+      style={{ background: "var(--t-bg-deep)" }}
     >
       {/* Header */}
       <div
         className="flex items-center justify-between px-4 border-b border-white/5 shrink-0"
         style={{
-          background: "#1a1a1a",
+          background: "var(--t-surface)",
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}
@@ -949,7 +949,7 @@ export default function MainChat() {
                 <div
                   className="rounded-xl border border-white/10 px-3 py-2"
                   style={{
-                    background: "#111111",
+                    background: "var(--t-surface)",
                     boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
                   }}
                 >
@@ -972,7 +972,7 @@ export default function MainChat() {
       {!pwaNudgeDismissed && (
         <div
           className="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 suggest-in"
-          style={{ background: "#1e1e1e" }}
+          style={{ background: "var(--t-card)" }}
         >
           <span className="text-xs text-white/50 flex-1 leading-snug">
             📲 Add Remi to your home screen for the full experience
@@ -1140,7 +1140,7 @@ export default function MainChat() {
           bottom: 0,
           left: 0,
           right: 0,
-          background: "#000000",
+          background: "var(--t-bg-deep)",
           zIndex: 10,
           padding: "8px 16px 48px",
         }}

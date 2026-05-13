@@ -184,7 +184,7 @@ function PinGate({ onUnlock }: { onUnlock: (pin: string) => void }) {
     <div
       style={{
         display: "flex", flexDirection: "column", alignItems: "center",
-        justifyContent: "center", minHeight: "100vh", background: "#1a1a1a",
+        justifyContent: "center", minHeight: "100vh", background: "var(--t-bg)",
         paddingTop: "env(safe-area-inset-top, 0px)",
       }}
     >
@@ -203,8 +203,8 @@ function PinGate({ onUnlock }: { onUnlock: (pin: string) => void }) {
             key={i}
             style={{
               width: 16, height: 16, borderRadius: "50%",
-              background: i < digits.length ? "#4ade80" : "rgba(255,255,255,0.12)",
-              border: "2px solid rgba(255,255,255,0.15)",
+              background: i < digits.length ? "#4ade80" : "var(--t-el-med)",
+              border: "2px solid var(--t-border-lg)",
               transition: "background 0.12s",
             }}
           />
@@ -223,9 +223,9 @@ function PinGate({ onUnlock }: { onUnlock: (pin: string) => void }) {
               style={{
                 height: 76, borderRadius: 18,
                 fontSize: k === "⌫" ? 20 : 24, fontWeight: 600,
-                color: k === "⌫" ? "rgba(255,255,255,0.35)" : "#e5e5e5",
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                color: k === "⌫" ? "var(--t-text5)" : "var(--t-text)",
+                background: "var(--t-el-low)",
+                border: "1px solid var(--t-border-md)",
                 cursor: checking ? "not-allowed" : "pointer",
                 transition: "background 0.1s",
                 opacity: checking ? 0.5 : 1,
@@ -444,7 +444,7 @@ export default function Journal() {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: "100dvh", overflow: "hidden", background: "#1a1a1a", color: "#e5e5e5" }}>
+    <div className="flex flex-col" style={{ height: "100dvh", overflow: "hidden", background: "var(--t-bg)", color: "var(--t-text)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
       {/* Header */}
@@ -505,7 +505,7 @@ export default function Journal() {
       {/* Input bar */}
       <div
         className="shrink-0 px-4 pt-3 border-t border-white/5"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 16px) + 16px)", background: "#1a1a1a" }}
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 16px) + 16px)", background: "var(--t-bg)" }}
       >
         {recordingError && (
           <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
@@ -619,7 +619,7 @@ export default function Journal() {
         <div
           style={{
             position: "fixed", inset: 0, zIndex: 40,
-            background: "#1a1a1a", display: "flex", flexDirection: "column",
+            background: "var(--t-bg)", display: "flex", flexDirection: "column",
           }}
         >
           {/* Header */}
@@ -635,7 +635,7 @@ export default function Journal() {
               onClick={() => setShowEntries(false)}
               style={{
                 padding: 8, marginRight: 4, borderRadius: 10,
-                color: "rgba(255,255,255,0.4)",
+                color: "var(--t-text5)",
                 background: "transparent", border: "none", cursor: "pointer",
               }}
             >
@@ -693,7 +693,7 @@ export default function Journal() {
                           <p
                             style={{
                               fontSize: 10, fontWeight: 700,
-                              color: "rgba(255,255,255,0.18)",
+                              color: "var(--t-text8)",
                               marginBottom: 8, letterSpacing: 1,
                               textTransform: "uppercase",
                             }}
@@ -703,11 +703,11 @@ export default function Journal() {
                         )}
                         <p
                           className="font-mono"
-                          style={{ fontSize: 11, color: "rgba(255,255,255,0.22)", marginBottom: 6 }}
+                          style={{ fontSize: 11, color: "var(--t-text7)", marginBottom: 6 }}
                         >
                           {e.timestamp}
                         </p>
-                        <p style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,0.78)" }}>
+                        <p style={{ fontSize: 14, lineHeight: 1.6, color: "var(--t-text2)" }}>
                           {e.text}
                         </p>
                       </div>
@@ -732,7 +732,7 @@ export default function Journal() {
         >
           <div
             className="rounded-t-3xl overflow-hidden menu-slide-in"
-            style={{ background: "#1e1e1e", maxHeight: "82vh" }}
+            style={{ background: "var(--t-card)", maxHeight: "82vh" }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Drag handle */}
@@ -756,7 +756,7 @@ export default function Journal() {
               className="overflow-y-auto px-5 py-5"
               style={{ maxHeight: "calc(82vh - 76px)" }}
             >
-              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "rgba(255,255,255,0.82)" }}>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--t-text2)" }}>
                 {analysis}
               </p>
             </div>

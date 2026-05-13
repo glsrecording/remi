@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
-import { X, Sun, Brain, Music, Clock, CheckSquare, BarChart2, MessageCircle, Terminal, Archive, History, Download, Shuffle, Radio, BookOpen, RotateCcw } from "lucide-react";
+import { X, Sun, Moon, Brain, Music, Clock, CheckSquare, BarChart2, MessageCircle, Terminal, Archive, History, Download, Shuffle, Radio, BookOpen, RotateCcw } from "lucide-react";
 import { useEffect } from "react";
+import { useTheme } from "@/hooks/use-theme";
 
 interface HamburgerMenuProps {
   open: boolean;
@@ -27,6 +28,7 @@ const menuItems = [
 
 export default function HamburgerMenu({ open, onClose, onClearSession }: HamburgerMenuProps) {
   const [location, navigate] = useLocation();
+  const { isLight, toggleTheme } = useTheme();
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -52,7 +54,7 @@ export default function HamburgerMenu({ open, onClose, onClearSession }: Hamburg
       {/* Panel */}
       <div
         className="relative z-10 flex flex-col w-72 h-full menu-slide-in"
-        style={{ background: "#111111" }}
+        style={{ background: "var(--t-surface)" }}
         data-testid="hamburger-menu"
       >
         {/* Header */}
@@ -66,13 +68,26 @@ export default function HamburgerMenu({ open, onClose, onClearSession }: Hamburg
           >
             Remi
           </span>
-          <button
-            className="p-1.5 rounded-full text-white/40 hover:text-white hover:bg-white/5 transition-colors"
-            onClick={onClose}
-            data-testid="button-close-menu"
-          >
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Light/dark toggle */}
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-full hover:bg-white/5 transition-colors"
+              style={{ color: "var(--t-text6)" }}
+              title={isLight ? "Switch to dark mode" : "Switch to light mode"}
+              data-testid="button-theme-toggle"
+            >
+              {isLight ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
+            <button
+              className="p-1.5 rounded-full hover:bg-white/5 transition-colors"
+              style={{ color: "var(--t-text5)" }}
+              onClick={onClose}
+              data-testid="button-close-menu"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Items */}
@@ -86,7 +101,7 @@ export default function HamburgerMenu({ open, onClose, onClearSession }: Hamburg
                 className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all duration-150 text-left"
                 style={{
                   background: isActive ? "rgba(245,158,11,0.08)" : "transparent",
-                  color: isActive ? "#f59e0b" : "rgba(255,255,255,0.65)",
+                  color: isActive ? "#f59e0b" : "var(--t-text3)",
                 }}
                 onClick={() => handleItemClick(item.path)}
                 data-testid={`menu-item-${item.label.toLowerCase().replace(/ /g, "-")}`}
@@ -94,7 +109,7 @@ export default function HamburgerMenu({ open, onClose, onClearSession }: Hamburg
                 <Icon
                   size={18}
                   className="shrink-0"
-                  style={{ color: isActive ? "#f59e0b" : "rgba(255,255,255,0.3)" }}
+                  style={{ color: isActive ? "#f59e0b" : "var(--t-text6)" }}
                 />
                 <span className="text-sm font-medium tracking-wide">{item.label}</span>
               </button>
