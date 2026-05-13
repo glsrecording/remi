@@ -220,8 +220,9 @@ export default function Journal() {
     }
   }, [pin, analyzing]);
 
-  // Start recording from pre-mounted stream — synchronous, no getUserMedia call
-  function startMediaRecording(autoSubmit: boolean) {
+  // Start recording from pre-mounted stream — synchronous, no getUserMedia call.
+  // Transcript always goes to text input field; user reviews and taps Send.
+  function startMediaRecording() {
     if (isRecording) return;
     if (!micStreamRef.current) {
       setRecordingError("Microphone not ready — try again.");
@@ -261,8 +262,8 @@ export default function Journal() {
           const json = await resp.json();
           const transcript = (json.text || "").trim();
           if (transcript) {
-            if (autoSubmit) await handleSubmit(transcript);
-            else { setText(transcript); inputRef.current?.focus(); }
+            setText(transcript);
+            inputRef.current?.focus();
           } else {
             setRecordingError("Nothing captured — try again.");
           }
@@ -398,35 +399,6 @@ export default function Journal() {
           </div>
         )}
         <div className="flex gap-2 items-center">
-          {/* Left mic — tap to record, places transcript in field */}
-          <button
-            type="button"
-            className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
-            style={{
-              background: isRecording ? "#ef444422" : isProcessing ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)",
-              border: `1.5px solid ${isRecording ? "#ef4444" : "rgba(255,255,255,0.1)"}`,
-              touchAction: "none",
-            }}
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              startMediaRecording(false);
-            }}
-            onPointerUp={() => {
-              if (mediaRecorderRef.current?.state !== "inactive") {
-                mediaRecorderRef.current?.stop();
-                mediaRecorderRef.current = null;
-              }
-            }}
-          >
-            {isProcessing ? (
-              <Loader2 size={16} className="animate-spin" style={{ color: "rgba(255,255,255,0.6)" }} />
-            ) : isRecording ? (
-              <MicOff size={16} style={{ color: "#ef4444" }} />
-            ) : (
-              <Mic size={16} style={{ color: "rgba(255,255,255,0.45)" }} />
-            )}
-          </button>
-
           {/* Text input */}
           <input
             ref={inputRef}
@@ -470,7 +442,7 @@ export default function Journal() {
               if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
               holdTimerRef.current = setTimeout(() => {
                 holdActiveRef.current = true;
-                startMediaRecording(true);
+                startMediaRecording();
               }, 150);
             }}
             onPointerMove={(e) => {
