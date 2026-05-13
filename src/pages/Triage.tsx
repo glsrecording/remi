@@ -283,7 +283,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
           ? <Loader2 size={11} className="animate-spin" style={{ color: "#f59e0b" }} />
           : isRecording
           ? <MicOff size={11} style={{ color: "#ef4444" }} />
-          : <Mic size={11} style={{ color: "rgba(255,255,255,0.35)" }} />}
+          : <Mic size={11} style={{ color: "var(--t-text5)" }} />}
       </button>
 
       {/* Confirm */}
@@ -481,11 +481,11 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
         </p>
         <button
           className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity active:scale-90"
-          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
+          style={{ background: "var(--t-el-low)", border: "1px solid var(--t-border-lg)" }}
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
           onClick={(e) => { e.stopPropagation(); setCommitted(true); onDismissed(item); }}
         >
-          <X size={8} style={{ color: "rgba(255,255,255,0.7)" }} />
+          <X size={8} style={{ color: "var(--t-text3)" }} />
         </button>
       </div>
     </div>
@@ -614,11 +614,11 @@ function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
         </p>
         <button
           className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity active:scale-90"
-          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)" }}
+          style={{ background: "var(--t-el-low)", border: "1px solid var(--t-border-lg)" }}
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
           onClick={(e) => { e.stopPropagation(); setCommitted(true); onDismissed(item); }}
         >
-          <X size={8} style={{ color: "rgba(255,255,255,0.7)" }} />
+          <X size={8} style={{ color: "var(--t-text3)" }} />
         </button>
       </div>
     </div>
@@ -864,7 +864,7 @@ export default function Triage() {
           <div className="flex gap-3">
             <button
               className="px-6 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
-              style={{ background: "#ffffff10", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.12)" }}
+              style={{ background: "var(--t-el-med)", color: "var(--t-text4)", border: "1px solid var(--t-border-md)" }}
               onClick={reset}
             >
               New session

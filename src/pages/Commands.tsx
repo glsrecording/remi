@@ -90,7 +90,7 @@ export default function Commands() {
                   <div className="flex-1 min-w-0">
                     <p
                       className="text-sm font-medium leading-snug mb-0.5"
-                      style={{ fontFamily: "'Space Mono', monospace", color: "rgba(255,255,255,0.9)" }}
+                      style={{ fontFamily: "'Space Mono', monospace", color: "var(--t-text2)" }}
                     >
                       "{cmd.trigger}"
                     </p>

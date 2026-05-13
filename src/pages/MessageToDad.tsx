@@ -279,7 +279,7 @@ export default function MessageToDad() {
               >
                 <p
                   className="text-base leading-relaxed font-medium"
-                  style={{ color: "rgba(255,255,255,0.92)", lineHeight: "1.6" }}
+                  style={{ color: "var(--t-text2)", lineHeight: "1.6" }}
                 >
                   {condensed}
                 </p>

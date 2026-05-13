@@ -371,7 +371,7 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
           ? <Loader2 size={11} className="animate-spin" style={{ color }} />
           : isRecording
           ? <MicOff size={11} style={{ color: "#ef4444" }} />
-          : <Mic size={11} style={{ color: "rgba(255,255,255,0.35)" }} />}
+          : <Mic size={11} style={{ color: "var(--t-text5)" }} />}
       </button>
 
       {/* Confirm */}
@@ -392,10 +392,10 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
       <button
         type="button"
         className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
-        style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.08)" }}
+        style={{ background: "transparent", border: "1px solid var(--t-border-md)" }}
         onClick={onCancel}
       >
-        <X size={11} style={{ color: "rgba(255,255,255,0.3)" }} />
+        <X size={11} style={{ color: "var(--t-text6)" }} />
       </button>
 
       {/* Right amber mic — auto-submits on release */}
@@ -877,7 +877,7 @@ export default function Tasks() {
           ))}
         </div>
         {(cacheHit || bgLoading) && (
-          <p className="text-center mt-1" style={{ fontSize: "10px", color: "rgba(255,255,255,0.2)" }}>
+          <p className="text-center mt-1" style={{ fontSize: "10px", color: "var(--t-text8)" }}>
             {bgLoading ? (cacheHit ? "Cached · refreshing…" : "Loading rest…") : "Cached"}
           </p>
         )}

@@ -192,8 +192,8 @@ function remiBubbleStyles(color: string, style: UserBubbleStyle) {
       color: "var(--t-text2)" as const,
     };
   return {
-    background: "var(--t-surface)",
-    border: "1px solid var(--t-border)",
+    background: color + "18",
+    border: `1px solid ${color}35`,
     color: "var(--t-text2)" as const,
   };
 }
@@ -356,7 +356,7 @@ function SuggestionBar({ command, onUse, onDismiss }: SuggestionBarProps) {
           <p
             className="text-xs font-medium truncate leading-snug"
             style={{
-              color: "rgba(255,255,255,0.75)",
+              color: "var(--t-text2)",
               fontFamily: "'Space Mono', monospace",
             }}
             data-testid="suggestion-trigger"
@@ -1002,7 +1002,7 @@ export default function MainChat() {
           <p
             className="text-xs flex-1 leading-snug"
             style={{
-              color: "rgba(255,255,255,0.7)",
+              color: "var(--t-text3)",
               fontFamily: "'Space Mono', monospace",
             }}
           >
@@ -1073,9 +1073,9 @@ export default function MainChat() {
                               display: "block",
                               padding: "5px 10px",
                               borderRadius: "7px",
-                              background: "rgba(255,255,255,0.06)",
-                              border: "1px solid rgba(255,255,255,0.11)",
-                              color: "rgba(255,255,255,0.7)",
+                              background: "var(--t-el-low)",
+                              border: "1px solid var(--t-border-md)",
+                              color: "var(--t-text3)",
                               fontSize: "0.78em",
                               textDecoration: "none",
                               lineHeight: 1.3,
@@ -1091,7 +1091,7 @@ export default function MainChat() {
                               borderRadius: "7px",
                               background: "rgba(255,60,0,0.08)",
                               border: "1px solid rgba(255,60,0,0.2)",
-                              color: "rgba(255,255,255,0.4)",
+                              color: "var(--t-text5)",
                               fontSize: "0.78em",
                               lineHeight: 1.3,
                             }}
@@ -1122,9 +1122,9 @@ export default function MainChat() {
               }}
             >
               <div className="flex gap-1.5 items-end" style={{ height: "16px" }}>
-                <div className="rounded-full animate-bounce" style={{ width: "6px", height: "6px", background: "rgba(255,255,255,0.35)", animationDelay: "0ms" }} />
-                <div className="rounded-full animate-bounce" style={{ width: "6px", height: "6px", background: "rgba(255,255,255,0.35)", animationDelay: "150ms" }} />
-                <div className="rounded-full animate-bounce" style={{ width: "6px", height: "6px", background: "rgba(255,255,255,0.35)", animationDelay: "300ms" }} />
+                <div className="rounded-full animate-bounce" style={{ width: "6px", height: "6px", background: "var(--t-text4)", animationDelay: "0ms" }} />
+                <div className="rounded-full animate-bounce" style={{ width: "6px", height: "6px", background: "var(--t-text4)", animationDelay: "150ms" }} />
+                <div className="rounded-full animate-bounce" style={{ width: "6px", height: "6px", background: "var(--t-text4)", animationDelay: "300ms" }} />
               </div>
             </div>
           </div>
@@ -1198,7 +1198,7 @@ export default function MainChat() {
                     style={{
                       background: color + "14",
                       border: `1px solid ${color}30`,
-                      color: "rgba(255,255,255,0.65)",
+                      color: "var(--t-text3)",
                     }}
                     onClick={() => handleUseSuggestion(trigger)}
                     data-testid={`chip-recent-${trigger}`}

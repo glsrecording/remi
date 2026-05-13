@@ -119,6 +119,7 @@ html.light-mode #root { background: var(--t-bg); box-shadow: 0 0 0 1px rgba(0,0,
 
 html.light-mode .text-white   { color: var(--t-text); }
 html.light-mode .text-white\/90 { color: var(--t-text2); }
+html.light-mode .text-white\/85 { color: var(--t-text2); }
 html.light-mode .text-white\/80 { color: var(--t-text2); }
 html.light-mode .text-white\/70 { color: var(--t-text3); }
 html.light-mode .text-white\/65 { color: var(--t-text3); }

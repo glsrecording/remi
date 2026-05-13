@@ -96,7 +96,7 @@ function DateScrollBar({
             padding: "4px 10px",
             fontSize: 12,
             fontWeight: 600,
-            color: "rgba(255,255,255,0.9)",
+            color: "var(--t-text2)",
             whiteSpace: "nowrap",
             pointerEvents: "none",
             backdropFilter: "blur(6px)",
@@ -238,7 +238,7 @@ function PinGate({ onUnlock }: { onUnlock: (pin: string) => void }) {
       </div>
 
       {checking && (
-        <p style={{ marginTop: 28, color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Checking…</p>
+        <p style={{ marginTop: 28, color: "var(--t-text6)", fontSize: 13 }}>Checking…</p>
       )}
     </div>
   );
@@ -666,11 +666,11 @@ export default function Journal() {
               }}
             >
               {loadingEntries ? (
-                <p style={{ textAlign: "center", padding: "48px 0", color: "rgba(255,255,255,0.25)", fontSize: 14 }}>
+                <p style={{ textAlign: "center", padding: "48px 0", color: "var(--t-text7)", fontSize: 14 }}>
                   Loading…
                 </p>
               ) : sortedEntries.length === 0 ? (
-                <p style={{ textAlign: "center", padding: "56px 0", color: "rgba(255,255,255,0.2)", fontSize: 14 }}>
+                <p style={{ textAlign: "center", padding: "56px 0", color: "var(--t-text8)", fontSize: 14 }}>
                   Nothing here yet. Start writing.
                 </p>
               ) : (
