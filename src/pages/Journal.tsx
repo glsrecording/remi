@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from "react";
-import { Menu, Sparkles, Mic, MicOff, Loader2, X, Lock } from "lucide-react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { Menu, Sparkles, Mic, MicOff, Loader2, X, Lock, ArrowLeft, BookOpen } from "lucide-react";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
@@ -9,6 +9,124 @@ const AUTH_HEADERS = { Authorization: `Bearer ${REMI_API_KEY}` };
 interface JournalEntry {
   timestamp: string;
   text: string;
+}
+
+// ── Date parser ───────────────────────────────────────────────────────────────
+
+function parseEntryDate(timestamp: string): string {
+  const isoMatch = timestamp.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const d = new Date(`${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`);
+    if (!isNaN(d.getTime()))
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  const humanMatch = timestamp.match(/^([A-Za-z]+ \d+)/);
+  if (humanMatch) return humanMatch[1];
+  return timestamp.slice(0, 10);
+}
+
+// ── Date scroll bar (contacts A–Z pattern) ───────────────────────────────────
+
+function DateScrollBar({
+  dates,
+  listRef,
+}: {
+  dates: string[];
+  listRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [tooltipY, setTooltipY] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  if (dates.length < 2) return null;
+
+  function compute(clientY: number) {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    const idx = Math.round(ratio * (dates.length - 1));
+    setDragIdx(idx);
+    setTooltipY(clientY - rect.top);
+    const el = listRef.current?.querySelector(
+      `[data-date="${dates[idx]}"]`
+    ) as HTMLElement | null;
+    if (el) el.scrollIntoView({ block: "start" });
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: "absolute",
+        right: 4,
+        top: 16,
+        bottom: 16,
+        width: 32,
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        alignItems: "center",
+        touchAction: "none",
+        userSelect: "none",
+        cursor: "pointer",
+        zIndex: 2,
+      }}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        compute(e.clientY);
+      }}
+      onPointerMove={(e) => {
+        if (e.buttons === 0) return;
+        compute(e.clientY);
+      }}
+      onPointerUp={() => {
+        setTimeout(() => setDragIdx(null), 1000);
+      }}
+    >
+      {/* Floating tooltip */}
+      {dragIdx !== null && (
+        <div
+          style={{
+            position: "absolute",
+            right: 36,
+            top: Math.max(0, tooltipY - 14),
+            background: "rgba(20,20,20,0.96)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 8,
+            padding: "4px 10px",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "rgba(255,255,255,0.9)",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            backdropFilter: "blur(6px)",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
+          }}
+        >
+          {dates[dragIdx]}
+        </div>
+      )}
+
+      {/* Date labels — day number only to stay compact */}
+      {dates.map((d, i) => {
+        const dayNum = d.match(/\d+$/)?.[0] ?? d;
+        return (
+          <span
+            key={d}
+            style={{
+              fontSize: 9,
+              lineHeight: 1,
+              fontWeight: dragIdx === i ? 700 : 400,
+              color: dragIdx === i ? "#f59e0b" : "rgba(255,255,255,0.25)",
+              transition: "color 0.1s",
+            }}
+          >
+            {dayNum}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 // ── PIN gate ──────────────────────────────────────────────────────────────────
@@ -133,6 +251,7 @@ export default function Journal() {
   const [pin, setPin] = useState<string | null>(null);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
+  const [showEntries, setShowEntries] = useState(false);
   const [text, setText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -152,6 +271,7 @@ export default function Journal() {
   const pointerStartYRef = useRef<number>(0);
   const micStartTimeRef = useRef<number>(0);
   const cancelledRef = useRef(false);
+  const entriesListRef = useRef<HTMLDivElement>(null);
 
   // Acquire mic permission at mount; release on unmount
   useEffect(() => {
@@ -177,9 +297,29 @@ export default function Journal() {
     }
   }, []);
 
+  // Fetch entries when pin is first set
   useEffect(() => {
     if (pin) fetchEntries();
   }, [pin, fetchEntries]);
+
+  // Refresh entries whenever the overlay is opened
+  useEffect(() => {
+    if (showEntries && pin) fetchEntries();
+  }, [showEntries, pin, fetchEntries]);
+
+  // Entries sorted oldest-first for the overlay
+  const sortedEntries = useMemo(() => [...entries].reverse(), [entries]);
+
+  // Unique dates in oldest-first order for the scroll bar
+  const uniqueDates = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const e of sortedEntries) {
+      const d = parseEntryDate(e.timestamp);
+      if (!seen.has(d)) { seen.add(d); result.push(d); }
+    }
+    return result;
+  }, [sortedEntries]);
 
   const handleSubmit = useCallback(async (entryText: string) => {
     if (!entryText.trim() || !pin) return;
@@ -309,57 +449,58 @@ export default function Journal() {
 
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-4 border-b border-white/5 shrink-0"
+        className="flex items-center px-4 py-4 border-b border-white/5 shrink-0"
         style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
       >
-        <button
-          onClick={() => setMenuOpen(true)}
-          className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors"
-        >
-          <Menu size={20} />
-        </button>
+        {/* Left: hamburger */}
+        <div style={{ flex: 1 }}>
+          <button
+            onClick={() => setMenuOpen(true)}
+            className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <Menu size={20} />
+          </button>
+        </div>
+
+        {/* Center: title */}
         <span className="text-sm font-semibold tracking-widest uppercase" style={{ color: "#4ade80" }}>
           Journal
         </span>
-        <button
-          onClick={handleAnalyze}
-          disabled={analyzing || entries.length === 0}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
-          style={{
-            background: "rgba(74,222,128,0.10)",
-            color: (analyzing || entries.length === 0) ? "rgba(74,222,128,0.35)" : "#4ade80",
-            border: "1px solid rgba(74,222,128,0.18)",
-          }}
-        >
-          {analyzing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-          {analyzing ? "Analyzing…" : "Find Patterns"}
-        </button>
+
+        {/* Right: Entries + Find Patterns */}
+        <div style={{ flex: 1, display: "flex", justifyContent: "flex-end" }}>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowEntries(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+              style={{
+                background: "rgba(74,222,128,0.10)",
+                color: "#4ade80",
+                border: "1px solid rgba(74,222,128,0.18)",
+              }}
+            >
+              <BookOpen size={13} />
+              Entries
+            </button>
+            <button
+              onClick={handleAnalyze}
+              disabled={analyzing || entries.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all"
+              style={{
+                background: "rgba(74,222,128,0.10)",
+                color: (analyzing || entries.length === 0) ? "rgba(74,222,128,0.35)" : "#4ade80",
+                border: "1px solid rgba(74,222,128,0.18)",
+              }}
+            >
+              {analyzing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+              {analyzing ? "Analyzing…" : "Find Patterns"}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Entries list */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        {loadingEntries ? (
-          <p className="text-sm text-white/25 text-center py-12">Loading…</p>
-        ) : entries.length === 0 ? (
-          <p className="text-sm text-white/20 text-center py-14">Nothing here yet. Start writing.</p>
-        ) : (
-          <div className="space-y-5 pb-2">
-            {entries.map((e, i) => (
-              <div
-                key={i}
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: 14 }}
-              >
-                <p className="text-xs font-mono mb-1.5" style={{ color: "rgba(255,255,255,0.22)" }}>
-                  {e.timestamp}
-                </p>
-                <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.78)" }}>
-                  {e.text}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Main body — clean capture screen, no entries shown */}
+      <div className="flex-1" />
 
       {/* Input bar */}
       <div
@@ -473,7 +614,116 @@ export default function Journal() {
         </div>
       </div>
 
-      {/* Analysis overlay — slides up from bottom */}
+      {/* ── Entries overlay ─────────────────────────────────────────────────── */}
+      {showEntries && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 40,
+            background: "#1a1a1a", display: "flex", flexDirection: "column",
+          }}
+        >
+          {/* Header */}
+          <div
+            style={{
+              display: "flex", alignItems: "center", flexShrink: 0,
+              padding: "16px 16px 16px",
+              paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)",
+              borderBottom: "1px solid rgba(255,255,255,0.05)",
+            }}
+          >
+            <button
+              onClick={() => setShowEntries(false)}
+              style={{
+                padding: 8, marginRight: 4, borderRadius: 10,
+                color: "rgba(255,255,255,0.4)",
+                background: "transparent", border: "none", cursor: "pointer",
+              }}
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <span
+              style={{
+                flex: 1, textAlign: "center",
+                fontSize: 13, fontWeight: 600, letterSpacing: "0.12em",
+                textTransform: "uppercase", color: "#4ade80",
+              }}
+            >
+              Journal Entries
+            </span>
+            {/* Spacer matching back button width */}
+            <div style={{ width: 36 }} />
+          </div>
+
+          {/* Content area — scroll container + date scroll bar */}
+          <div style={{ flex: 1, overflow: "hidden", position: "relative" }}>
+            {/* Scroll container */}
+            <div
+              ref={entriesListRef}
+              style={{
+                position: "absolute", inset: 0,
+                overflowY: "auto",
+                padding: "16px 44px 32px 16px",
+              }}
+            >
+              {loadingEntries ? (
+                <p style={{ textAlign: "center", padding: "48px 0", color: "rgba(255,255,255,0.25)", fontSize: 14 }}>
+                  Loading…
+                </p>
+              ) : sortedEntries.length === 0 ? (
+                <p style={{ textAlign: "center", padding: "56px 0", color: "rgba(255,255,255,0.2)", fontSize: 14 }}>
+                  Nothing here yet. Start writing.
+                </p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {sortedEntries.map((e, i) => {
+                    const date = parseEntryDate(e.timestamp);
+                    const isFirstOfDate =
+                      i === 0 || parseEntryDate(sortedEntries[i - 1].timestamp) !== date;
+                    return (
+                      <div
+                        key={i}
+                        {...(isFirstOfDate ? { "data-date": date } : {})}
+                        style={{
+                          borderBottom: "1px solid rgba(255,255,255,0.05)",
+                          paddingBottom: 14,
+                          marginBottom: 20,
+                        }}
+                      >
+                        {isFirstOfDate && (
+                          <p
+                            style={{
+                              fontSize: 10, fontWeight: 700,
+                              color: "rgba(255,255,255,0.18)",
+                              marginBottom: 8, letterSpacing: 1,
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            {date}
+                          </p>
+                        )}
+                        <p
+                          className="font-mono"
+                          style={{ fontSize: 11, color: "rgba(255,255,255,0.22)", marginBottom: 6 }}
+                        >
+                          {e.timestamp}
+                        </p>
+                        <p style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,0.78)" }}>
+                          {e.text}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Date scroll bar */}
+            <DateScrollBar dates={uniqueDates} listRef={entriesListRef} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Analysis overlay — slides up from bottom ─────────────────────────── */}
       {analysis !== null && (
         <div
           className="fixed inset-0 z-50 flex flex-col justify-end"
