@@ -324,6 +324,24 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
               mediaRecorderRef.current = null;
             }
           }}
+          onPointerCancel={() => {
+            if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+            holdActiveRef.current = false;
+            if (isLocked) return;
+            if (mediaRecorderRef.current?.state !== "inactive") {
+              mediaRecorderRef.current?.stop();
+              mediaRecorderRef.current = null;
+            }
+          }}
+          onPointerLeave={() => {
+            if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+            holdActiveRef.current = false;
+            if (isLocked) return;
+            if (mediaRecorderRef.current?.state !== "inactive") {
+              mediaRecorderRef.current?.stop();
+              mediaRecorderRef.current = null;
+            }
+          }}
         >
           {isProcessing ? (
             <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
