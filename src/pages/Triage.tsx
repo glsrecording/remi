@@ -10,24 +10,24 @@ const LONG_PRESS_MS    = 500; // identical to Tasks.tsx
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type Phase       = "capture" | "pass2" | "done";
-type Pass1Action = "today" | "tonight" | "tomorrow" | "memory" | "someday";
+type Pass1Action = "today" | "tomorrow" | "queue" | "memory" | "someday";
 type Pass2Action = "insight" | "memory" | "gratitude" | "bio";
 
 interface TriageItem { id: string; text: string }
 interface Counts {
-  today: number; tonight: number; tomorrow: number; someday: number;
+  today: number; tomorrow: number; queue: number; someday: number;
   insight: number; memory: number; gratitude: number; bio: number;
 }
 
 // ── Swipe targets ─────────────────────────────────────────────────────────────
-// Pass 1 mirrors Tasks.tsx exactly: ↑Today ↓Tomorrow →Tonight ←Memory/Insight
+// Pass 1: ↑Today →Tomorrow ↓Queue ←Memory/Insight
 // Long press → Someday (same as Tasks.tsx).
 
 const P1_TARGETS = [
-  { action: "today"   as Pass1Action, label: "Today",            color: "#f59e0b", arrow: "↑" },
-  { action: "tonight" as Pass1Action, label: "Tonight",          color: "#c084fc", arrow: "→" },
-  { action: "tomorrow"as Pass1Action, label: "Tomorrow",         color: "#60a5fa", arrow: "↓" },
-  { action: "memory"  as Pass1Action, label: "Memory / Insight", color: "#94a3b8", arrow: "←" },
+  { action: "today"    as Pass1Action, label: "Today",            color: "#f59e0b", arrow: "↑" },
+  { action: "tomorrow" as Pass1Action, label: "Tomorrow",         color: "#60a5fa", arrow: "→" },
+  { action: "queue"    as Pass1Action, label: "Queue",            color: "#c084fc", arrow: "↓" },
+  { action: "memory"   as Pass1Action, label: "Memory / Insight", color: "#94a3b8", arrow: "←" },
 ];
 
 const P2_TARGETS = [
@@ -39,7 +39,7 @@ const P2_TARGETS = [
 
 // ── API helpers ──────────────────────────────────────────────────────────────
 
-function createTask(title: string, bucket: "today" | "tonight" | "tomorrow" | "someday"): void {
+function createTask(title: string, bucket: "today" | "tomorrow" | "queue" | "someday"): void {
   fetch(`${JARVIS_URL}/tasks/create`, {
     method: "POST",
     headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
@@ -706,8 +706,8 @@ function HintStrip({ pass }: { pass: 1 | 2 }) {
         <>
           <span style={{ color: "#94a3b8" }}>← Memory</span>
           <span style={{ color: "#f59e0b" }}>↑ Today</span>
-          <span style={{ color: "#60a5fa" }}>↓ Tomorrow</span>
-          <span style={{ color: "#c084fc" }}>→ Tonight</span>
+          <span style={{ color: "#c084fc" }}>↓ Queue</span>
+          <span style={{ color: "#60a5fa" }}>→ Tomorrow</span>
         </>
       ) : (
         <>
@@ -756,7 +756,7 @@ function Header({ label, accent, count }: { label: string; accent: string; count
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const ZERO_COUNTS: Counts = { today: 0, tonight: 0, tomorrow: 0, someday: 0, insight: 0, memory: 0, gratitude: 0, bio: 0 };
+const ZERO_COUNTS: Counts = { today: 0, tomorrow: 0, queue: 0, someday: 0, insight: 0, memory: 0, gratitude: 0, bio: 0 };
 
 export default function Triage() {
   const [, navigate] = useLocation();
@@ -809,12 +809,12 @@ export default function Triage() {
     if (action === "today") {
       createTask(item.text, "today");
       setCounts((c) => ({ ...c, today: c.today + 1 }));
-    } else if (action === "tonight") {
-      createTask(item.text, "tonight");
-      setCounts((c) => ({ ...c, tonight: c.tonight + 1 }));
     } else if (action === "tomorrow") {
       createTask(item.text, "tomorrow");
       setCounts((c) => ({ ...c, tomorrow: c.tomorrow + 1 }));
+    } else if (action === "queue") {
+      createTask(item.text, "queue");
+      setCounts((c) => ({ ...c, queue: c.queue + 1 }));
     } else if (action === "someday") {
       createTask(item.text, "someday");
       setCounts((c) => ({ ...c, someday: c.someday + 1 }));
@@ -868,14 +868,14 @@ export default function Triage() {
                 {counts.today} today
               </p>
             )}
-            {counts.tonight > 0 && (
-              <p className="text-lg" style={{ color: "#c084fc" }}>
-                {counts.tonight} tonight
-              </p>
-            )}
             {counts.tomorrow > 0 && (
               <p className="text-lg" style={{ color: "#60a5fa" }}>
                 {counts.tomorrow} tomorrow
+              </p>
+            )}
+            {counts.queue > 0 && (
+              <p className="text-lg" style={{ color: "#c084fc" }}>
+                {counts.queue} queued
               </p>
             )}
             {counts.someday > 0 && (
