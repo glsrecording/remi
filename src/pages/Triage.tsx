@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, Mic, MicOff, Loader2, Check, X } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, Loader2, Check, X, Lock } from "lucide-react";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
@@ -116,20 +116,23 @@ function getP2Dominant(x: number, y: number) {
   return y < 0 ? P2_TARGETS[2] : P2_TARGETS[3];              // up=gratitude, down=bio
 }
 
-// ── Input row — matches AddTaskCard from Tasks.tsx ───────────────────────────
+// ── Input row — Journal mic pattern (getUserMedia at mount, pointer events, lock mode) ─
 
 function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
   const [text, setText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const recRef = useRef<MediaRecorder | null>(null);
-  const chunks = useRef<BlobPart[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  // getUserMedia called once at mount — never inside a pointer/touch handler
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdActiveRef = useRef(false);
+  const pointerStartYRef = useRef<number>(0);
   const micStartTimeRef = useRef<number>(0);
-  const micCancelledRef = useRef(false);
-  const touchEndedRef = useRef(false);
-  const holdToSendRef = useRef(false);
+  const cancelledRef = useRef(false);
 
   useEffect(() => { taRef.current?.focus(); }, []);
 
@@ -137,6 +140,17 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
     const el = taRef.current; if (!el) return;
     el.style.height = "auto"; el.style.height = el.scrollHeight + "px";
   }, [text]);
+
+  // Acquire mic permission at mount; release on unmount
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then((stream) => { micStreamRef.current = stream; })
+      .catch(() => {});
+    return () => {
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+    };
+  }, []);
 
   function submit() {
     const t = text.trim(); if (!t) return;
@@ -149,104 +163,68 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
     if (e.key === "Escape") setText("");
   }
 
-  const stopRecorder = useCallback(() => {
-    if (recRef.current && recRef.current.state !== "inactive") {
-      recRef.current.stop();
-      recRef.current = null;
-    }
-  }, []);
-
-  const startRecording = useCallback(async (autoSubmit: boolean) => {
+  // Start recording from pre-mounted stream — synchronous, no getUserMedia call.
+  // Transcript goes directly to onAdd (no review step).
+  function startMediaRecording() {
     if (isRecording) return;
-    micCancelledRef.current = false;
-    touchEndedRef.current = false;
-    holdToSendRef.current = autoSubmit;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      chunks.current = [];
-      const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm"
-        : MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/ogg";
-      const rec = new MediaRecorder(stream, { mimeType: mime });
-      recRef.current = rec;
-      rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.current.push(ev.data); };
-      rec.onstop = () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        const duration = Date.now() - micStartTimeRef.current;
-        const cancelled = micCancelledRef.current;
-        const autoSub = holdToSendRef.current;
-        micCancelledRef.current = false;
-        holdToSendRef.current = false;
-        setIsRecording(false);
-        if (cancelled || duration < 500) return;
-        setIsProcessing(true);
-        setTimeout(async () => {
-          const blob = new Blob(chunks.current, { type: mime });
-          chunks.current = [];
-          if (blob.size === 0) { setIsProcessing(false); return; }
-          try {
-            const t = await transcribeAudio(blob);
-            if (t) {
-              if (autoSub) {
-                onAdd(t.trim());
-                setText("");
-                setTimeout(() => taRef.current?.focus(), 50);
-              } else {
-                setText(t);
-                taRef.current?.focus();
-              }
-            }
-          } catch { /* silent */ }
-          finally { setIsProcessing(false); }
-        }, 800);
-      };
-      rec.start(100);
-      micStartTimeRef.current = Date.now();
-      if (touchEndedRef.current) {
-        micCancelledRef.current = true;
-        rec.stop();
-        recRef.current = null;
-        return;
-      }
-      setIsRecording(true);
-    } catch { /* mic denied — silent */ }
-  }, [isRecording, onAdd]);
-
-  const handleLeftTouchStart = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    startRecording(false);
-  }, [startRecording]);
-
-  const handleLeftTouchEnd = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (!isRecording) { touchEndedRef.current = true; return; }
-    stopRecorder();
-  }, [isRecording, stopRecorder]);
-
-  const handleRightTouchStart = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    startRecording(true);
-  }, [startRecording]);
-
-  const handleRightTouchEnd = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    if (!isRecording) { touchEndedRef.current = true; return; }
-    stopRecorder();
-  }, [isRecording, stopRecorder]);
+    if (!micStreamRef.current) return;
+    cancelledRef.current = false;
+    audioChunksRef.current = [];
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+    const recorder = new MediaRecorder(micStreamRef.current, { mimeType });
+    mediaRecorderRef.current = recorder;
+    recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
+    recorder.onstop = () => {
+      const duration = Date.now() - micStartTimeRef.current;
+      const cancelled = cancelledRef.current;
+      cancelledRef.current = false;
+      setIsRecording(false);
+      setIsLocked(false);
+      // Discard taps under 500ms or explicit cancels
+      if (cancelled || duration < 500) return;
+      setIsProcessing(true);
+      // 800ms flush: Safari delivers dataavailable after onstop (out of spec)
+      setTimeout(async () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        audioChunksRef.current = [];
+        if (blob.size === 0) { setIsProcessing(false); return; }
+        try {
+          const transcript = await transcribeAudio(blob);
+          if (transcript) onAdd(transcript);
+        } catch { /* silent */ }
+        finally { setIsProcessing(false); }
+      }, 800);
+    };
+    recorder.start(100);
+    micStartTimeRef.current = Date.now();
+    setIsRecording(true);
+  }
 
   const handleMicCancel = useCallback(() => {
-    micCancelledRef.current = true;
-    stopRecorder();
-  }, [stopRecorder]);
+    cancelledRef.current = true;
+    setIsLocked(false);
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    holdActiveRef.current = false;
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current?.stop();
+      mediaRecorderRef.current = null;
+    }
+    setIsRecording(false);
+  }, []);
+
+  const handleMicSend = useCallback(() => {
+    setIsLocked(false);
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current?.stop();
+      mediaRecorderRef.current = null;
+    }
+  }, []);
 
   const canSubmit = text.trim().length > 0;
 
   return (
     <div
-      className="flex items-end gap-1.5 px-3 py-2 rounded-xl"
+      className="rounded-xl"
       style={{
         background: "var(--t-card)",
         borderLeft: "3px solid rgba(245,158,11,0.4)",
@@ -255,71 +233,109 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         borderBottom: "1px solid var(--t-border)",
       }}
     >
-      <textarea
-        ref={taRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKey}
-        placeholder="Add an item…"
-        rows={1}
-        className="flex-1 bg-transparent text-lg text-white/85 outline-none min-w-0 placeholder:text-white/25 resize-none overflow-hidden"
-        style={{ lineHeight: "1.4" }}
-      />
-
-      {/* Left mic — transcribe to input field */}
-      <button
-        type="button"
-        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
-        style={{
-          background: isRecording ? "#ef444420" : "transparent",
-          border: `1px solid ${isRecording ? "#ef4444" : isProcessing ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.1)"}`,
-          touchAction: "none",
-        }}
-        onTouchStart={handleLeftTouchStart}
-        onTouchEnd={handleLeftTouchEnd}
-        onTouchCancel={handleMicCancel}
-      >
-        {isProcessing
-          ? <Loader2 size={11} className="animate-spin" style={{ color: "#f59e0b" }} />
-          : isRecording
-          ? <MicOff size={11} style={{ color: "#ef4444" }} />
-          : <Mic size={11} style={{ color: "var(--t-text5)" }} />}
-      </button>
-
-      {/* Confirm */}
-      <button
-        type="button"
-        className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
-        style={{
-          background: canSubmit ? "#f59e0b22" : "transparent",
-          border: `1px solid ${canSubmit ? "#f59e0b60" : "rgba(255,255,255,0.08)"}`,
-        }}
-        onClick={submit}
-        disabled={!canSubmit}
-      >
-        <Check size={11} style={{ color: canSubmit ? "#f59e0b" : "rgba(255,255,255,0.2)" }} />
-      </button>
-
-      {/* Right amber mic — auto-submits on release */}
-      <button
-        type="button"
-        className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90 ${isRecording ? "voice-button-recording" : ""}`}
-        style={{
-          background: isRecording ? "#ef444420" : "#f59e0b14",
-          border: `1px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
-          marginRight: "24px",
-          touchAction: "none",
-        }}
-        onTouchStart={handleRightTouchStart}
-        onTouchEnd={handleRightTouchEnd}
-        onTouchCancel={handleMicCancel}
-      >
-        {isProcessing
-          ? <Loader2 size={11} className="animate-spin" style={{ color: "#f59e0b" }} />
-          : isRecording
-          ? <MicOff size={11} style={{ color: "#ef4444" }} />
-          : <Mic size={11} style={{ color: "#f59e0b" }} />}
-      </button>
+      {/* Lock bar */}
+      {isLocked && (
+        <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-white/5">
+          <button type="button" onClick={handleMicCancel}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95"
+            style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444" }}>
+            <X size={12} /> Cancel
+          </button>
+          <div className="flex items-center gap-1.5">
+            {[1,2,3,4,5].map((i) => (
+              <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i-1)*0.1}s` }} />
+            ))}
+            <Lock size={12} className="ml-1" style={{ color: "#f59e0b" }} />
+          </div>
+          <button type="button" onClick={handleMicSend}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95"
+            style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", color: "#f59e0b" }}>
+            Send ↑
+          </button>
+        </div>
+      )}
+      {/* Recording indicator */}
+      {(isRecording && !isLocked) && (
+        <div className="flex items-center justify-center gap-2 px-3 py-1.5 border-b border-white/5">
+          {[1,2,3,4,5].map((i) => (
+            <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i-1)*0.1}s` }} />
+          ))}
+          <span className="text-xs ml-1" style={{ color: "#ef4444" }}>Recording</span>
+          <span className="text-xs text-white/25 ml-2">↑ slide to lock</span>
+        </div>
+      )}
+      {/* Input row */}
+      <div className="flex items-end gap-1.5 px-3 py-2">
+        <textarea
+          ref={taRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="Add an item…"
+          rows={1}
+          className="flex-1 bg-transparent text-lg text-white/85 outline-none min-w-0 placeholder:text-white/25 resize-none overflow-hidden"
+          style={{ lineHeight: "1.4" }}
+        />
+        {/* Confirm */}
+        <button
+          type="button"
+          className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
+          style={{
+            background: canSubmit ? "#f59e0b22" : "transparent",
+            border: `1px solid ${canSubmit ? "#f59e0b60" : "rgba(255,255,255,0.08)"}`,
+          }}
+          onClick={submit}
+          disabled={!canSubmit}
+        >
+          <Check size={11} style={{ color: canSubmit ? "#f59e0b" : "rgba(255,255,255,0.2)" }} />
+        </button>
+        {/* Single amber mic — hold 150ms to record, release to transcribe+add, slide up to lock */}
+        <button
+          type="button"
+          className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
+          style={{
+            background: isRecording ? "#ef444422" : isProcessing ? "#f59e0b18" : "#f59e0b14",
+            border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+            marginRight: "20px",
+            touchAction: "none",
+          }}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            pointerStartYRef.current = e.clientY;
+            holdActiveRef.current = false;
+            setIsLocked(false);
+            if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+            holdTimerRef.current = setTimeout(() => {
+              holdActiveRef.current = true;
+              startMediaRecording();
+            }, 150);
+          }}
+          onPointerMove={(e) => {
+            if (!isRecording || isLocked) return;
+            const deltaY = pointerStartYRef.current - e.clientY;
+            if (deltaY > 60) setIsLocked(true);
+          }}
+          onPointerUp={() => {
+            if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+            holdActiveRef.current = false;
+            if (isLocked) return;
+            if (mediaRecorderRef.current?.state !== "inactive") {
+              mediaRecorderRef.current?.stop();
+              mediaRecorderRef.current = null;
+            }
+          }}
+        >
+          {isProcessing ? (
+            <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+          ) : isRecording && isLocked ? (
+            <Lock size={16} style={{ color: "#f59e0b" }} />
+          ) : isRecording ? (
+            <MicOff size={16} style={{ color: "#ef4444" }} />
+          ) : (
+            <Mic size={16} style={{ color: "#f59e0b" }} />
+          )}
+        </button>
+      </div>
     </div>
   );
 }
