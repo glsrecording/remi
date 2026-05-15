@@ -432,3 +432,37 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
     padding-top: env(safe-area-inset-top, 0px);
   }
 }
+
+/* ── Tablet / desktop layout (768px+) ──────────────────────────────────────── */
+@media (min-width: 768px) {
+  html { font-size: 17px; }
+
+  body {
+    background: #0a0a0a;
+    display: flex;
+    justify-content: center;
+    min-height: 100dvh;
+  }
+
+  html.light-mode body { background: #d0d0cc; }
+
+  #root {
+    max-width: 640px;
+    width: 100%;
+    min-height: 100dvh;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 0 80px rgba(0,0,0,0.6);
+  }
+
+  html.light-mode #root {
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.08), 0 0 80px rgba(0,0,0,0.22);
+  }
+
+  /* Re-anchor MainChat's fixed input bar to the centered 640px panel */
+  .remi-chat-input-bar {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%);
+    width: 640px;
+    max-width: 100vw;
+  }
+}

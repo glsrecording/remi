@@ -597,7 +597,7 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
 
       {/* Sliding card */}
       <div
-        className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
+        className="relative flex items-start gap-3 px-4 py-3.5 md:px-5 md:py-4 rounded-xl select-none"
         style={{
           background: committing ? `${commitColor}22` : "var(--t-card)",
           borderLeft: `3px solid ${BUCKET_META[sourceBucket].color}70`,
@@ -615,7 +615,7 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        <p className="text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words">{task.title}</p>
+        <p className="text-lg md:text-xl text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words">{task.title}</p>
       </div>
     </div>
   );

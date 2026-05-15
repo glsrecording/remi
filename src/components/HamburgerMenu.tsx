@@ -53,7 +53,7 @@ export default function HamburgerMenu({ open, onClose, onClearSession }: Hamburg
 
       {/* Panel */}
       <div
-        className="relative z-10 flex flex-col w-72 h-full menu-slide-in"
+        className="relative z-10 flex flex-col w-72 md:w-80 h-full menu-slide-in"
         style={{ background: "var(--t-surface)" }}
         data-testid="hamburger-menu"
       >
@@ -98,7 +98,7 @@ export default function HamburgerMenu({ open, onClose, onClearSession }: Hamburg
             return (
               <button
                 key={item.label}
-                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl mb-1 transition-all duration-150 text-left"
+                className="w-full flex items-center gap-4 px-4 py-3.5 md:py-4 rounded-xl mb-1 transition-all duration-150 text-left"
                 style={{
                   background: isActive ? "rgba(245,158,11,0.08)" : "transparent",
                   color: isActive ? "#f59e0b" : "var(--t-text3)",

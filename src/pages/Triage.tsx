@@ -292,7 +292,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         {/* Single amber mic — hold 150ms to record, release to transcribe+add, slide up to lock */}
         <button
           type="button"
-          className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
+          className={`shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
           style={{
             background: isRecording ? "#ef444422" : isProcessing ? "#f59e0b18" : "#f59e0b14",
             border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
@@ -491,7 +491,7 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
       </div>
       {/* Sliding card */}
       <div
-        className="relative flex flex-col px-4 pt-3.5 pb-2.5 rounded-xl select-none"
+        className="relative flex flex-col px-4 md:px-5 pt-3.5 md:pt-4 pb-2.5 md:pb-3 rounded-xl select-none"
         style={{
           background: committing ? `${commitColorRef.current}22` : "var(--t-card)",
           borderLeft: "3px solid rgba(245,158,11,0.4)",
@@ -510,7 +510,7 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
         onPointerCancel={onUp}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <p className="text-lg text-white/85 leading-snug min-w-0 whitespace-normal break-words pr-5">
+        <p className="text-lg md:text-xl text-white/85 leading-snug min-w-0 whitespace-normal break-words pr-5">
           {item.text}
         </p>
         <p
@@ -636,7 +636,7 @@ function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
         )}
       </div>
       <div
-        className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
+        className="relative flex items-start gap-3 px-4 py-3.5 md:px-5 md:py-4 rounded-xl select-none"
         style={{
           background: committing ? `${commitColorRef.current}22` : "var(--t-card)",
           borderLeft: "3px solid rgba(148,163,184,0.4)", // gray — from memory swipe in pass 1
@@ -655,7 +655,7 @@ function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
         onPointerCancel={onUp}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <p className="text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words pr-5">
+        <p className="text-lg md:text-xl text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words pr-5">
           {item.text}
         </p>
         <button

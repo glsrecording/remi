@@ -1135,6 +1135,7 @@ export default function MainChat() {
       </div>
 
       <div
+        className="remi-chat-input-bar"
         style={{
           position: "fixed",
           bottom: 0,
@@ -1229,13 +1230,13 @@ export default function MainChat() {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder='Try "Mix note for [song] — [note]"'
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 md:py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
             data-testid="input-text-command"
           />
 
           <button
             type="submit"
-            className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+            className="shrink-0 px-4 py-2.5 md:py-3 rounded-xl text-sm font-medium transition-all active:scale-95"
             style={{ background: userColor, color: "#111111" }}
             data-testid="button-send"
           >
@@ -1245,7 +1246,7 @@ export default function MainChat() {
           {/* Amber hold-to-send mic: hold 150ms → record, release → transcribe + send */}
           <button
             type="button"
-            className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150"
+            className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all duration-150"
             style={{
               background: isRecording ? "#ef444422" : "#f59e0b14",
               border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
