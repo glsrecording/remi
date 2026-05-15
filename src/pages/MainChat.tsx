@@ -13,6 +13,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import UndoBar from "@/components/UndoBar";
+import SundaySweep, { SundaySweepChip } from "@/components/SundaySweep";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import {
   STORAGE_KEYS,
@@ -528,7 +529,8 @@ export default function MainChat() {
     localStorage.setItem("remi_font_size", String(next));
   }
 
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen,  setMenuOpen]  = useState(false);
+  const [sweepOpen, setSweepOpen] = useState(false);
   const [openPicker, setOpenPicker] = useState<"user" | "remi" | null>(null);
   const [systemOnline] = useState(true);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -969,6 +971,8 @@ export default function MainChat() {
         </div>
       </div>
 
+      <SundaySweepChip onOpen={() => setSweepOpen(true)} />
+
       {!pwaNudgeDismissed && (
         <div
           className="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 suggest-in"
@@ -1282,6 +1286,7 @@ export default function MainChat() {
       <HamburgerMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
+        onWeeklyReview={() => setSweepOpen(true)}
         onClearSession={() => {
           fetch(`${JARVIS_URL}/remi/reset`, {
             method: "POST",
@@ -1290,6 +1295,8 @@ export default function MainChat() {
           }).catch(() => {});
         }}
       />
+      {sweepOpen && <SundaySweep onClose={() => setSweepOpen(false)} />}
+
       {undoAction && (
         <UndoBar
           message={undoAction.message}

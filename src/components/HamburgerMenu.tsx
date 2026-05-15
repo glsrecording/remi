@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { X, Sun, Moon, Brain, Music, Clock, CheckSquare, BarChart2, MessageCircle, Terminal, Archive, History, Download, Shuffle, Radio, BookOpen, RotateCcw, CalendarClock } from "lucide-react";
+import { X, Sun, Moon, Brain, Music, Clock, CheckSquare, BarChart2, MessageCircle, Terminal, Archive, History, Download, Shuffle, Radio, BookOpen, RotateCcw, CalendarClock, ClipboardCheck } from "lucide-react";
 import { useEffect } from "react";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -7,6 +7,7 @@ interface HamburgerMenuProps {
   open: boolean;
   onClose: () => void;
   onClearSession?: () => void;
+  onWeeklyReview?: () => void;
 }
 
 const menuItems = [
@@ -15,6 +16,7 @@ const menuItems = [
   { label: "Session", icon: Radio, path: "/session" },
   { label: "Triage", icon: Shuffle, path: "/triage" },
   { label: "Scheduler", icon: CalendarClock, path: "/scheduler" },
+  { label: "Weekly Review", icon: ClipboardCheck, path: "#weekly-review" },
   { label: "Mix Notes", icon: Music, path: "/mix-notes" },
   { label: "Time Track", icon: Clock, path: "/time-track" },
   { label: "Wrap Up", icon: CheckSquare, path: "/wrap-up" },
@@ -27,7 +29,7 @@ const menuItems = [
   { label: "Commands", icon: Terminal, path: "/commands" },
 ];
 
-export default function HamburgerMenu({ open, onClose, onClearSession }: HamburgerMenuProps) {
+export default function HamburgerMenu({ open, onClose, onClearSession, onWeeklyReview }: HamburgerMenuProps) {
   const [location, navigate] = useLocation();
   const { isLight, toggleTheme } = useTheme();
 
@@ -39,6 +41,11 @@ export default function HamburgerMenu({ open, onClose, onClearSession }: Hamburg
   if (!open) return null;
 
   const handleItemClick = (path: string) => {
+    if (path === "#weekly-review") {
+      onWeeklyReview?.();
+      onClose();
+      return;
+    }
     navigate(path);
     onClose();
   };
