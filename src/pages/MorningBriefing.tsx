@@ -1,60 +1,63 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, Sun, RefreshCw, Calendar, CheckSquare, CreditCard, Sparkles } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
+
+const JARVIS_URL = "https://jarvis.joshhollandgls.com";
+const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
 const today = new Date();
 const dateLabel = today.toLocaleDateString("en-US", {
   weekday: "long", month: "long", day: "numeric", year: "numeric",
 });
 
-const SAMPLE_BRIEFING = {
-  calendar: [
-    { time: "10:00 AM", title: "Mix session — Kayla EP", detail: "Studio A · 2 hrs" },
-    { time: "1:30 PM", title: "Call with Marcus (management)", detail: "Phone · 30 min" },
-    { time: "4:00 PM", title: "Vocal tracking — Midnight Drive", detail: "Home studio · 3 hrs" },
-  ],
-  tasks: [
-    { text: "Send stems to mastering engineer by EOD", priority: "high" },
-    { text: "Reply to venue booking email — Northside show", priority: "normal" },
-  ],
-  bills: [
-    { name: "Studio Pro subscription", amount: "$49", due: "in 3 days" },
-  ],
+type CalItem  = { time: string; title: string };
+type TaskItem = { id: string; title: string; url: string };
+type BillItem = { name: string; due: string; auto: boolean };
+type BriefingData = {
+  calendar: CalItem[];
+  tasks: { today: TaskItem[]; tonight: TaskItem[]; tomorrow: TaskItem[] };
+  bills: BillItem[];
 };
 
 export default function MorningBriefing() {
   const [, navigate] = useLocation();
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
-  const [showBriefing, setShowBriefing] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [briefingResponse, setBriefingResponse] = useState<string | null>(null);
+  const [loading, setLoading]         = useState(false);
+  const [data, setData]               = useState<BriefingData | null>(null);
+  const [error, setError]             = useState<string | null>(null);
 
   const handleRequest = () => {
     setLoading(true);
-    fetch("https://jarvis.joshhollandgls.com/remi", {
+    setError(null);
+    fetch(`${JARVIS_URL}/morning-briefing`, {
       method: "POST",
       headers: {
-        "Authorization": "Bearer ea3c450fda7c377d24e0f5de6d0e8f7ebc6dfa9a3ab90f6b5c2bf45ff7a3d411",
+        Authorization: `Bearer ${REMI_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ message: "morning briefing", user_id: "remi" }),
+      body: JSON.stringify({}),
     })
-      .then((r) => r.json())
-      .then((data) => {
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
+      })
+      .then((payload: BriefingData) => {
+        setData(payload);
         setLoading(false);
-        setBriefingResponse(data.response ?? null);
-        setShowBriefing(true);
       })
       .catch(() => {
+        setError("Briefing unavailable — tap to retry");
         setLoading(false);
-        setBriefingResponse("Sorry, couldn't fetch the morning briefing.");
-        setShowBriefing(true);
       });
   };
+
+  const allTasks = [
+    ...(data?.tasks.today   ?? []),
+    ...(data?.tasks.tonight ?? []),
+    ...(data?.tasks.tomorrow ?? []),
+  ];
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
@@ -80,14 +83,14 @@ export default function MorningBriefing() {
         >
           Morning Briefing
         </span>
-        {showBriefing && (
+        {data && (
           <button
             className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
-            onClick={() => { setShowBriefing(false); }}
+            onClick={() => { setData(null); setError(null); }}
             data-testid="button-clear-briefing"
           >
             <RefreshCw size={12} />
-            Reset
+            Refresh
           </button>
         )}
       </div>
@@ -96,7 +99,7 @@ export default function MorningBriefing() {
         className="flex-1 overflow-y-auto px-5 py-6 space-y-6"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)" }}
       >
-        {!showBriefing ? (
+        {!data && !error ? (
           /* Pre-briefing state */
           <div className="flex flex-col items-center justify-center h-full gap-6 -mt-6">
             <div
@@ -134,25 +137,40 @@ export default function MorningBriefing() {
                 </>
               )}
             </button>
-
-            <p className="text-xs text-white/20 text-center max-w-xs">
-              Connects to Jarvis for live data — showing sample layout
-            </p>
+          </div>
+        ) : error ? (
+          /* Error state */
+          <div className="flex flex-col items-center justify-center h-full gap-6 -mt-6">
+            <div
+              className="w-20 h-20 rounded-3xl flex items-center justify-center"
+              style={{ background: "rgba(239,68,68,0.1)", border: "1.5px solid rgba(239,68,68,0.2)" }}
+            >
+              <Sun size={34} className="text-red-400/60" />
+            </div>
+            <p className="text-sm text-white/50 text-center max-w-xs">{error}</p>
+            <button
+              className="flex items-center gap-2.5 px-8 py-4 rounded-2xl text-base font-semibold transition-all active:scale-[0.97]"
+              style={{ background: remiColor, color: "#111111" }}
+              onClick={handleRequest}
+              disabled={loading}
+              data-testid="button-retry-briefing"
+            >
+              {loading ? (
+                <>
+                  <RefreshCw size={18} className="animate-spin" />
+                  Retrying…
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={18} />
+                  Retry
+                </>
+              )}
+            </button>
           </div>
         ) : (
-          /* Briefing content */
+          /* Live briefing content */
           <div className="space-y-6 overlay-fade-in">
-            {briefingResponse && (
-              <div className="p-4 rounded-2xl border border-white/5" style={{ background: "var(--t-card)" }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-invert max-w-none">
-                  {briefingResponse}
-                </ReactMarkdown>
-              </div>
-            )}
-            <div className="flex items-center gap-2 px-4 py-3 rounded-xl" style={{ background: "var(--t-card)" }}>
-              <Sparkles size={13} className="text-white/20 shrink-0" />
-              <p className="text-xs text-white/25">Live briefing loaded from Jarvis</p>
-            </div>
             {/* Date header */}
             <div
               className="px-4 py-3 rounded-2xl flex items-center gap-3"
@@ -173,28 +191,29 @@ export default function MorningBriefing() {
                   Schedule
                 </p>
               </div>
-              {SAMPLE_BRIEFING.calendar.map((item, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
-                  style={{ background: "var(--t-card)" }}
-                  data-testid={`calendar-item-${i}`}
-                >
-                  <span
-                    className="text-xs font-mono mt-0.5 shrink-0"
-                    style={{ color: remiColor, opacity: 0.7 }}
+              {data!.calendar.length === 0 ? (
+                <p className="text-xs text-white/25 px-1">No events today</p>
+              ) : (
+                data!.calendar.map((item, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
+                    style={{ background: "var(--t-card)" }}
+                    data-testid={`calendar-item-${i}`}
                   >
-                    {item.time}
-                  </span>
-                  <div>
+                    <span
+                      className="text-xs font-mono mt-0.5 shrink-0"
+                      style={{ color: remiColor, opacity: 0.7 }}
+                    >
+                      {item.time}
+                    </span>
                     <p className="text-sm text-white/85 font-medium leading-snug">{item.title}</p>
-                    <p className="text-xs text-white/35 mt-0.5">{item.detail}</p>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
-            {/* Tasks due today */}
+            {/* Tasks */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <CheckSquare size={13} style={{ color: remiColor }} />
@@ -202,20 +221,24 @@ export default function MorningBriefing() {
                   Due Today
                 </p>
               </div>
-              {SAMPLE_BRIEFING.tasks.map((task, i) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
-                  style={{ background: "var(--t-card)" }}
-                  data-testid={`task-item-${i}`}
-                >
+              {allTasks.length === 0 ? (
+                <p className="text-xs text-white/25 px-1">No tasks due today</p>
+              ) : (
+                allTasks.map((task, i) => (
                   <div
-                    className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
-                    style={{ background: task.priority === "high" ? "#ef4444" : "rgba(255,255,255,0.2)" }}
-                  />
-                  <p className="text-sm text-white/80 leading-snug">{task.text}</p>
-                </div>
-              ))}
+                    key={task.id || i}
+                    className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
+                    style={{ background: "var(--t-card)" }}
+                    data-testid={`task-item-${i}`}
+                  >
+                    <div
+                      className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                      style={{ background: "rgba(255,255,255,0.2)" }}
+                    />
+                    <p className="text-sm text-white/80 leading-snug">{task.title}</p>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Bills */}
@@ -226,26 +249,32 @@ export default function MorningBriefing() {
                   Bills This Week
                 </p>
               </div>
-              {SAMPLE_BRIEFING.bills.map((bill, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between px-4 py-3 rounded-xl border border-white/5"
-                  style={{ background: "var(--t-card)" }}
-                  data-testid={`bill-item-${i}`}
-                >
-                  <p className="text-sm text-white/80">{bill.name}</p>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold" style={{ color: remiColor }}>{bill.amount}</p>
-                    <p className="text-xs text-white/30">{bill.due}</p>
+              {data!.bills.length === 0 ? (
+                <p className="text-xs text-white/25 px-1">No bills due in the next 14 days</p>
+              ) : (
+                data!.bills.map((bill, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between px-4 py-3 rounded-xl border border-white/5"
+                    style={{ background: "var(--t-card)" }}
+                    data-testid={`bill-item-${i}`}
+                  >
+                    <div>
+                      <p className="text-sm text-white/80">{bill.name}</p>
+                      {bill.auto && (
+                        <p className="text-xs text-white/25 mt-0.5">Auto-pay</p>
+                      )}
+                    </div>
+                    <p className="text-xs text-white/40 shrink-0 ml-3">{bill.due}</p>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
-            {/* Jarvis note */}
+            {/* Footer */}
             <div className="flex items-center gap-2 px-4 py-3 rounded-xl" style={{ background: "var(--t-card)" }}>
               <Sparkles size={13} className="text-white/20 shrink-0" />
-              <p className="text-xs text-white/25">Sample layout — live data from Jarvis coming soon</p>
+              <p className="text-xs text-white/25">Live data from Jarvis</p>
             </div>
           </div>
         )}
