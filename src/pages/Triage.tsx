@@ -517,8 +517,7 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
           className="text-right pointer-events-none select-none"
           style={{
             fontSize: "9px",
-            color: "#94a3b8",
-            opacity: 0.4,
+            color: "var(--t-text5)",
             fontFamily: "'Space Mono', monospace",
             letterSpacing: "0.04em",
             marginTop: "6px",
@@ -966,7 +965,7 @@ export default function Triage() {
         ) : pass1Queue.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <p
-              className="text-white/20 text-sm text-center leading-loose"
+              className="text-white/30 text-sm text-center leading-loose"
               style={{ fontFamily: "'Space Mono', monospace" }}
             >
               Add items above,<br />then swipe to sort.
