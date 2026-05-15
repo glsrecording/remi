@@ -226,11 +226,11 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
     <div
       className="rounded-xl"
       style={{
-        background: "var(--t-card)",
+        background: "var(--t-input-bg)",
         borderLeft: "3px solid rgba(245,158,11,0.4)",
-        borderTop: "1px solid var(--t-border)",
-        borderRight: "1px solid var(--t-border)",
-        borderBottom: "1px solid var(--t-border)",
+        borderTop: "1px solid var(--t-border-md)",
+        borderRight: "1px solid var(--t-border-md)",
+        borderBottom: "1px solid var(--t-border-md)",
       }}
     >
       {/* Lock bar */}
@@ -491,7 +491,7 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
       </div>
       {/* Sliding card */}
       <div
-        className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none"
+        className="relative flex flex-col px-4 pt-3.5 pb-2.5 rounded-xl select-none"
         style={{
           background: committing ? `${commitColorRef.current}22` : "var(--t-card)",
           borderLeft: "3px solid rgba(245,158,11,0.4)",
@@ -510,8 +510,21 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
         onPointerCancel={onUp}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <p className="text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words pr-5">
+        <p className="text-lg text-white/85 leading-snug min-w-0 whitespace-normal break-words pr-5">
           {item.text}
+        </p>
+        <p
+          className="text-right pointer-events-none select-none"
+          style={{
+            fontSize: "9px",
+            color: "#94a3b8",
+            opacity: 0.4,
+            fontFamily: "'Space Mono', monospace",
+            letterSpacing: "0.04em",
+            marginTop: "6px",
+          }}
+        >
+          hold → someday
         </p>
         <button
           className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity active:scale-90"
