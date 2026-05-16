@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, Sun, RefreshCw, Calendar, CheckSquare, CreditCard, Sparkles, Mail } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { useGutterScroll } from "@/hooks/useGutterScroll";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
@@ -26,6 +27,8 @@ type BriefingData = {
 export default function MorningBriefing() {
   const [, navigate] = useLocation();
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useGutterScroll(scrollRef);
   const [loading, setLoading]         = useState(false);
   const [data, setData]               = useState<BriefingData | null>(null);
   const [error, setError]             = useState<string | null>(null);
@@ -98,6 +101,7 @@ export default function MorningBriefing() {
       </div>
 
       <div
+        ref={scrollRef}
         className="flex-1 overflow-y-auto px-5 py-6 space-y-6"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)" }}
       >

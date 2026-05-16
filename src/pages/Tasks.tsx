@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useGutterScroll } from "@/hooks/useGutterScroll";
 import { useLocation } from "wouter";
 import {
   ArrowLeft, RefreshCw, Loader2, ChevronDown, ChevronRight,
@@ -738,7 +739,7 @@ export default function Tasks() {
   const [undoState, setUndoState] = useState<UndoState | null>(null);
   const initialLoaded = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const gutterTouchRef = useRef<{ lastY: number } | null>(null);
+  useGutterScroll(scrollRef);
 
   const load = useCallback(async (forceRefresh = false) => {
     // ── Cache check ────────────────────────────────────────────────────────
@@ -791,37 +792,6 @@ export default function Tasks() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  // Forward vertical drags in the body gutters (outside #root) to the task list scroll container.
-  // Gutter touches never enter the React tree — they land on <body> — so we need document listeners.
-  useEffect(() => {
-    function onTouchStart(e: TouchEvent) {
-      const root = document.getElementById("root");
-      if (!root || !scrollRef.current) return;
-      const { left, right } = root.getBoundingClientRect();
-      const { clientX, clientY } = e.touches[0];
-      if (clientX >= left && clientX <= right) return; // inside panel — ignore
-      gutterTouchRef.current = { lastY: clientY };
-    }
-    function onTouchMove(e: TouchEvent) {
-      if (!gutterTouchRef.current || !scrollRef.current) return;
-      const { clientY } = e.touches[0];
-      const delta = clientY - gutterTouchRef.current.lastY;
-      gutterTouchRef.current.lastY = clientY;
-      scrollRef.current.scrollTop -= delta;
-    }
-    function onTouchEnd() { gutterTouchRef.current = null; }
-    document.addEventListener("touchstart", onTouchStart, { passive: true });
-    document.addEventListener("touchmove",  onTouchMove,  { passive: true });
-    document.addEventListener("touchend",   onTouchEnd);
-    document.addEventListener("touchcancel", onTouchEnd);
-    return () => {
-      document.removeEventListener("touchstart", onTouchStart);
-      document.removeEventListener("touchmove",  onTouchMove);
-      document.removeEventListener("touchend",   onTouchEnd);
-      document.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, []);
 
   // Optimistically add task, then refresh + re-cache after 2s to get the real page_id
   const handleTaskAdded = useCallback((title: string, bucket: Bucket) => {

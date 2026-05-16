@@ -8,6 +8,8 @@ import {
   Pin,
   X,
   Loader2,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -517,6 +519,12 @@ export default function MainChat() {
   const [isLocked, setIsLocked] = useState(false);
   const pointerStartYRef = useRef<number>(0);
 
+  // Voice mode
+  const [voiceEnabled, setVoiceEnabled] = useLocalStorage<boolean>("remi_voice_enabled", false);
+  const voiceEnabledRef = useRef(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
   const [fontSizeStep, setFontSizeStep] = useState<number>(() => {
@@ -550,6 +558,7 @@ export default function MainChat() {
   const pickerRef = useRef<HTMLDivElement>(null);
   const mountTimeRef = useRef(new Date());
 
+  useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
   useEffect(() => {
     document.documentElement.style.setProperty("--remi-accent", remiColor);
   }, [remiColor]);
@@ -614,6 +623,33 @@ export default function MainChat() {
     setDismissedTrigger(null);
   }, []);
 
+  const speakResponse = useCallback(async (text: string) => {
+    if (!voiceEnabledRef.current || !text.trim()) return;
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    try {
+      setIsSpeaking(true);
+      const res = await fetch(`${JARVIS_URL}/tts`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
+      if (!data.audio) { setIsSpeaking(false); return; }
+      const bytes = atob(data.audio);
+      const buf = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+      const blob = new Blob([buf], { type: data.mimeType || "audio/wav" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
+      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
+      await audio.play();
+    } catch {
+      setIsSpeaking(false);
+    }
+  }, []);
+
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
       if (!text.trim()) return;
@@ -665,14 +701,15 @@ export default function MainChat() {
             navigate("/session");
             return;
           }
+          const _aiText = data.response
+            ? (data.response as string).replace(/•/g, "\n•")
+            : "Didn't land. Try again.";
           setMessages((prev) => [
             ...prev,
             {
               id: (Date.now() + 2).toString(),
               role: "ai",
-              text: data.response
-                ? (data.response as string).replace(/•/g, "\n•")
-                : "Didn't land. Try again.",
+              text: _aiText,
               timestamp: new Date().toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
@@ -682,6 +719,7 @@ export default function MainChat() {
                 : {}),
             },
           ]);
+          speakResponse(_aiText);
         })
         .catch(() => {
           setIsJarvisLoading(false);
@@ -699,7 +737,7 @@ export default function MainChat() {
           ]);
         });
     },
-    [setMessages, recordRecentCommand, navigate],
+    [setMessages, recordRecentCommand, navigate, speakResponse],
   );
 
   // ─── Mic: 150ms hold-to-record ───────────────────────────────────────────
@@ -968,6 +1006,24 @@ export default function MainChat() {
               </div>
             )}
           </div>
+          <button
+            className="p-1.5 rounded-lg transition-colors"
+            style={{ color: voiceEnabled ? remiColor : "rgba(255,255,255,0.25)" }}
+            onClick={() => {
+              if (voiceEnabled && audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current = null;
+                setIsSpeaking(false);
+              }
+              setVoiceEnabled((p) => !p);
+            }}
+            data-testid="button-voice-toggle"
+            title={voiceEnabled ? "Voice on — tap to mute" : "Voice off"}
+          >
+            {voiceEnabled
+              ? <Volume2 size={16} className={isSpeaking ? "animate-pulse" : ""} />
+              : <VolumeX size={16} />}
+          </button>
         </div>
       </div>
 
