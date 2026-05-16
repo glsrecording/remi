@@ -627,8 +627,10 @@ export default function MainChat() {
   const speakResponse = useCallback(async (text: string) => {
     if (!voiceEnabledRef.current || !text.trim()) return;
     if (audioRef.current) { try { audioRef.current.stop(); } catch { /* already stopped */ } audioRef.current = null; }
+    // Create lazily — by the time speakResponse runs, the user clicked Send (a real gesture),
+    // so resume() succeeds even across the async fetch chain.
+    if (!audioContextRef.current) audioContextRef.current = new AudioContext();
     const actx = audioContextRef.current;
-    if (!actx) return; // AudioContext not created yet — user hasn't clicked the toggle in this session
     try {
       setIsSpeaking(true);
       if (actx.state === "suspended") await actx.resume();
