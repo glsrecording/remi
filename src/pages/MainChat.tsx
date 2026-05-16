@@ -624,6 +624,7 @@ export default function MainChat() {
   }, []);
 
   const speakResponse = useCallback(async (text: string) => {
+    console.log("speakResponse called, voiceEnabled:", voiceEnabledRef.current);
     if (!voiceEnabledRef.current || !text.trim()) return;
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     try {
@@ -719,6 +720,7 @@ export default function MainChat() {
                 : {}),
             },
           ]);
+          console.log("Response received, calling speakResponse");
           speakResponse(_aiText);
         })
         .catch(() => {
