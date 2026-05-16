@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, Sun, RefreshCw, Calendar, CheckSquare, CreditCard, Sparkles } from "lucide-react";
+import { ArrowLeft, Sun, RefreshCw, Calendar, CheckSquare, CreditCard, Sparkles, Mail } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
 
@@ -12,11 +12,13 @@ const dateLabel = today.toLocaleDateString("en-US", {
   weekday: "long", month: "long", day: "numeric", year: "numeric",
 });
 
-type CalItem  = { time: string; title: string };
-type TaskItem = { id: string; title: string; url: string };
-type BillItem = { name: string; due: string; auto: boolean };
+type CalItem   = { time: string; title: string };
+type TaskItem  = { id: string; title: string; url: string };
+type BillItem  = { name: string; due: string; auto: boolean };
+type EmailItem = { subject: string; sender: string; thread_id: string };
 type BriefingData = {
   calendar: CalItem[];
+  emails:   EmailItem[];
   tasks: { today: TaskItem[]; tonight: TaskItem[]; tomorrow: TaskItem[] };
   bills: BillItem[];
 };
@@ -212,6 +214,39 @@ export default function MorningBriefing() {
                 ))
               )}
             </div>
+
+            {/* Emails */}
+            {(data!.emails ?? []).length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Mail size={13} style={{ color: remiColor }} />
+                  <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: remiColor }}>
+                    Inbox
+                  </p>
+                </div>
+                {data!.emails.map((item, i) => (
+                  <a
+                    key={i}
+                    href={`https://mail.google.com/mail/u/0/#inbox/${item.thread_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5 transition-opacity active:opacity-60"
+                    style={{ background: "var(--t-card)", display: "flex", textDecoration: "none" }}
+                    data-testid={`email-item-${i}`}
+                  >
+                    <span
+                      className="text-xs font-mono mt-0.5 shrink-0 max-w-[72px] truncate"
+                      style={{ color: remiColor, opacity: 0.7 }}
+                    >
+                      {item.sender}
+                    </span>
+                    <p className="text-sm font-medium leading-snug flex-1 min-w-0" style={{ color: "var(--t-text2)" }}>
+                      {item.subject}
+                    </p>
+                  </a>
+                ))}
+              </div>
+            )}
 
             {/* Tasks */}
             <div className="space-y-2">
