@@ -47,6 +47,18 @@ async function apiPatch(id: string, patch: { life_area?: string; scheduled_date?
   if (!r.ok) throw new Error(`${r.status}`);
 }
 
+async function apiArchive(id: string): Promise<void> {
+  const r = await fetch(`${JARVIS_URL}/scheduler/update`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${REMI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id, action: "done" }),
+  });
+  if (!r.ok) throw new Error(`${r.status}`);
+}
+
 function todayISO(): string  { return new Date().toISOString().slice(0, 10); }
 function tomorrowISO(): string {
   const d = new Date(); d.setDate(d.getDate() + 1);
@@ -106,6 +118,19 @@ export default function Scheduler() {
     setPickDateId(null);
     try {
       await apiPatch(id, { scheduled_date: isoDate });
+    } catch {
+      load();
+    }
+  }
+
+  async function handleDone(id: string) {
+    // Optimistic remove — archive the task
+    setTasks((prev) => prev.filter((t) => t.id !== id));
+    setSelectedId((prev) => (prev === id ? null : prev));
+    setShowDateSet((prev) => { const s = new Set(prev); s.delete(id); return s; });
+    setPickDateId((prev) => (prev === id ? null : prev));
+    try {
+      await apiArchive(id);
     } catch {
       load();
     }
@@ -250,6 +275,13 @@ export default function Scheduler() {
                                   {task.life_area}
                                 </span>
                               )}
+                              <button
+                                className="shrink-0 px-2 py-1 rounded-lg text-xs font-semibold transition-all active:scale-95"
+                                style={{ background: "rgba(34,197,94,0.12)", color: "rgba(34,197,94,0.75)" }}
+                                onClick={(e) => { e.stopPropagation(); handleDone(task.id); }}
+                              >
+                                Done ✓
+                              </button>
                             </div>
 
                             {/* Date assignment row — visible when life area assigned */}
