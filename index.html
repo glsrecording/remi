@@ -44,14 +44,6 @@
       } catch(e) {}
     </script>
 
-    <!-- Register service worker inline so it runs before any JS bundle -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
-        });
-      }
-    </script>
   </head>
   <body>
     <div id="root"></div>

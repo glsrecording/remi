@@ -44,14 +44,6 @@
       } catch(e) {}
     </script>
 
-    <!-- Register service worker inline so it runs before any JS bundle -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(() => {});
-        });
-      }
-    </script>
     <script type="module" crossorigin src="/assets/index-B-fOWtup.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-D1_chJRT.css">
   </head>
