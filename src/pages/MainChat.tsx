@@ -523,7 +523,8 @@ export default function MainChat() {
   const [voiceEnabled, setVoiceEnabled] = useLocalStorage<boolean>("remi_voice_enabled", false);
   const voiceEnabledRef = useRef(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -624,11 +625,13 @@ export default function MainChat() {
   }, []);
 
   const speakResponse = useCallback(async (text: string) => {
-    console.log("speakResponse called, voiceEnabled:", voiceEnabledRef.current);
     if (!voiceEnabledRef.current || !text.trim()) return;
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    if (audioRef.current) { try { audioRef.current.stop(); } catch { /* already stopped */ } audioRef.current = null; }
+    const actx = audioContextRef.current;
+    if (!actx) return; // AudioContext not created yet — user hasn't clicked the toggle in this session
     try {
       setIsSpeaking(true);
+      if (actx.state === "suspended") await actx.resume();
       const res = await fetch(`${JARVIS_URL}/tts`, {
         method: "POST",
         headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
@@ -639,14 +642,15 @@ export default function MainChat() {
       const bytes = atob(data.audio);
       const buf = new Uint8Array(bytes.length);
       for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
-      const blob = new Blob([buf], { type: data.mimeType || "audio/wav" });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
-      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
-      await audio.play();
-    } catch {
+      const audioBuffer = await actx.decodeAudioData(buf.buffer);
+      const source = actx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(actx.destination);
+      audioRef.current = source;
+      source.onended = () => { setIsSpeaking(false); audioRef.current = null; };
+      source.start();
+    } catch (e) {
+      console.warn("[speakResponse]", (e as Error).message);
       setIsSpeaking(false);
     }
   }, []);
@@ -720,7 +724,6 @@ export default function MainChat() {
                 : {}),
             },
           ]);
-          console.log("Response received, calling speakResponse");
           speakResponse(_aiText);
         })
         .catch(() => {
@@ -1012,10 +1015,18 @@ export default function MainChat() {
             className="p-1.5 rounded-lg transition-colors"
             style={{ color: voiceEnabled ? remiColor : "rgba(255,255,255,0.25)" }}
             onClick={() => {
-              if (voiceEnabled && audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current = null;
+              if (voiceEnabled) {
+                if (audioRef.current) {
+                  try { audioRef.current.stop(); } catch { /* already stopped */ }
+                  audioRef.current = null;
+                }
                 setIsSpeaking(false);
+              } else {
+                if (!audioContextRef.current) {
+                  audioContextRef.current = new AudioContext();
+                } else if (audioContextRef.current.state === "suspended") {
+                  audioContextRef.current.resume().catch(() => {});
+                }
               }
               setVoiceEnabled((p) => !p);
             }}
