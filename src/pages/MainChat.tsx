@@ -528,6 +528,8 @@ export default function MainChat() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const wsPlaybackTimeRef = useRef<number>(0);
+  const pendingAudioRef = useRef<number>(0);
+  const streamEndedRef = useRef<boolean>(false);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -577,21 +579,31 @@ export default function MainChat() {
     ws.onclose = (e) => { if (wsRef.current === ws) wsRef.current = null; console.log("[ws/tts] closed", e.code, e.reason); };
     ws.onerror = (e) => console.warn("[ws/tts] error", e);
     ws.onmessage = (event) => {
-      if (!(event.data instanceof ArrayBuffer) || event.data.byteLength === 0) return;
+      if (!(event.data instanceof ArrayBuffer)) return;
+      if (event.data.byteLength === 0) {
+        // End-of-stream marker — backend finished sending all audio chunks
+        streamEndedRef.current = true;
+        if (pendingAudioRef.current === 0) setIsSpeaking(false);
+        return;
+      }
       const actx = audioContextRef.current;
       if (!actx) return;
-      // Backend sends a complete WAV file — decode directly
+      pendingAudioRef.current++;
       actx.decodeAudioData(event.data.slice(0)).then((audioBuffer) => {
-        if (audioRef.current) { try { audioRef.current.stop(); } catch { /* stopped */ } }
+        const t = Math.max(actx.currentTime, wsPlaybackTimeRef.current);
+        wsPlaybackTimeRef.current = t + audioBuffer.duration;
         const source = actx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(actx.destination);
-        audioRef.current = source;
-        source.onended = () => { setIsSpeaking(false); audioRef.current = null; };
-        source.start();
+        source.onended = () => {
+          pendingAudioRef.current = Math.max(0, pendingAudioRef.current - 1);
+          if (pendingAudioRef.current === 0 && streamEndedRef.current) setIsSpeaking(false);
+        };
+        source.start(t);
       }).catch((e) => {
         console.warn("[ws/tts] decodeAudioData failed", e);
-        setIsSpeaking(false);
+        pendingAudioRef.current = Math.max(0, pendingAudioRef.current - 1);
+        if (pendingAudioRef.current === 0 && streamEndedRef.current) setIsSpeaking(false);
       });
     };
     wsRef.current = ws;
@@ -678,6 +690,8 @@ export default function MainChat() {
       }
       setIsSpeaking(true);
       wsPlaybackTimeRef.current = actx.currentTime;
+      pendingAudioRef.current = 0;
+      streamEndedRef.current = false;
       console.log("[speakResponse] sending", text.length, "chars");
       ws.send(text);
     } catch (e) {
