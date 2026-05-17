@@ -577,27 +577,22 @@ export default function MainChat() {
     ws.onclose = (e) => { if (wsRef.current === ws) wsRef.current = null; console.log("[ws/tts] closed", e.code, e.reason); };
     ws.onerror = (e) => console.warn("[ws/tts] error", e);
     ws.onmessage = (event) => {
-      if (!(event.data instanceof ArrayBuffer)) return;
-      const pcm = new Int16Array(event.data);
-      if (pcm.length === 0) return;  // empty frame = end of audio stream
+      if (!(event.data instanceof ArrayBuffer) || event.data.byteLength === 0) return;
       const actx = audioContextRef.current;
       if (!actx) return;
-      const buf = actx.createBuffer(1, pcm.length, 24000);
-      const ch  = buf.getChannelData(0);
-      for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768.0;
-      const source = actx.createBufferSource();
-      source.buffer = buf;
-      source.connect(actx.destination);
-      const t = Math.max(actx.currentTime, wsPlaybackTimeRef.current);
-      source.start(t);
-      wsPlaybackTimeRef.current = t + buf.duration;
-      audioRef.current = source;
-      source.onended = () => {
-        if (wsPlaybackTimeRef.current <= actx.currentTime + 0.05) {
-          setIsSpeaking(false);
-          audioRef.current = null;
-        }
-      };
+      // Backend sends a complete WAV file — decode directly
+      actx.decodeAudioData(event.data.slice(0)).then((audioBuffer) => {
+        if (audioRef.current) { try { audioRef.current.stop(); } catch { /* stopped */ } }
+        const source = actx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(actx.destination);
+        audioRef.current = source;
+        source.onended = () => { setIsSpeaking(false); audioRef.current = null; };
+        source.start();
+      }).catch((e) => {
+        console.warn("[ws/tts] decodeAudioData failed", e);
+        setIsSpeaking(false);
+      });
     };
     wsRef.current = ws;
     return () => { ws.close(1000, "cleanup"); };
