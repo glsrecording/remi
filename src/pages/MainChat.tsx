@@ -635,10 +635,16 @@ export default function MainChat() {
     try {
       if (actx.state === "suspended") await actx.resume();
       setIsSpeaking(true);
+      const ttsText = text
+        .replace(/https?:\/\/\S+/g, "")
+        .replace(/[*_`]/g, "")
+        .replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{27BF}️]/gu, "")
+        .replace(/\s+/g, " ")
+        .trim();
       const resp = await fetch(`${JARVIS_URL}/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${REMI_API_KEY}` },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: ttsText }),
       });
       if (!resp.ok) throw new Error(`TTS ${resp.status}`);
       const buf = await resp.arrayBuffer();
