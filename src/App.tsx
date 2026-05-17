@@ -11,11 +11,8 @@ import MixNotes from "@/pages/MixNotes";
 import TimeTrack from "@/pages/TimeTrack";
 import Scorecard from "@/pages/Scorecard";
 import MorningBriefing from "@/pages/MorningBriefing";
-import WrapUp from "@/pages/WrapUp";
 import MessageToDad from "@/pages/MessageToDad";
 import SomedayReview from "@/pages/SomedayReview";
-import SessionHistory from "@/pages/SessionHistory";
-import DataExport from "@/pages/DataExport";
 import Triage from "@/pages/Triage";
 import Session from "@/pages/Session";
 import Journal from "@/pages/Journal";
@@ -34,11 +31,8 @@ function Router() {
       <Route path="/time-track" component={TimeTrack} />
       <Route path="/scorecard" component={Scorecard} />
       <Route path="/morning-briefing" component={MorningBriefing} />
-      <Route path="/wrap-up" component={WrapUp} />
       <Route path="/message-to-dad" component={MessageToDad} />
       <Route path="/someday-review" component={SomedayReview} />
-      <Route path="/session-history" component={SessionHistory} />
-      <Route path="/data-export" component={DataExport} />
       <Route path="/triage" component={Triage} />
       <Route path="/session" component={Session} />
       <Route path="/journal" component={Journal} />

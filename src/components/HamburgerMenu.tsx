@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { X, Sun, Moon, Brain, Music, Clock, CheckSquare, BarChart2, MessageCircle, Terminal, History, Download, Shuffle, Radio, BookOpen, RotateCcw, CalendarClock, ClipboardCheck } from "lucide-react";
+import { X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, Terminal, Shuffle, Radio, BookOpen, RotateCcw, CalendarClock, ClipboardCheck } from "lucide-react";
 import { useEffect } from "react";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -19,11 +19,8 @@ const menuItems = [
   { label: "Weekly Review", icon: ClipboardCheck, path: "#weekly-review" },
   { label: "Mix Notes", icon: Music, path: "/mix-notes" },
   { label: "Time Track", icon: Clock, path: "/time-track" },
-  { label: "Wrap Up", icon: CheckSquare, path: "/wrap-up" },
   { label: "Scorecard", icon: BarChart2, path: "/scorecard" },
   { label: "Journal", icon: BookOpen, path: "/journal" },
-  { label: "Session History", icon: History, path: "/session-history" },
-  { label: "Export Data", icon: Download, path: "/data-export" },
   { label: "Message to Dad", icon: MessageCircle, path: "/message-to-dad" },
   { label: "Commands", icon: Terminal, path: "/commands" },
 ];
