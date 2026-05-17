@@ -573,8 +573,8 @@ export default function MainChat() {
     }
     const ws = new WebSocket(`${JARVIS_WS_URL}/ws/tts?key=${REMI_API_KEY}`);
     ws.binaryType = "arraybuffer";
-    ws.onopen  = () => { wsRef.current = ws; };
-    ws.onclose = () => { if (wsRef.current === ws) wsRef.current = null; };
+    ws.onopen  = () => { wsRef.current = ws; console.log("[ws/tts] connected"); };
+    ws.onclose = (e) => { if (wsRef.current === ws) wsRef.current = null; console.log("[ws/tts] closed", e.code, e.reason); };
     ws.onerror = (e) => console.warn("[ws/tts] error", e);
     ws.onmessage = (event) => {
       if (!(event.data instanceof ArrayBuffer)) return;
@@ -678,11 +678,12 @@ export default function MainChat() {
       if (actx.state === "suspended") await actx.resume();
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
-        console.warn("[speakResponse] WebSocket not open");
+        console.warn("[speakResponse] WebSocket not open — state:", ws?.readyState ?? "no ws");
         return;
       }
       setIsSpeaking(true);
       wsPlaybackTimeRef.current = actx.currentTime;
+      console.log("[speakResponse] sending", text.length, "chars");
       ws.send(text);
     } catch (e) {
       console.warn("[speakResponse]", (e as Error).message);
