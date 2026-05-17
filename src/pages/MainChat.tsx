@@ -32,9 +32,8 @@ import {
 import { findBestMatch, CATEGORY_COLORS, COMMANDS } from "@/lib/commands";
 import type { Command } from "@/lib/commands";
 
-const JARVIS_URL    = "https://jarvis.joshhollandgls.com";
-const JARVIS_WS_URL = JARVIS_URL.replace("https://", "wss://").replace("http://", "ws://");
-const REMI_API_KEY  = import.meta.env.VITE_REMI_API_KEY as string;
+const JARVIS_URL   = "https://jarvis.joshhollandgls.com";
+const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
 const ACCENT_COLORS = [
   { name: "green", value: "#22c55e" },
@@ -74,28 +73,6 @@ const SEED_MESSAGES: ChatMessage[] = [
   },
 ];
 
-function buildWavBuffer(pcmChunks: ArrayBuffer[], sampleRate: number): ArrayBuffer {
-  const totalPcm = pcmChunks.reduce((n, b) => n + b.byteLength, 0);
-  const buf = new ArrayBuffer(44 + totalPcm);
-  const v   = new DataView(buf);
-  const u8  = new Uint8Array(buf);
-  u8.set([0x52,0x49,0x46,0x46], 0);              // "RIFF"
-  v.setUint32(4,  36 + totalPcm, true);
-  u8.set([0x57,0x41,0x56,0x45], 8);              // "WAVE"
-  u8.set([0x66,0x6d,0x74,0x20], 12);             // "fmt "
-  v.setUint32(16, 16, true);
-  v.setUint16(20, 1,  true);                      // PCM
-  v.setUint16(22, 1,  true);                      // mono
-  v.setUint32(24, sampleRate,     true);
-  v.setUint32(28, sampleRate * 2, true);          // byteRate
-  v.setUint16(32, 2,  true);                      // blockAlign
-  v.setUint16(34, 16, true);                      // bitsPerSample
-  u8.set([0x64,0x61,0x74,0x61], 36);             // "data"
-  v.setUint32(40, totalPcm, true);
-  let off = 44;
-  for (const chunk of pcmChunks) { u8.set(new Uint8Array(chunk), off); off += chunk.byteLength; }
-  return buf;
-}
 
 function buildMixNoteReply(song: string, note: string): string {
   return `**Mix Note logged** for *${song}*\n\n${note ? `> ${note}\n\n` : ""}Added to **Mix Notes Buffer** ✓\n\n_Saved to device · ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}_`;
@@ -549,8 +526,6 @@ export default function MainChat() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const pcmChunksRef = useRef<ArrayBuffer[]>([]);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -587,47 +562,6 @@ export default function MainChat() {
 
   useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
 
-  // WebSocket lifecycle — open on voice ON, close on voice OFF
-  useEffect(() => {
-    if (!voiceEnabled) {
-      wsRef.current?.close(1000, "voice disabled");
-      wsRef.current = null;
-      return;
-    }
-    const ws = new WebSocket(`${JARVIS_WS_URL}/ws/tts?key=${REMI_API_KEY}`);
-    ws.binaryType = "arraybuffer";
-    ws.onopen  = () => { wsRef.current = ws; console.log("[ws/tts] connected"); };
-    ws.onclose = (e) => { if (wsRef.current === ws) wsRef.current = null; console.log("[ws/tts] closed", e.code, e.reason); };
-    ws.onerror = (e) => console.warn("[ws/tts] error", e);
-    ws.onmessage = (event) => {
-      if (!(event.data instanceof ArrayBuffer)) return;
-      if (event.data.byteLength === 0) {
-        // End-of-stream: all PCM chunks received — concatenate and play once
-        const chunks = pcmChunksRef.current;
-        pcmChunksRef.current = [];
-        if (chunks.length === 0) { setIsSpeaking(false); return; }
-        const actx = audioContextRef.current;
-        if (!actx) { setIsSpeaking(false); return; }
-        const wav = buildWavBuffer(chunks, 24000);
-        actx.decodeAudioData(wav).then((audioBuffer) => {
-          const source = actx.createBufferSource();
-          source.buffer = audioBuffer;
-          source.connect(actx.destination);
-          audioRef.current = source;
-          source.onended = () => { setIsSpeaking(false); audioRef.current = null; };
-          source.start();
-        }).catch((e) => {
-          console.warn("[ws/tts] decodeAudioData failed", e);
-          setIsSpeaking(false);
-        });
-        return;
-      }
-      // Collect raw PCM — strip the 44-byte WAV header the backend adds per chunk
-      pcmChunksRef.current.push(event.data.slice(44));
-    };
-    wsRef.current = ws;
-    return () => { ws.close(1000, "cleanup"); };
-  }, [voiceEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     document.documentElement.style.setProperty("--remi-accent", remiColor);
@@ -696,21 +630,25 @@ export default function MainChat() {
   const speakResponse = useCallback(async (text: string) => {
     if (!voiceEnabledRef.current || !text.trim()) return;
     if (audioRef.current) { try { audioRef.current.stop(); } catch { /* already stopped */ } audioRef.current = null; }
-    // Create lazily — by the time speakResponse runs, the user clicked Send (a real gesture),
-    // so resume() succeeds even across the async chain.
     if (!audioContextRef.current) audioContextRef.current = new AudioContext();
     const actx = audioContextRef.current;
     try {
       if (actx.state === "suspended") await actx.resume();
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        console.warn("[speakResponse] WebSocket not open — state:", ws?.readyState ?? "no ws");
-        return;
-      }
       setIsSpeaking(true);
-      pcmChunksRef.current = [];
-      console.log("[speakResponse] sending", text.length, "chars");
-      ws.send(text);
+      const resp = await fetch(`${JARVIS_URL}/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${REMI_API_KEY}` },
+        body: JSON.stringify({ text }),
+      });
+      if (!resp.ok) throw new Error(`TTS ${resp.status}`);
+      const buf = await resp.arrayBuffer();
+      const audioBuffer = await actx.decodeAudioData(buf);
+      const source = actx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(actx.destination);
+      audioRef.current = source;
+      source.onended = () => { setIsSpeaking(false); audioRef.current = null; };
+      source.start();
     } catch (e) {
       console.warn("[speakResponse]", (e as Error).message);
       setIsSpeaking(false);
