@@ -1,8 +1,11 @@
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, Mic, MicOff, MessageCircle, Copy, RefreshCw, Check, Clock } from "lucide-react";
+import { ArrowLeft, Mic, MicOff, MessageCircle, Copy, RefreshCw, Check, Clock, Loader2 } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
+
+const JARVIS_URL   = "https://jarvis.joshhollandgls.com";
+const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
 interface DadMessage {
   id: string;
@@ -11,12 +14,6 @@ interface DadMessage {
   timestamp: string;
   date: string;
 }
-
-const FAKE_TRANSCRIPTIONS = [
-  "Hey Dad, just wanted to let you know that the studio session went really well today. We got three songs tracked and the producer said the vocals on the second one were the best he'd heard all month. I'm feeling really good about where this project is heading and wanted to share that with you.",
-  "Dad I've been thinking about you a lot lately and I just wanted to check in and see how you're doing. I know things have been a bit tough lately but I'm here if you need anything at all, even just to talk.",
-  "Hey so I got some exciting news today — I landed a sync deal for one of my tracks. It's going to be used in a TV show pilot. It's not huge money but it's a real credit and it means my music is getting heard by more people which is what I've been working toward.",
-];
 
 function todayStr() {
   return new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -37,24 +34,73 @@ export default function MessageToDad() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
 
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef   = useRef<BlobPart[]>([]);
+  const streamRef        = useRef<MediaStream | null>(null);
+  const holdTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdActiveRef    = useRef(false);
 
-  const handleHoldStart = () => {
-    holdTimer.current = setTimeout(() => setIsRecording(true), 300);
-  };
+  function handleMicDown() {
+    if (isRecording) return;
+    holdActiveRef.current = false;
+    holdTimerRef.current = setTimeout(async () => {
+      holdActiveRef.current = true;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (!holdActiveRef.current) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        audioChunksRef.current = [];
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+        const recorder = new MediaRecorder(stream, { mimeType });
+        mediaRecorderRef.current = recorder;
+        recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
+        recorder.onstop = () => {
+          streamRef.current?.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+          setIsRecording(false);
+          setTimeout(async () => {
+            const blob = new Blob(audioChunksRef.current, { type: mimeType });
+            audioChunksRef.current = [];
+            if (blob.size === 0) return;
+            setIsTranscribing(true);
+            try {
+              const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+              const formData = new FormData();
+              formData.append("file", blob, `audio.${ext}`);
+              formData.append("model", "whisper-1");
+              const resp = await fetch(`${JARVIS_URL}/transcribe`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+                body: formData,
+              });
+              const json = await resp.json();
+              const transcript = (json.text || "").trim();
+              if (transcript) setInputText((prev) => prev ? `${prev} ${transcript}` : transcript);
+              else setError("Nothing captured — try again.");
+            } catch {
+              setError("Transcription failed — check connection.");
+            } finally {
+              setIsTranscribing(false);
+            }
+          }, 800);
+        };
+        recorder.start(100);
+        setIsRecording(true);
+      } catch {
+        setError("Microphone permission is blocked or unavailable.");
+      }
+    }, 150);
+  }
 
-  const handleHoldEnd = () => {
-    if (holdTimer.current) clearTimeout(holdTimer.current);
-    if (isRecording) {
-      setIsRecording(false);
-      setIsTranscribing(true);
-      setTimeout(() => {
-        const t = FAKE_TRANSCRIPTIONS[Math.floor(Math.random() * FAKE_TRANSCRIPTIONS.length)];
-        setInputText((prev) => prev ? `${prev} ${t}` : t);
-        setIsTranscribing(false);
-      }, 1000);
+  function handleMicUp() {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    holdActiveRef.current = false;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
     }
-  };
+    setIsRecording(false);
+  }
 
   const condense = async () => {
     if (!inputText.trim() || loading) return;
@@ -63,9 +109,12 @@ export default function MessageToDad() {
     setCondensed("");
 
     try {
-      const res = await fetch("/api/condense", {
+      const res = await fetch(`${JARVIS_URL}/condense`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${REMI_API_KEY}`,
+        },
         body: JSON.stringify({ message: inputText.trim() }),
       });
 
@@ -194,21 +243,17 @@ export default function MessageToDad() {
                 style={{
                   background: isRecording ? "#ef444415" : isTranscribing ? "#33333380" : userColor + "15",
                   border: `2px solid ${isRecording ? "#ef4444" : isTranscribing ? "rgba(255,255,255,0.08)" : userColor + "50"}`,
+                  touchAction: "none",
                 }}
-                onPointerDown={handleHoldStart}
-                onPointerUp={handleHoldEnd}
-                onPointerLeave={handleHoldEnd}
+                onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); handleMicDown(); }}
+                onPointerUp={handleMicUp}
+                onPointerLeave={handleMicUp}
                 data-testid="button-voice"
               >
                 {isRecording ? (
                   <MicOff size={18} style={{ color: "#ef4444" }} />
                 ) : isTranscribing ? (
-                  <div className="flex gap-0.5">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="w-0.5 h-3 rounded-full wave-bar"
-                        style={{ background: remiColor, animationDelay: `${(i - 1) * 0.15}s` }} />
-                    ))}
-                  </div>
+                  <Loader2 size={18} className="animate-spin" style={{ color: userColor }} />
                 ) : (
                   <Mic size={18} style={{ color: userColor }} />
                 )}

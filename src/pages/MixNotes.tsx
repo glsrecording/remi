@@ -253,7 +253,7 @@ export default function MixNotes() {
         <div className="flex justify-end">
           <button
             type="button"
-            className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-150"
+            className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-150"
             style={{
               background: isRecording ? "#ef444422" : "#f59e0b14",
               border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
