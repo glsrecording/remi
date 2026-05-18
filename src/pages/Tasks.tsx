@@ -166,7 +166,7 @@ function UndoToast({
   const color = actionColor(state.action);
 
   useEffect(() => {
-    const t = setTimeout(onDismiss, 5000);
+    const t = setTimeout(onDismiss, 8000);
     return () => clearTimeout(t);
   }, [onDismiss]);
 
@@ -818,6 +818,8 @@ export default function Tasks() {
     setUndoState({ task, fromBucket, action });
   }, []);
 
+  const handleDismissUndo = useCallback(() => setUndoState(null), []);
+
   const handleUndo = useCallback(() => {
     if (!undoState) return;
     const { task, fromBucket, action } = undoState;
@@ -930,9 +932,10 @@ export default function Tasks() {
 
       {undoState && (
         <UndoToast
+          key={`${undoState.task.id}-${undoState.action}`}
           state={undoState}
           onUndo={handleUndo}
-          onDismiss={() => setUndoState(null)}
+          onDismiss={handleDismissUndo}
         />
       )}
     </div>
