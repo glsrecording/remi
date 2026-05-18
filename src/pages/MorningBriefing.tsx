@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, Sun, RefreshCw, Calendar, CheckSquare, CreditCard, Sparkles, Mail } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
@@ -7,6 +7,14 @@ import { useGutterScroll } from "@/hooks/useGutterScroll";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
+
+const CACHE_KEY_DATA = "remi_briefing_data";
+const CACHE_KEY_DATE = "remi_briefing_date";
+
+function todayDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 const today = new Date();
 const dateLabel = today.toLocaleDateString("en-US", {
@@ -33,6 +41,18 @@ export default function MorningBriefing() {
   const [data, setData]               = useState<BriefingData | null>(null);
   const [error, setError]             = useState<string | null>(null);
 
+  useEffect(() => {
+    const cachedDate = localStorage.getItem(CACHE_KEY_DATE);
+    const cachedData = localStorage.getItem(CACHE_KEY_DATA);
+    if (cachedDate === todayDateStr() && cachedData) {
+      try {
+        setData(JSON.parse(cachedData));
+      } catch {
+        // corrupt cache — fall through to manual request
+      }
+    }
+  }, []);
+
   const handleRequest = () => {
     setLoading(true);
     setError(null);
@@ -49,6 +69,8 @@ export default function MorningBriefing() {
         return r.json();
       })
       .then((payload: BriefingData) => {
+        localStorage.setItem(CACHE_KEY_DATE, todayDateStr());
+        localStorage.setItem(CACHE_KEY_DATA, JSON.stringify(payload));
         setData(payload);
         setLoading(false);
       })
@@ -56,6 +78,14 @@ export default function MorningBriefing() {
         setError("Briefing unavailable — tap to retry");
         setLoading(false);
       });
+  };
+
+  const handleRefresh = () => {
+    localStorage.removeItem(CACHE_KEY_DATE);
+    localStorage.removeItem(CACHE_KEY_DATA);
+    setData(null);
+    setError(null);
+    handleRequest();
   };
 
   const allTasks = [
@@ -91,7 +121,7 @@ export default function MorningBriefing() {
         {data && (
           <button
             className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
-            onClick={() => { setData(null); setError(null); }}
+            onClick={handleRefresh}
             data-testid="button-clear-briefing"
           >
             <RefreshCw size={12} />
