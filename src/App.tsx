@@ -17,6 +17,7 @@ import Triage from "@/pages/Triage";
 import Session from "@/pages/Session";
 import Journal from "@/pages/Journal";
 import Scheduler from "@/pages/Scheduler";
+import ShoppingList from "@/pages/ShoppingList";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/session" component={Session} />
       <Route path="/journal" component={Journal} />
       <Route path="/scheduler" component={Scheduler} />
+      <Route path="/shopping-list" component={ShoppingList} />
       <Route component={NotFound} />
     </Switch>
   );
