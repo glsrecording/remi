@@ -90,14 +90,22 @@ async function patchQueue(id: string, patch: { life_area?: string; scheduled_dat
 
 export function SundaySweepChip({ onOpen }: { onOpen: () => void }) {
   const [, tick] = useState(0);
+  const [sweepDone, setSweepDone] = useState<boolean | null>(null);
+
   useEffect(() => {
     const id = setInterval(() => tick(n => n + 1), 60_000);
     return () => clearInterval(id);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isSunday  = new Date().getDay() === 0;
-  const isDone    = localStorage.getItem("lastSweepDate") === todayISO();
-  if (!isSunday || isDone) return null;
+  useEffect(() => {
+    fetch(`${JARVIS_URL}/sweep-date`, { headers: AUTH_HDR })
+      .then((r) => r.json())
+      .then((d) => setSweepDone((d.date ?? null) === todayISO()))
+      .catch(() => setSweepDone(false));
+  }, []);
+
+  const isSunday = new Date().getDay() === 0;
+  if (!isSunday || sweepDone === null || sweepDone) return null;
 
   const ts = chipTimeStyle();
   return (
@@ -543,7 +551,11 @@ export default function SundaySweep({ onClose }: SundaySweepProps) {
   const [remiColor]         = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
 
   function handleDone() {
-    localStorage.setItem("lastSweepDate", todayISO());
+    fetch(`${JARVIS_URL}/sweep-date`, {
+      method: "POST",
+      headers: { ...AUTH_HDR, "Content-Type": "application/json" },
+      body: JSON.stringify({ date: todayISO() }),
+    }).catch(() => {});
     onClose();
   }
 

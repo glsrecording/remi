@@ -48,6 +48,12 @@ export interface ChatMessage {
   timestamp: string;
   isVoice?: boolean;
   pages?: Array<{ title: string; url: string | null }>;
+  card?: {
+    type: "task_done";
+    task_name: string;
+    notion_url: string;
+    show_undo: boolean;
+  };
 }
 
 /** Parse "mix note for [song] — [note body]" from a user message. Returns null if not a mix-note command. */

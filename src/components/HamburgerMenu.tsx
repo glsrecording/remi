@@ -1,12 +1,12 @@
 import { useLocation } from "wouter";
-import { X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, Terminal, Shuffle, Radio, BookOpen, RotateCcw, CalendarClock, ClipboardCheck, ShoppingCart } from "lucide-react";
+import { X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, Terminal, Shuffle, Radio, BookOpen, RefreshCw, CalendarClock, ClipboardCheck, ShoppingCart } from "lucide-react";
 import { useEffect } from "react";
 import { useTheme } from "@/hooks/use-theme";
 
 interface HamburgerMenuProps {
   open: boolean;
   onClose: () => void;
-  onClearSession?: () => void;
+  onRefreshContext?: () => void;
   onWeeklyReview?: () => void;
 }
 
@@ -26,7 +26,7 @@ const menuItems = [
   { label: "Commands", icon: Terminal, path: "/commands" },
 ];
 
-export default function HamburgerMenu({ open, onClose, onClearSession, onWeeklyReview }: HamburgerMenuProps) {
+export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeeklyReview }: HamburgerMenuProps) {
   const [location, navigate] = useLocation();
   const { isLight, toggleTheme } = useTheme();
 
@@ -122,17 +122,17 @@ export default function HamburgerMenu({ open, onClose, onClearSession, onWeeklyR
           })}
         </nav>
 
-        {/* Clear session */}
-        {onClearSession && (
+        {/* Refresh daily context */}
+        {onRefreshContext && (
           <div className="px-3 pb-2 border-t border-white/5 pt-2">
             <button
               className="w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-150 text-left"
-              style={{ color: "rgba(239,68,68,0.7)" }}
-              onClick={() => { onClearSession(); onClose(); }}
-              data-testid="button-clear-session"
+              style={{ color: "var(--t-text5)" }}
+              onClick={() => { onRefreshContext(); onClose(); }}
+              data-testid="button-refresh-context"
             >
-              <RotateCcw size={16} className="shrink-0" style={{ color: "rgba(239,68,68,0.5)" }} />
-              <span className="text-sm font-medium tracking-wide">Reset Jarvis context</span>
+              <RefreshCw size={16} className="shrink-0" style={{ color: "var(--t-text6)" }} />
+              <span className="text-sm font-medium tracking-wide">Refresh Daily Context</span>
             </button>
           </div>
         )}

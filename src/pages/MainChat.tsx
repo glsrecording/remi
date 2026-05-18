@@ -10,6 +10,7 @@ import {
   Loader2,
   Volume2,
   VolumeX,
+  ExternalLink,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -17,6 +18,7 @@ import HamburgerMenu from "@/components/HamburgerMenu";
 import UndoBar from "@/components/UndoBar";
 import SundaySweep, { SundaySweepChip } from "@/components/SundaySweep";
 import { useLocalStorage } from "@/hooks/use-local-storage";
+import { useToast } from "@/hooks/use-toast";
 import {
   STORAGE_KEYS,
   ChatMessage,
@@ -541,6 +543,7 @@ export default function MainChat() {
 
   const [menuOpen,  setMenuOpen]  = useState(false);
   const [sweepOpen, setSweepOpen] = useState(false);
+  const { toast } = useToast();
   const [openPicker, setOpenPicker] = useState<"user" | "remi" | null>(null);
   const [systemOnline] = useState(true);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -692,13 +695,17 @@ export default function MainChat() {
       const match = findBestMatch(text.trim(), 0.3);
       if (match) recordRecentCommand(match.command.trigger);
       setIsJarvisLoading(true);
+      const history = messages.slice(-8).map((m) => ({
+        role: m.role === "ai" ? "assistant" : "user",
+        content: m.text,
+      }));
       fetch(`${JARVIS_URL}/remi`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${REMI_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: text.trim(), user_id: "remi" }),
+        body: JSON.stringify({ message: text.trim(), user_id: "remi", history }),
       })
         .then((r) => r.json())
         .then((data) => {
@@ -728,9 +735,13 @@ export default function MainChat() {
               ...(Array.isArray(data.pages) && data.pages.length > 0
                 ? { pages: data.pages as Array<{ title: string; url: string | null }> }
                 : {}),
+              ...(data.card ? { card: data.card } : {}),
             },
           ]);
-          speakResponse(_aiText);
+          const _ttsText = data.card?.type === "task_done"
+            ? `Done — ${data.card.task_name}.`
+            : _aiText;
+          speakResponse(_ttsText);
         })
         .catch(() => {
           setIsJarvisLoading(false);
@@ -748,7 +759,7 @@ export default function MainChat() {
           ]);
         });
     },
-    [setMessages, recordRecentCommand, navigate, speakResponse],
+    [messages, setMessages, recordRecentCommand, navigate, speakResponse],
   );
 
   // ─── Mic: 150ms hold-to-record ───────────────────────────────────────────
@@ -1181,6 +1192,33 @@ export default function MainChat() {
                       )}
                     </div>
                   )}
+                  {msg.card?.type === "task_done" && (
+                    <div style={{ marginTop: "10px", padding: "10px 12px", borderRadius: "10px", background: "rgba(20,184,166,0.07)", border: "1px solid rgba(20,184,166,0.2)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "9px" }}>
+                        <span style={{ color: "#22c55e", fontSize: "1em", lineHeight: 1 }}>✓</span>
+                        <span style={{ color: "var(--t-text2)", fontSize: "0.85em", fontWeight: 500, lineHeight: 1.3 }}>{msg.card.task_name}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <a
+                          href={msg.card.notion_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "6px", background: "rgba(20,184,166,0.12)", border: "1px solid rgba(20,184,166,0.25)", color: "#14b8a6", fontSize: "0.78em", textDecoration: "none", lineHeight: 1 }}
+                        >
+                          <ExternalLink size={11} />
+                          View in Notion
+                        </a>
+                        {msg.card.show_undo && (
+                          <button
+                            onClick={() => sendMessage("undo that")}
+                            style={{ padding: "4px 10px", borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "var(--t-text5)", fontSize: "0.78em", cursor: "pointer", lineHeight: 1 }}
+                          >
+                            Undo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <p>{msg.text}</p>
@@ -1362,12 +1400,14 @@ export default function MainChat() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         onWeeklyReview={() => setSweepOpen(true)}
-        onClearSession={() => {
-          fetch(`${JARVIS_URL}/remi/reset`, {
+        onRefreshContext={() => {
+          fetch(`${JARVIS_URL}/refresh-context`, {
             method: "POST",
             headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ user_id: "remi" }),
-          }).catch(() => {});
+          })
+            .then((r) => r.json())
+            .then(() => toast({ description: "Context refreshed", duration: 2500 }))
+            .catch(() => toast({ description: "Context refresh failed", duration: 2500 }));
         }}
       />
       {sweepOpen && <SundaySweep onClose={() => setSweepOpen(false)} />}
