@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, Sun, RefreshCw, Calendar, CheckSquare, CreditCard, Sparkles, Mail } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
@@ -38,20 +38,15 @@ export default function MorningBriefing() {
   const scrollRef = useRef<HTMLDivElement>(null);
   useGutterScroll(scrollRef);
   const [loading, setLoading]         = useState(false);
-  const [data, setData]               = useState<BriefingData | null>(null);
-  const [error, setError]             = useState<string | null>(null);
-
-  useEffect(() => {
+  const [data, setData]               = useState<BriefingData | null>(() => {
     const cachedDate = localStorage.getItem(CACHE_KEY_DATE);
     const cachedData = localStorage.getItem(CACHE_KEY_DATA);
     if (cachedDate === todayDateStr() && cachedData) {
-      try {
-        setData(JSON.parse(cachedData));
-      } catch {
-        // corrupt cache — fall through to manual request
-      }
+      try { return JSON.parse(cachedData); } catch {}
     }
-  }, []);
+    return null;
+  });
+  const [error, setError]             = useState<string | null>(null);
 
   const handleRequest = () => {
     setLoading(true);
