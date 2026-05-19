@@ -237,11 +237,20 @@ export default function Scheduler() {
                                 : "1px solid var(--t-border)",
                               transition: "border-color 0.15s",
                             }}
-                            onClick={(e) => { e.stopPropagation(); handleCardTap(task.id); }}
+                            onClick={(e) => { e.stopPropagation(); window.open(`https://notion.so/${task.id.replace(/-/g, "")}`, "_blank"); }}
                           >
                             {/* Card main row */}
                             <div className="flex items-start gap-2 px-3 py-3">
-                              <p className="flex-1 text-sm leading-snug" style={{ color: "var(--t-text2)" }}>
+                              <p
+                                className="flex-1 text-sm leading-snug"
+                                style={{
+                                  color: "var(--t-text2)",
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
+                              >
                                 {task.title}
                               </p>
                               {task.life_area && (
