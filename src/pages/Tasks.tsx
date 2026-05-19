@@ -832,7 +832,7 @@ export default function Tasks() {
     setUndoState((s) => (s?.task.id === task.id && s.action === action ? null : s));
   }, [undoState]);
 
-  const totalCount = Object.values(buckets).reduce((n, a) => n + a.length, 0);
+  const totalCount = buckets.today.length + buckets.tonight.length + buckets.tomorrow.length;
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg-deep)" }}>

@@ -68,12 +68,13 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
           className="flex items-center justify-between px-6 py-5 border-b border-white/5"
           style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 20px)" }}
         >
-          <span
-            className="text-xl font-bold tracking-tight"
+          <button
+            className="text-xl font-bold tracking-tight text-left"
             style={{ fontFamily: "'Space Mono', monospace", color: "#f59e0b" }}
+            onClick={() => { navigate("/"); onClose(); }}
           >
             Remi
-          </span>
+          </button>
           <div className="flex items-center gap-1">
             {/* Light/dark toggle */}
             <button

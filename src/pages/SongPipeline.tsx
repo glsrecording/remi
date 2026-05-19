@@ -12,6 +12,13 @@ const STATUS_CHIPS = [
   "Mastering", "Stems", "Proofing", "Active", "Waiting", "Outsource", "Archive",
 ];
 
+const PRIORITY_CHIPS: { label: string; color: string }[] = [
+  { label: "P1",   color: "#4ade80" },
+  { label: "P2",   color: "#c084fc" },
+  { label: "P3",   color: "#60a5fa" },
+  { label: "Warm", color: "#94a3b8" },
+];
+
 // These groups only show songs that have a next_action value
 const FILTER_NEXT_ACTION = new Set(["Active", "PrePro"]);
 
@@ -20,6 +27,7 @@ interface Song {
   artist: string;
   song: string;
   status: string;
+  priority: string;
   next_action: string;
   notion_url: string;
 }
@@ -52,10 +60,11 @@ async function fetchPipeline(): Promise<Group[]> {
     .filter(g => g.songs.length > 0);
 }
 
-async function patchSong(pageId: string, status: string | undefined, nextAction: string | undefined) {
+async function patchSong(pageId: string, status: string | undefined, nextAction: string | undefined, priority?: string) {
   const body: Record<string, string> = {};
   if (status !== undefined) body.status = status;
   if (nextAction !== undefined) body.next_action = nextAction;
+  if (priority !== undefined) body.priority = priority;
   const res = await fetch(`${JARVIS_URL}/song/${encodeURIComponent(pageId)}`, {
     method: "PATCH",
     headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
@@ -77,8 +86,9 @@ function EditSheet({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [selectedStatus, setSelectedStatus] = useState(song.status);
-  const [nextAction, setNextAction]         = useState(song.next_action);
+  const [selectedStatus, setSelectedStatus]     = useState(song.status);
+  const [selectedPriority, setSelectedPriority] = useState(song.priority);
+  const [nextAction, setNextAction]             = useState(song.next_action);
   const [saving, setSaving]                 = useState(false);
   const [saveError, setSaveError]           = useState<string | null>(null);
   const [isRecording, setIsRecording]       = useState(false);
@@ -142,7 +152,7 @@ function EditSheet({
     setSaving(true);
     setSaveError(null);
     try {
-      await patchSong(song.id, selectedStatus, nextAction);
+      await patchSong(song.id, selectedStatus, nextAction, selectedPriority || undefined);
       onSaved();
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Save failed");
@@ -174,6 +184,30 @@ function EditSheet({
           >
             <X size={16} />
           </button>
+        </div>
+
+        {/* Priority chips */}
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>
+          Priority
+        </p>
+        <div className="flex gap-2 mb-5">
+          {PRIORITY_CHIPS.map(chip => {
+            const sel = selectedPriority === chip.label;
+            return (
+              <button
+                key={chip.label}
+                onClick={() => setSelectedPriority(chip.label)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: sel ? chip.color + "22" : "var(--t-card)",
+                  color:      sel ? chip.color        : "var(--t-text4)",
+                  border:     sel ? `1.5px solid ${chip.color}60` : "1.5px solid var(--t-border-md)",
+                }}
+              >
+                {chip.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Status chips */}

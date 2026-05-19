@@ -1,4 +1,5 @@
-import { Menu, Moon, Sun } from "lucide-react";
+import { Menu, Moon, Sun, ArrowLeft } from "lucide-react";
+import { useLocation } from "wouter";
 import { useTheme } from "@/hooks/use-theme";
 
 interface PageHeaderProps {
@@ -9,6 +10,7 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, color, onMenu, right }: PageHeaderProps) {
+  const [, navigate] = useLocation();
   const { isLight, toggleTheme } = useTheme();
 
   return (
@@ -27,6 +29,14 @@ export function PageHeader({ title, color, onMenu, right }: PageHeaderProps) {
         data-testid="button-menu"
       >
         <Menu size={20} />
+      </button>
+      <button
+        className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+        style={{ color: "var(--t-text5)" }}
+        onClick={() => navigate("/")}
+        data-testid="button-back"
+      >
+        <ArrowLeft size={20} />
       </button>
       <span
         className="text-base font-bold tracking-tight flex-1"
