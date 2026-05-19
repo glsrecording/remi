@@ -28,6 +28,73 @@ interface ViewGroup {
   notes: ViewNote[];
 }
 
+function SwipeableNote({
+  note,
+  accent,
+  onDismiss,
+}: {
+  note: ViewNote;
+  accent: string;
+  onDismiss: (id: string) => void;
+}) {
+  const [dx, setDx] = useState(0);
+  const [animating, setAnimating] = useState(false);
+  const startX = useRef(0);
+  const dragging = useRef(false);
+
+  function onDown(e: React.PointerEvent) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    startX.current = e.clientX;
+    dragging.current = true;
+    setAnimating(false);
+  }
+
+  function onMove(e: React.PointerEvent) {
+    if (!dragging.current) return;
+    setDx(Math.max(0, e.clientX - startX.current));
+  }
+
+  function onUp() {
+    if (!dragging.current) return;
+    dragging.current = false;
+    setAnimating(true);
+    if (dx > 80) {
+      setDx(window.innerWidth);
+      onDismiss(note.id);
+    } else {
+      setDx(0);
+    }
+  }
+
+  function onCancel() {
+    dragging.current = false;
+    setAnimating(true);
+    setDx(0);
+  }
+
+  return (
+    <div
+      className="px-4 py-3 rounded-xl"
+      style={{
+        background: "var(--t-card)",
+        border: `1px solid ${dx > 30 ? accent + "60" : "var(--t-border)"}`,
+        touchAction: "pan-y",
+        userSelect: "none",
+        transform: `translateX(${dx}px)`,
+        transition: animating ? "transform 0.25s ease, opacity 0.25s ease" : "none",
+        opacity: 1 - Math.min(dx / 180, 0.6),
+      }}
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+      onPointerCancel={onCancel}
+    >
+      <p className="text-sm leading-snug" style={{ color: "var(--t-text)" }}>{note.note}</p>
+      <p className="text-xs mt-1.5" style={{ color: "var(--t-text6)" }}>{fmtDateTime(note.created_time)}</p>
+    </div>
+  );
+}
+
 function fmtDateTime(iso: string): string {
   if (!iso) return "";
   try {
@@ -65,6 +132,23 @@ export default function MixNotes() {
   const [pulling,     setPulling]     = useState(false);
   const touchStartY = useRef(0);
   const isAtTop     = useRef(true);
+
+  function handleDismissNote(noteId: string) {
+    // Fire archive API immediately (no await — fire and forget)
+    fetch(`${JARVIS_URL}/scheduler/update`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ id: noteId, action: "done" }),
+    }).catch(() => {/* no recovery — note is already dismissed in UI */});
+    // Delay UI removal to let the slide-out animation finish
+    setTimeout(() => {
+      setViewGroups((prev) =>
+        prev
+          .map((g) => ({ ...g, notes: g.notes.filter((n) => n.id !== noteId) }))
+          .filter((g) => g.notes.length > 0)
+      );
+    }, 270);
+  }
 
   const loadViewNotes = useCallback(async () => {
     setViewLoading(true);
@@ -414,14 +498,12 @@ export default function MixNotes() {
 
               <div className="space-y-1.5">
                 {group.notes.map((n) => (
-                  <div
+                  <SwipeableNote
                     key={n.id}
-                    className="px-4 py-3 rounded-xl"
-                    style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}
-                  >
-                    <p className="text-sm leading-snug" style={{ color: "var(--t-text)" }}>{n.note}</p>
-                    <p className="text-xs mt-1.5" style={{ color: "var(--t-text6)" }}>{fmtDateTime(n.created_time)}</p>
-                  </div>
+                    note={n}
+                    accent={ACCENT}
+                    onDismiss={handleDismissNote}
+                  />
                 ))}
               </div>
             </div>
