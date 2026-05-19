@@ -340,7 +340,7 @@ function SongCard({
           <span className="text-xs font-medium tracking-wide shrink-0" style={{ color: priorityColor(song.priority) }}>
             {song.artist}
           </span>
-          <span className="text-sm font-semibold leading-snug min-w-0" style={{ color: STATUS_COLORS[song.status] ?? "var(--t-text)" }}>
+          <span className="text-sm font-semibold leading-snug min-w-0" style={{ color: priorityColor(song.priority) }}>
             {song.song}
           </span>
         </div>
