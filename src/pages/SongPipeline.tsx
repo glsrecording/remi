@@ -35,11 +35,18 @@ const STATUS_COLORS: Record<string, string> = {
   Active:    "#14b8a6",
 };
 
-function priorityColor(priority: string): string {
-  if (priority === "P1") return "#4ade80";
-  if (priority === "P2") return "#c084fc";
-  if (priority === "P3") return "#60a5fa";
-  return "#94a3b8";
+function priorityArtistColor(priority: string): string {
+  if (priority === "P1") return "#22c55e";
+  if (priority === "P2") return "#a855f7";
+  if (priority === "P3") return "#3b82f6";
+  return "#6b7280";
+}
+
+function priorityTitleColor(priority: string): string {
+  if (priority === "P1") return "#a855f7";
+  if (priority === "P2") return "#3b82f6";
+  if (priority === "P3") return "#6b7280";
+  return "#9ca3af";
 }
 
 // These groups only show songs that have a next_action value
@@ -337,10 +344,10 @@ function SongCard({
         }}
       >
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-xs font-medium tracking-wide shrink-0" style={{ color: priorityColor(song.priority) }}>
+          <span className="text-xs font-medium tracking-wide shrink-0" style={{ color: priorityArtistColor(song.priority) }}>
             {song.artist}
           </span>
-          <span className="text-sm font-semibold leading-snug min-w-0" style={{ color: priorityColor(song.priority) }}>
+          <span className="text-sm font-semibold leading-snug min-w-0" style={{ color: priorityTitleColor(song.priority) }}>
             {song.song}
           </span>
         </div>
