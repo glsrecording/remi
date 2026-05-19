@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
 import {
   RefreshCw, Loader2, ChevronDown, ChevronRight,
-  Plus, Mic, MicOff, Check, X,
+  Plus, Mic, MicOff, Check, X, GripVertical,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
@@ -17,6 +17,7 @@ interface Task {
   id: string;
   title: string;
   url: string;
+  sort_order?: number | null;
 }
 
 interface TaskBuckets {
@@ -28,6 +29,8 @@ interface TaskBuckets {
 
 type Bucket = keyof TaskBuckets;
 type SwipeAction = Bucket | "done";
+
+const DRAGGABLE_BUCKETS = new Set<Bucket>(["today", "tonight", "tomorrow"]);
 
 const BUCKET_META: Record<Bucket, { label: string; emoji: string; color: string }> = {
   today:    { label: "Today",    emoji: "⚡", color: "#f59e0b" },
@@ -75,6 +78,14 @@ async function applyTaskAction(pageId: string, action: SwipeAction): Promise<voi
   }).catch((err) => {
     console.error("[Remi] /tasks/move network error:", err);
   });
+}
+
+async function patchTaskReorder(pageId: string, sortOrder: number): Promise<void> {
+  await fetch(`${JARVIS_URL}/task/${encodeURIComponent(pageId)}/reorder`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ sort_order: sortOrder }),
+  }).catch(() => {});
 }
 
 async function fetchTasks(priorityOnly = false): Promise<TaskBuckets> {
@@ -631,16 +642,50 @@ function BucketSection({
   defaultOpen,
   onMoved,
   onTaskAdded,
+  onReordered,
 }: {
   bucket: Bucket;
   tasks: Task[];
   defaultOpen: boolean;
   onMoved: (task: Task, fromBucket: Bucket, action: SwipeAction) => void;
   onTaskAdded: (title: string) => void;
+  onReordered: (bucket: Bucket, newOrder: Task[]) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [adding, setAdding] = useState(false);
   const meta = BUCKET_META[bucket];
+  const isDraggable = DRAGGABLE_BUCKETS.has(bucket);
+
+  const [localTasks, setLocalTasks] = useState<Task[]>(tasks);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const cardEls = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Sync from parent only when not mid-drag
+  useEffect(() => {
+    if (dragIdx === null) setLocalTasks(tasks);
+  }, [tasks, dragIdx]);
+
+  function calcOverIdx(y: number): number {
+    let next = localTasks.length;
+    for (let j = 0; j < cardEls.current.length; j++) {
+      const el = cardEls.current[j];
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (y < rect.top + rect.height / 2) { next = j; break; }
+    }
+    return next;
+  }
+
+  function commitDrag(fromIdx: number, toIdx: number) {
+    const newTasks = [...localTasks];
+    const [moved] = newTasks.splice(fromIdx, 1);
+    const insertAt = Math.max(0, Math.min(toIdx > fromIdx ? toIdx - 1 : toIdx, newTasks.length));
+    newTasks.splice(insertAt, 0, moved);
+    newTasks.forEach((t, i) => patchTaskReorder(t.id, (i + 1) * 1000));
+    setLocalTasks(newTasks);
+    onReordered(bucket, newTasks);
+  }
 
   function handleAddClick(e: React.MouseEvent) {
     e.stopPropagation();
@@ -650,9 +695,8 @@ function BucketSection({
 
   return (
     <div className="space-y-2">
-      {/* Header row — div so we can nest buttons */}
+      {/* Header row */}
       <div className="w-full flex items-center gap-2 py-1">
-        {/* Collapse trigger covers emoji + label */}
         <div
           className="flex items-center gap-2 flex-1 cursor-pointer"
           onClick={() => setOpen((o) => !o)}
@@ -668,15 +712,13 @@ function BucketSection({
           </span>
         </div>
 
-        {/* Count badge */}
         <span
           className="text-xs font-mono px-2 py-0.5 rounded-full"
           style={{ background: meta.color + "20", color: meta.color }}
         >
-          {tasks.length}
+          {localTasks.length}
         </span>
 
-        {/* Add button */}
         <button
           className="w-6 h-6 rounded-md flex items-center justify-center transition-all active:scale-90"
           style={{ background: meta.color + "18", color: meta.color }}
@@ -686,7 +728,6 @@ function BucketSection({
           <Plus size={12} />
         </button>
 
-        {/* Chevron */}
         <div
           className="cursor-pointer p-0.5"
           onClick={() => setOpen((o) => !o)}
@@ -709,17 +750,81 @@ function BucketSection({
               onSubmitted={(title) => { setAdding(false); onTaskAdded(title); }}
             />
           )}
-          {tasks.length === 0 && !adding && (
+          {localTasks.length === 0 && !adding && (
             <p className="text-xs text-white/25 pl-2">Nothing here.</p>
           )}
-          {tasks.map((task) => (
-            <SwipeableCard
-              key={task.id}
-              task={task}
-              sourceBucket={bucket}
-              onMoved={(t, action) => onMoved(t, bucket, action)}
-            />
+          {localTasks.map((task, i) => (
+            <div key={task.id}>
+              {/* Drop indicator above this slot */}
+              {isDraggable && dragIdx !== null && overIdx === i && dragIdx !== i && (
+                <div
+                  className="rounded-full mb-1"
+                  style={{ height: 2, background: meta.color }}
+                />
+              )}
+              <div
+                ref={el => { cardEls.current[i] = el; }}
+                className="flex items-stretch"
+                style={{ opacity: dragIdx === i ? 0.4 : 1 }}
+              >
+                {/* Drag handle */}
+                {isDraggable && (
+                  <div
+                    className="flex items-center justify-center w-6 shrink-0"
+                    style={{
+                      touchAction: "none",
+                      color: dragIdx === i ? meta.color : "var(--t-text6)",
+                      cursor: dragIdx === i ? "grabbing" : "grab",
+                    }}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                      setDragIdx(i);
+                      setOverIdx(calcOverIdx(e.clientY));
+                    }}
+                    onPointerMove={(e) => {
+                      if (dragIdx !== i) return;
+                      setOverIdx(calcOverIdx(e.clientY));
+                    }}
+                    onPointerUp={() => {
+                      if (dragIdx === null || overIdx === null) {
+                        setDragIdx(null); setOverIdx(null); return;
+                      }
+                      const from = dragIdx, to = overIdx;
+                      setDragIdx(null); setOverIdx(null);
+                      if (from !== to && from !== to - 1) commitDrag(from, to);
+                    }}
+                    onPointerCancel={() => { setDragIdx(null); setOverIdx(null); }}
+                  >
+                    <GripVertical size={14} />
+                  </div>
+                )}
+                {/* Card */}
+                <div
+                  className="flex-1 min-w-0"
+                  style={{
+                    transform: dragIdx === i ? "scale(1.01)" : "none",
+                    boxShadow: dragIdx === i ? "0 6px 20px rgba(0,0,0,0.5)" : "none",
+                    transition: dragIdx !== i ? "transform 0.15s, box-shadow 0.15s" : "none",
+                  }}
+                >
+                  <SwipeableCard
+                    task={task}
+                    sourceBucket={bucket}
+                    onMoved={(t, action) => onMoved(t, bucket, action)}
+                  />
+                </div>
+              </div>
+            </div>
           ))}
+          {/* Drop indicator after last card */}
+          {isDraggable && dragIdx !== null && overIdx === localTasks.length && (
+            <div
+              className="rounded-full"
+              style={{ height: 2, background: meta.color }}
+            />
+          )}
         </div>
       )}
     </div>
@@ -819,6 +924,14 @@ export default function Tasks() {
     setUndoState({ task, fromBucket, action });
   }, []);
 
+  const handleReordered = useCallback((bucket: Bucket, newTasks: Task[]) => {
+    setBuckets(prev => {
+      const updated = { ...prev, [bucket]: newTasks };
+      saveCache(updated);
+      return updated;
+    });
+  }, []);
+
   const handleDismissUndo = useCallback(() => setUndoState(null), []);
 
   const handleUndo = useCallback(() => {
@@ -911,6 +1024,7 @@ export default function Tasks() {
                 defaultOpen={b === "today" || b === "tonight"}
                 onMoved={handleMoved}
                 onTaskAdded={(title) => handleTaskAdded(title, b)}
+                onReordered={handleReordered}
               />
             ))}
           </div>
