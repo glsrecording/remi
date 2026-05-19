@@ -40,6 +40,7 @@ function fmt(secs: number): string {
 }
 
 export default function Session() {
+  const [, navigate] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const { isLight, toggleTheme } = useTheme();
   const [session, setSession] = useState<SessionState>({ active: false });
