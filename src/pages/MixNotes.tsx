@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { Mic, MicOff } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Mic, MicOff, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import { useLocalStorage } from "@/hooks/use-local-storage";
@@ -16,11 +16,34 @@ interface SessionNote {
   timestamp: string;
 }
 
+interface ViewNote {
+  id: string;
+  note: string;
+  created_time: string;
+}
+
+interface ViewGroup {
+  artist: string;
+  song: string;
+  notes: ViewNote[];
+}
+
+function fmtDateTime(iso: string): string {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    return `${date} · ${time}`;
+  } catch { return iso.slice(0, 10); }
+}
+
 export default function MixNotes() {
   const [ACCENT] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mode, setMode] = useState<"new" | "view">("new");
 
-  // Pre-fill from deep link (MainChat navigation)
+  // ── New Note state ──────────────────────────────────────────────────────────
   const [artist, setArtist] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem("mix_notes_prefill") || "{}").artist || ""; }
     catch { return ""; }
@@ -32,19 +55,48 @@ export default function MixNotes() {
 
   useEffect(() => { sessionStorage.removeItem("mix_notes_prefill"); }, []);
 
-  const [sessionNotes, setSessionNotes] = useState<SessionNote[]>([]);
+  const [sessionNotes, setSessionNotes]     = useState<SessionNote[]>([]);
   const [recordingError, setRecordingError] = useState<string | null>(null);
 
-  // Mic state — identical pattern to MainChat.tsx
+  // ── View Notes state ────────────────────────────────────────────────────────
+  const [viewGroups,  setViewGroups]  = useState<ViewGroup[]>([]);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewError,   setViewError]   = useState<string | null>(null);
+  const [pulling,     setPulling]     = useState(false);
+  const touchStartY = useRef(0);
+  const isAtTop     = useRef(true);
+
+  const loadViewNotes = useCallback(async () => {
+    setViewLoading(true);
+    setViewError(null);
+    try {
+      const r = await fetch(`${JARVIS_URL}/mix_notes`, {
+        headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+      });
+      if (!r.ok) throw new Error(`${r.status}`);
+      const data = await r.json();
+      setViewGroups(data.groups ?? []);
+    } catch (e) {
+      setViewError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setViewLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (mode === "view") loadViewNotes();
+  }, [mode, loadViewNotes]);
+
+  // ── Mic state ───────────────────────────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
+  const [isLocked, setIsLocked]       = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const holdActiveRef = useRef(false);
+  const audioChunksRef   = useRef<Blob[]>([]);
+  const streamRef        = useRef<MediaStream | null>(null);
+  const holdTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdActiveRef    = useRef(false);
   const pointerStartYRef = useRef<number>(0);
-  const micStartTimeRef = useRef<number>(0);
+  const micStartTimeRef  = useRef<number>(0);
 
   async function postMixNote(noteText: string) {
     const ts = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -88,7 +140,6 @@ export default function MixNotes() {
           setIsRecording(false);
           setIsLocked(false);
           if (Date.now() - micStartTimeRef.current < 500) { audioChunksRef.current = []; return; }
-          // 800ms flush: Safari delivers dataavailable after onstop.
           setTimeout(async () => {
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
             audioChunksRef.current = [];
@@ -155,108 +206,228 @@ export default function MixNotes() {
     }
   }
 
+  async function handlePullEnd(e: React.TouchEvent) {
+    if (!isAtTop.current || viewLoading || pulling) return;
+    const delta = e.changedTouches[0].clientY - touchStartY.current;
+    if (delta > 70) {
+      setPulling(true);
+      await loadViewNotes();
+      setPulling(false);
+    }
+  }
+
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <PageHeader title="Mix Notes" color={ACCENT} onMenu={() => setMenuOpen(true)} />
 
-      {/* Artist / Song inputs */}
-      <div className="px-4 py-3 border-b border-white/5 shrink-0">
-        <div className="flex gap-2">
-          <input
-            value={artist}
-            onChange={(e) => setArtist(e.target.value)}
-            placeholder="Artist"
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
-          />
-          <input
-            value={song}
-            onChange={(e) => setSong(e.target.value)}
-            placeholder="Song"
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
-          />
+      {/* Mode toggle */}
+      <div className="px-4 py-2.5 border-b shrink-0" style={{ borderColor: "var(--t-border)" }}>
+        <div
+          className="flex p-0.5 rounded-xl"
+          style={{ background: "var(--t-card)", border: "1px solid var(--t-border-md)" }}
+        >
+          {(["New Note", "View Notes"] as const).map((label) => {
+            const isActive = label === "New Note" ? mode === "new" : mode === "view";
+            return (
+              <button
+                key={label}
+                className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={{
+                  background: isActive ? ACCENT + "22" : "transparent",
+                  color:      isActive ? ACCENT : "var(--t-text5)",
+                  border:     isActive ? `1px solid ${ACCENT}50` : "1px solid transparent",
+                }}
+                onClick={() => setMode(label === "New Note" ? "new" : "view")}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Session note history */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2" style={{ paddingBottom: "120px" }}>
-        {sessionNotes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 gap-2">
-            <p className="text-sm text-white/30">Hold mic to capture a note</p>
-            <p className="text-xs text-white/20">Notes go straight to Notion</p>
-          </div>
-        ) : (
-          sessionNotes.map((n) => (
-            <div key={n.id} className="px-4 py-3 rounded-xl border border-white/8" style={{ background: "var(--t-card)" }}>
-              <p className="text-sm text-white/85 leading-snug">{n.note}</p>
-              <p className="text-xs text-white/25 mt-1">
-                {n.timestamp}
-                {(n.artist || n.song) && " · "}
-                {n.artist}{n.artist && n.song ? " / " : ""}{n.song}
-              </p>
+      {/* ── NEW NOTE mode ───────────────────────────────────────────────────── */}
+      {mode === "new" && (
+        <>
+          <div className="px-4 py-3 border-b border-white/5 shrink-0">
+            <div className="flex gap-2">
+              <input
+                value={artist}
+                onChange={(e) => setArtist(e.target.value)}
+                placeholder="Artist"
+                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+              />
+              <input
+                value={song}
+                onChange={(e) => setSong(e.target.value)}
+                placeholder="Song"
+                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+              />
             </div>
-          ))
-        )}
-      </div>
-
-      {/* Fixed bottom bar */}
-      <div
-        style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--t-surface)", zIndex: 10, padding: "12px 16px 48px" }}
-      >
-        {recordingError && (
-          <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
-        )}
-
-        {/* Lock bar */}
-        {isLocked && (
-          <div className="flex items-center justify-between mb-2 px-1">
-            <button
-              type="button"
-              onClick={handleCancelLocked}
-              className="text-xs px-3 py-1.5 rounded-lg"
-              style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}
-            >
-              ✕ Cancel
-            </button>
-            <span className="text-xs" style={{ color: "#ef4444" }}>🔒 Recording</span>
-            <button
-              type="button"
-              onClick={handleSendLocked}
-              className="text-xs px-3 py-1.5 rounded-lg"
-              style={{ background: "#22c55e20", border: "1px solid #22c55e40", color: "#22c55e" }}
-            >
-              Send ↑
-            </button>
           </div>
-        )}
 
-        {isRecording && !isLocked && (
-          <div className="flex items-center justify-center gap-2 mb-2 h-5">
-            <span className="text-xs" style={{ color: "#ef4444" }}>Recording…</span>
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2" style={{ paddingBottom: "120px" }}>
+            {sessionNotes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-40 gap-2">
+                <p className="text-sm text-white/30">Hold mic to capture a note</p>
+                <p className="text-xs text-white/20">Notes go straight to Notion</p>
+              </div>
+            ) : (
+              sessionNotes.map((n) => (
+                <div key={n.id} className="px-4 py-3 rounded-xl border border-white/8" style={{ background: "var(--t-card)" }}>
+                  <p className="text-sm text-white/85 leading-snug">{n.note}</p>
+                  <p className="text-xs text-white/25 mt-1">
+                    {n.timestamp}
+                    {(n.artist || n.song) && " · "}
+                    {n.artist}{n.artist && n.song ? " / " : ""}{n.song}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
-        )}
 
-        <div className="flex justify-end">
-          <button
-            type="button"
-            className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-150"
-            style={{
-              background: isRecording ? "#ef444422" : "#f59e0b14",
-              border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
-              marginRight: "20px",
-              touchAction: "none",
-            }}
-            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); pointerStartYRef.current = e.clientY; handleMicDown(); }}
-            onPointerMove={(e) => { if (!isRecording || isLocked) return; if (pointerStartYRef.current - e.clientY > 60) setIsLocked(true); }}
-            onPointerUp={handleMicUp}
-            onPointerLeave={handleMicUp}
-          >
-            {isRecording
-              ? <MicOff size={16} style={{ color: "#ef4444" }} />
-              : <Mic size={16} style={{ color: "#f59e0b" }} />}
-          </button>
+          {/* Fixed bottom mic bar */}
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--t-surface)", zIndex: 10, padding: "12px 16px 48px" }}>
+            {recordingError && (
+              <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
+            )}
+            {isLocked && (
+              <div className="flex items-center justify-between mb-2 px-1">
+                <button type="button" onClick={handleCancelLocked} className="text-xs px-3 py-1.5 rounded-lg"
+                  style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}>
+                  ✕ Cancel
+                </button>
+                <span className="text-xs" style={{ color: "#ef4444" }}>🔒 Recording</span>
+                <button type="button" onClick={handleSendLocked} className="text-xs px-3 py-1.5 rounded-lg"
+                  style={{ background: "#22c55e20", border: "1px solid #22c55e40", color: "#22c55e" }}>
+                  Send ↑
+                </button>
+              </div>
+            )}
+            {isRecording && !isLocked && (
+              <div className="flex items-center justify-center gap-2 mb-2 h-5">
+                <span className="text-xs" style={{ color: "#ef4444" }}>Recording…</span>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-150"
+                style={{
+                  background: isRecording ? "#ef444422" : "#f59e0b14",
+                  border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+                  marginRight: "20px",
+                  touchAction: "none",
+                }}
+                onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); pointerStartYRef.current = e.clientY; handleMicDown(); }}
+                onPointerMove={(e) => { if (!isRecording || isLocked) return; if (pointerStartYRef.current - e.clientY > 60) setIsLocked(true); }}
+                onPointerUp={handleMicUp}
+                onPointerLeave={handleMicUp}
+              >
+                {isRecording
+                  ? <MicOff size={16} style={{ color: "#ef4444" }} />
+                  : <Mic size={16} style={{ color: "#f59e0b" }} />}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── VIEW NOTES mode ─────────────────────────────────────────────────── */}
+      {mode === "view" && (
+        <div
+          className="flex-1 overflow-y-auto px-4 py-4 space-y-6"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}
+          onScroll={(e) => { isAtTop.current = e.currentTarget.scrollTop === 0; }}
+          onTouchStart={(e) => { touchStartY.current = e.touches[0].clientY; }}
+          onTouchEnd={handlePullEnd}
+        >
+          {pulling && (
+            <div className="flex items-center justify-center gap-2 py-2">
+              <Loader2 size={14} className="animate-spin" style={{ color: ACCENT }} />
+              <span className="text-xs" style={{ color: "var(--t-text6)" }}>Refreshing…</span>
+            </div>
+          )}
+
+          {viewLoading && !pulling && (
+            <div className="flex items-center justify-center gap-2 py-16">
+              <Loader2 size={18} className="animate-spin" style={{ color: ACCENT }} />
+              <span className="text-sm" style={{ color: "var(--t-text5)" }}>Loading notes…</span>
+            </div>
+          )}
+
+          {!viewLoading && viewError && (
+            <div className="flex flex-col items-center gap-3 py-16">
+              <p className="text-sm" style={{ color: "rgba(239,68,68,0.8)" }}>Could not load ({viewError})</p>
+              <button
+                className="px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95"
+                style={{ background: ACCENT + "20", color: ACCENT }}
+                onClick={loadViewNotes}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
+          {!viewLoading && !viewError && viewGroups.length === 0 && (
+            <div className="flex flex-col items-center justify-center gap-2 py-16">
+              <p className="text-sm" style={{ color: "var(--t-text5)" }}>No mix notes yet.</p>
+              <p className="text-xs" style={{ color: "var(--t-text6)" }}>Capture notes in New Note mode</p>
+            </div>
+          )}
+
+          {!viewLoading && !viewError && viewGroups.map((group) => (
+            <div key={`${group.artist}||${group.song}`}>
+              <div className="flex items-baseline gap-2 mb-2 px-1">
+                {(group.artist || group.song) ? (
+                  <>
+                    {group.artist && (
+                      <span
+                        className="text-xs font-bold tracking-wide uppercase"
+                        style={{ color: ACCENT, fontFamily: "'Space Mono', monospace" }}
+                      >
+                        {group.artist}
+                      </span>
+                    )}
+                    {group.song && (
+                      <span className="text-xs" style={{ color: "var(--t-text5)" }}>
+                        {group.artist ? "/ " : ""}{group.song}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span
+                    className="text-xs font-bold uppercase tracking-wide"
+                    style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
+                  >
+                    Untitled
+                  </span>
+                )}
+                <span
+                  className="text-xs font-mono px-1.5 py-0.5 rounded-full"
+                  style={{ background: ACCENT + "18", color: ACCENT }}
+                >
+                  {group.notes.length}
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                {group.notes.map((n) => (
+                  <div
+                    key={n.id}
+                    className="px-4 py-3 rounded-xl"
+                    style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}
+                  >
+                    <p className="text-sm leading-snug" style={{ color: "var(--t-text)" }}>{n.note}</p>
+                    <p className="text-xs mt-1.5" style={{ color: "var(--t-text6)" }}>{fmtDateTime(n.created_time)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }
