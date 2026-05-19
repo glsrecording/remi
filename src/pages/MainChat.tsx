@@ -740,7 +740,7 @@ export default function MainChat() {
             },
           ]);
           const _ttsText = data.card?.type === "task_done"
-            ? `Done — ${data.card.task_name}.`
+            ? `${data.card.task_name} marked complete`
             : typeof data.tts === "string" && data.tts
             ? data.tts
             : _aiText;
