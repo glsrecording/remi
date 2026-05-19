@@ -237,7 +237,7 @@ export default function Scheduler() {
                                 : "1px solid var(--t-border)",
                               transition: "border-color 0.15s",
                             }}
-                            onClick={(e) => { e.stopPropagation(); window.open(`https://notion.so/${task.id.replace(/-/g, "")}`, "_blank"); }}
+                            onClick={(e) => { e.stopPropagation(); handleCardTap(task.id); }}
                           >
                             {/* Card main row */}
                             <div className="flex items-start gap-2 px-3 py-3">
