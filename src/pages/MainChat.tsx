@@ -639,6 +639,7 @@ export default function MainChat() {
       if (actx.state === "suspended") await actx.resume();
       setIsSpeaking(true);
       const ttsText = text
+        .replace(/\n_"[^\n]*"_\s*$/, "")
         .replace(/https?:\/\/\S+/g, "")
         .replace(/[*_`]/g, "")
         .replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{27BF}️]/gu, "")
