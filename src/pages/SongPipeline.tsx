@@ -1,10 +1,19 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useLocation } from "wouter";
-import { ArrowLeft, RefreshCw, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { RefreshCw, Loader2, ChevronDown, ChevronRight, X, Mic } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
+
+const STATUS_CHIPS = [
+  "PrePro", "Tracking", "Editing", "Mixing", "Revisions",
+  "Mastering", "Stems", "Proofing", "Active", "Waiting", "Outsource", "Archive",
+];
+
+// These groups only show songs that have a next_action value
+const FILTER_NEXT_ACTION = new Set(["Active", "PrePro"]);
 
 interface Song {
   id: string;
@@ -21,11 +30,11 @@ interface Group {
 }
 
 const PRIORITY_META: Record<string, { label: string; color: string }> = {
-  P1:      { label: "P1 — Priority",  color: "#4ade80" },
-  P2:      { label: "P2",             color: "#c084fc" },
-  P3:      { label: "P3",             color: "#60a5fa" },
-  Active:  { label: "Active",         color: "#2dd4bf" },
-  Waiting: { label: "Waiting",        color: "#94a3b8" },
+  P1:      { label: "P1 — Priority", color: "#4ade80" },
+  P2:      { label: "P2",            color: "#c084fc" },
+  P3:      { label: "P3",            color: "#60a5fa" },
+  Active:  { label: "Active",        color: "#2dd4bf" },
+  Waiting: { label: "Waiting",       color: "#94a3b8" },
 };
 
 async function fetchPipeline(): Promise<Group[]> {
@@ -34,39 +43,247 @@ async function fetchPipeline(): Promise<Group[]> {
   });
   if (!res.ok) throw new Error(`${res.status}`);
   const data = await res.json();
-  return data.groups as Group[];
+  return (data.groups as Group[])
+    .map(g =>
+      FILTER_NEXT_ACTION.has(g.priority)
+        ? { ...g, songs: g.songs.filter(s => s.next_action.trim() !== "") }
+        : g
+    )
+    .filter(g => g.songs.length > 0);
 }
 
-function SongCard({ song, color }: { song: Song; color: string }) {
+async function patchSong(pageId: string, status: string | undefined, nextAction: string | undefined) {
+  const body: Record<string, string> = {};
+  if (status !== undefined) body.status = status;
+  if (nextAction !== undefined) body.next_action = nextAction;
+  const res = await fetch(`${JARVIS_URL}/song/${encodeURIComponent(pageId)}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
+// ── Edit bottom sheet ──────────────────────────────────────────────────────
+
+function EditSheet({
+  song,
+  color,
+  onClose,
+  onSaved,
+}: {
+  song: Song;
+  color: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [selectedStatus, setSelectedStatus] = useState(song.status);
+  const [nextAction, setNextAction]         = useState(song.next_action);
+  const [saving, setSaving]                 = useState(false);
+  const [saveError, setSaveError]           = useState<string | null>(null);
+  const [isRecording, setIsRecording]       = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef   = useRef<BlobPart[]>([]);
+  const holdTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdActiveRef    = useRef(false);
+
+  function handleMicDown() {
+    if (isRecording || isTranscribing) return;
+    holdActiveRef.current = false;
+    holdTimerRef.current = setTimeout(async () => {
+      holdActiveRef.current = true;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunksRef.current = [];
+        const mr = new MediaRecorder(stream);
+        mediaRecorderRef.current = mr;
+        mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+        mr.onstart = () => setIsRecording(true);
+        mr.start();
+      } catch { /* mic denied — silent */ }
+    }, 150);
+  }
+
+  function handleMicUp() {
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+    holdActiveRef.current = false;
+    const mr = mediaRecorderRef.current;
+    if (!mr || mr.state === "inactive") return;
+    mr.onstop = async () => {
+      const tracks: MediaStreamTrack[] = (mr as any)?.stream?.getTracks?.() ?? [];
+      tracks.forEach(t => t.stop());
+      setIsRecording(false);
+      if (audioChunksRef.current.length === 0) return;
+      setIsTranscribing(true);
+      try {
+        const mimeType = mr.mimeType || "audio/webm";
+        const ext = mimeType.includes("ogg") ? "ogg" : mimeType.includes("mp4") ? "mp4" : "webm";
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        const fd = new FormData();
+        fd.append("file", blob, `audio.${ext}`);
+        fd.append("model", "whisper-1");
+        const resp = await fetch(`${JARVIS_URL}/transcribe`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+          body: fd,
+        });
+        const json = await resp.json();
+        const transcript = (json.text || "").trim();
+        if (transcript) setNextAction(transcript);
+      } catch { /* transcription failed — silent */ }
+      finally { setIsTranscribing(false); }
+    };
+    mr.stop();
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await patchSong(song.id, selectedStatus, nextAction);
+      onSaved();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Save failed");
+      setSaving(false);
+    }
+  }
+
   return (
-    <a
-      href={song.notion_url || "#"}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="block rounded-xl transition-all active:scale-[0.98]"
-      style={{ textDecoration: "none" }}
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="relative z-10 rounded-t-2xl px-5 pt-5 overflow-y-auto"
+        style={{
+          background: "var(--t-surface)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
+          maxHeight: "85vh",
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <p className="text-xs font-medium mb-0.5" style={{ color: "var(--t-text5)" }}>{song.artist}</p>
+            <p className="text-sm font-bold" style={{ color: "var(--t-text)" }}>{song.song}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-white/5 transition-colors mt-0.5"
+            style={{ color: "var(--t-text5)" }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Status chips */}
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>
+          Status
+        </p>
+        <div className="flex flex-wrap gap-2 mb-5">
+          {STATUS_CHIPS.map(chip => {
+            const sel = selectedStatus === chip;
+            return (
+              <button
+                key={chip}
+                onClick={() => setSelectedStatus(chip)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: sel ? color + "22" : "var(--t-card)",
+                  color:      sel ? color        : "var(--t-text4)",
+                  border:     sel ? `1.5px solid ${color}60` : "1.5px solid var(--t-border-md)",
+                }}
+              >
+                {chip}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Next action */}
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>
+          Next Action
+        </p>
+        <div className="flex items-center gap-2 mb-5">
+          <input
+            className="flex-1 px-3 py-2.5 rounded-xl text-sm"
+            style={{
+              background: "var(--t-card)",
+              color:      "var(--t-text)",
+              border:     "1.5px solid var(--t-border-md)",
+              outline:    "none",
+            }}
+            value={nextAction}
+            onChange={e => setNextAction(e.target.value)}
+            placeholder="Next action…"
+          />
+          <button
+            type="button"
+            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); handleMicDown(); }}
+            onPointerUp={handleMicUp}
+            onPointerLeave={handleMicUp}
+            className="p-2.5 rounded-xl shrink-0 transition-all"
+            style={{
+              background: (isRecording || isTranscribing) ? "#f59e0b22" : "var(--t-card)",
+              color:      (isRecording || isTranscribing) ? "#f59e0b"   : "var(--t-text5)",
+              border:     "1.5px solid var(--t-border-md)",
+              touchAction: "none",
+            }}
+          >
+            {isTranscribing
+              ? <Loader2 size={16} className="animate-spin" />
+              : <Mic size={16} />}
+          </button>
+        </div>
+
+        {saveError && (
+          <p className="text-xs text-red-400/80 mb-3">{saveError}</p>
+        )}
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full py-3 rounded-xl text-sm font-semibold transition-all active:scale-[0.98]"
+          style={{ background: color + "22", color }}
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Song card (tap to open edit sheet) ────────────────────────────────────
+
+function SongCard({
+  song,
+  color,
+  onTap,
+}: {
+  song: Song;
+  color: string;
+  onTap: (song: Song) => void;
+}) {
+  return (
+    <button
+      className="w-full text-left rounded-xl transition-all active:scale-[0.98]"
+      onClick={() => onTap(song)}
     >
       <div
         className="px-4 py-3 rounded-xl"
         style={{
-          background: "var(--t-card)",
-          borderLeft: `3px solid ${color}70`,
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          borderRight: "1px solid rgba(255,255,255,0.05)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          background:    "var(--t-card)",
+          borderLeft:    `3px solid ${color}70`,
+          borderTop:     "1px solid var(--t-border)",
+          borderRight:   "1px solid var(--t-border)",
+          borderBottom:  "1px solid var(--t-border)",
         }}
       >
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span
-            className="text-xs font-medium tracking-wide shrink-0"
-            style={{ color: "var(--t-text5)" }}
-          >
+          <span className="text-xs font-medium tracking-wide shrink-0" style={{ color: "var(--t-text5)" }}>
             {song.artist}
           </span>
-          <span
-            className="text-sm font-semibold leading-snug min-w-0"
-            style={{ color: "var(--t-text)" }}
-          >
+          <span className="text-sm font-semibold leading-snug min-w-0" style={{ color: "var(--t-text)" }}>
             {song.song}
           </span>
         </div>
@@ -80,37 +297,36 @@ function SongCard({ song, color }: { song: Song; color: string }) {
             </span>
           )}
           {song.next_action && (
-            <span
-              className="text-xs leading-snug"
-              style={{ color: "var(--t-text5)" }}
-            >
+            <span className="text-xs leading-snug" style={{ color: "var(--t-text5)" }}>
               → {song.next_action}
             </span>
           )}
         </div>
       </div>
-    </a>
+    </button>
   );
 }
+
+// ── Group section ─────────────────────────────────────────────────────────
 
 function GroupSection({
   group,
   defaultOpen,
+  onSongTap,
 }: {
   group: Group;
   defaultOpen: boolean;
+  onSongTap: (song: Song, color: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const meta = PRIORITY_META[group.priority] ?? {
-    label: group.priority,
-    color: "#94a3b8",
-  };
+  const meta = PRIORITY_META[group.priority] ?? { label: group.priority, color: "#94a3b8" };
 
   return (
     <div className="space-y-2">
       <div
-        className="flex items-center gap-2 py-1 cursor-pointer select-none"
-        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 py-1.5 px-2 -mx-2 cursor-pointer select-none rounded-lg"
+        style={{ background: meta.color + "12" }}
+        onClick={() => setOpen(o => !o)}
         role="button"
         aria-expanded={open}
       >
@@ -133,8 +349,8 @@ function GroupSection({
 
       {open && (
         <div className="space-y-1.5 mx-4">
-          {group.songs.map((song) => (
-            <SongCard key={song.id} song={song} color={meta.color} />
+          {group.songs.map(song => (
+            <SongCard key={song.id} song={song} color={meta.color} onTap={s => onSongTap(s, meta.color)} />
           ))}
         </div>
       )}
@@ -142,16 +358,19 @@ function GroupSection({
   );
 }
 
-export default function SongPipeline() {
-  const [, navigate] = useLocation();
-  const [loading, setLoading]   = useState(true);
-  const [error,   setError]     = useState<string | null>(null);
-  const [groups,  setGroups]    = useState<Group[]>([]);
-  const [pulling, setPulling]   = useState(false);
+// ── Page ──────────────────────────────────────────────────────────────────
 
-  const scrollRef    = useRef<HTMLDivElement>(null);
-  const touchStartY  = useRef(0);
-  const isAtTop      = useRef(true);
+export default function SongPipeline() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+  const [groups,  setGroups]  = useState<Group[]>([]);
+  const [pulling, setPulling] = useState(false);
+  const [editing, setEditing] = useState<{ song: Song; color: string } | null>(null);
+
+  const scrollRef   = useRef<HTMLDivElement>(null);
+  const touchStartY = useRef(0);
+  const isAtTop     = useRef(true);
 
   useGutterScroll(scrollRef);
 
@@ -159,8 +378,7 @@ export default function SongPipeline() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPipeline();
-      setGroups(data);
+      setGroups(await fetchPipeline());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load pipeline");
     } finally {
@@ -171,6 +389,7 @@ export default function SongPipeline() {
   useEffect(() => { load(); }, [load]);
 
   const totalSongs = groups.reduce((n, g) => n + g.songs.length, 0);
+  const spinning   = loading || pulling;
 
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     isAtTop.current = e.currentTarget.scrollTop === 0;
@@ -190,46 +409,39 @@ export default function SongPipeline() {
     }
   }
 
-  const spinning = loading || pulling;
+  function handleSaved() {
+    setEditing(null);
+    load();
+  }
+
+  // Change 1: only P1 and P2 open by default
+  function isDefaultOpen(priority: string) {
+    return priority === "P1" || priority === "P2";
+  }
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg-deep)" }}>
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{
-          background:    "var(--t-surface)",
-          paddingTop:    "calc(env(safe-area-inset-top, 0px) + 14px)",
-          paddingBottom: "14px",
-        }}
-      >
-        <button
-          className="p-1.5 rounded-lg hover:bg-white/5 transition-colors -ml-1"
-          style={{ color: "var(--t-text5)" }}
-          onClick={() => navigate("/")}
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <span
-          className="text-base font-bold tracking-tight flex-1"
-          style={{ fontFamily: "'Space Mono', monospace", color: "#2dd4bf" }}
-        >
-          Song Pipeline
-        </span>
-        {!loading && (
-          <span className="text-xs mr-2" style={{ color: "var(--t-text6)" }}>
-            {totalSongs} {totalSongs === 1 ? "song" : "songs"}
-          </span>
-        )}
-        <button
-          className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-          style={{ color: "var(--t-text5)" }}
-          onClick={() => load()}
-          disabled={spinning}
-        >
-          <RefreshCw size={16} className={spinning ? "animate-spin" : ""} />
-        </button>
-      </div>
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PageHeader
+        title="Song Pipeline"
+        color="#2dd4bf"
+        onMenu={() => setMenuOpen(true)}
+        right={<>
+          {!loading && (
+            <span className="text-xs mr-2" style={{ color: "var(--t-text6)" }}>
+              {totalSongs} {totalSongs === 1 ? "song" : "songs"}
+            </span>
+          )}
+          <button
+            className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+            style={{ color: "var(--t-text5)" }}
+            onClick={() => load()}
+            disabled={spinning}
+          >
+            <RefreshCw size={16} className={spinning ? "animate-spin" : ""} />
+          </button>
+        </>}
+      />
 
       {/* Content */}
       <div
@@ -243,9 +455,7 @@ export default function SongPipeline() {
         {spinning && groups.length === 0 && (
           <div className="flex items-center justify-center gap-2 py-16">
             <Loader2 size={18} className="animate-spin" style={{ color: "#2dd4bf" }} />
-            <span className="text-sm" style={{ color: "var(--t-text5)" }}>
-              Loading pipeline…
-            </span>
+            <span className="text-sm" style={{ color: "var(--t-text5)" }}>Loading pipeline…</span>
           </div>
         )}
 
@@ -266,24 +476,33 @@ export default function SongPipeline() {
 
         {!loading && !error && groups.length === 0 && (
           <div className="flex items-center justify-center py-16">
-            <p className="text-sm" style={{ color: "var(--t-text6)" }}>
-              No active songs in pipeline.
-            </p>
+            <p className="text-sm" style={{ color: "var(--t-text6)" }}>No active songs in pipeline.</p>
           </div>
         )}
 
         {groups.length > 0 && (
           <div className="space-y-6">
-            {groups.map((group) => (
+            {groups.map(group => (
               <GroupSection
                 key={group.priority}
                 group={group}
-                defaultOpen={group.priority !== "Waiting"}
+                defaultOpen={isDefaultOpen(group.priority)}
+                onSongTap={(song, color) => setEditing({ song, color })}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Edit sheet */}
+      {editing && (
+        <EditSheet
+          song={editing.song}
+          color={editing.color}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+        />
+      )}
     </div>
   );
 }

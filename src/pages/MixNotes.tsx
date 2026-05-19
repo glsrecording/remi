@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { useLocation } from "wouter";
-import { ArrowLeft, Mic, MicOff } from "lucide-react";
+import { Mic, MicOff } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
 
@@ -16,8 +17,8 @@ interface SessionNote {
 }
 
 export default function MixNotes() {
-  const [, navigate] = useLocation();
   const [ACCENT] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Pre-fill from deep link (MainChat navigation)
   const [artist, setArtist] = useState(() => {
@@ -156,23 +157,8 @@ export default function MixNotes() {
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
-      {/* Header */}
-      <div
-        className="px-4 border-b border-white/5 shrink-0"
-        style={{ background: "var(--t-surface)", paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)", paddingBottom: "14px" }}
-      >
-        <div className="flex items-center gap-3">
-          <button
-            className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1"
-            onClick={() => navigate("/")}
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <span className="text-base font-bold tracking-tight flex-1" style={{ fontFamily: "'Space Mono', monospace", color: ACCENT }}>
-            Mix Notes
-          </span>
-        </div>
-      </div>
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PageHeader title="Mix Notes" color={ACCENT} onMenu={() => setMenuOpen(true)} />
 
       {/* Artist / Song inputs */}
       <div className="px-4 py-3 border-b border-white/5 shrink-0">

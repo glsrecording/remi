@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
-import { ArrowLeft, ExternalLink, Clock, Pencil, Check, X } from "lucide-react";
+import { ExternalLink, Clock, Pencil, Check, X } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 
 export default function TimeTrack() {
-  const [, navigate] = useLocation();
   const [timerUrl, setTimerUrl] = useLocalStorage<string>(STORAGE_KEYS.TIMER_URL, "");
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(timerUrl);
@@ -34,29 +35,8 @@ export default function TimeTrack() {
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{
-          background: "var(--t-surface)",
-          paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
-          paddingBottom: "14px",
-        }}
-      >
-        <button
-          className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1"
-          onClick={() => navigate("/")}
-          data-testid="button-back"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <span
-          className="text-base font-bold tracking-tight"
-          style={{ fontFamily: "'Space Mono', monospace", color: remiColor }}
-        >
-          Time Track
-        </span>
-      </div>
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PageHeader title="Time Track" color={remiColor} onMenu={() => setMenuOpen(true)} />
 
       {/* Body */}
       <div

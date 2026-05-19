@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useLocation } from "wouter";
-import { ArrowLeft, RefreshCw, Loader2, Mic, MicOff } from "lucide-react";
+import { RefreshCw, Loader2, Mic, MicOff } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
 
 const JARVIS_URL   = "https://jarvis.joshhollandgls.com";
@@ -143,7 +144,7 @@ function SwipeableErrandCard({
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function ShoppingList() {
-  const [, navigate]     = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [items, setItems]           = useState<ErrandItem[]>([]);
   const [loading, setLoading]       = useState(true);
   const [activeStore, setActiveStore] = useState("All");
@@ -331,35 +332,21 @@ export default function ShoppingList() {
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg-deep)" }}>
 
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{
-          background: "var(--t-surface)",
-          paddingTop:    "calc(env(safe-area-inset-top, 0px) + 14px)",
-          paddingBottom: "14px",
-        }}
-      >
-        <button
-          className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1"
-          onClick={() => navigate("/")}
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <span
-          className="text-base font-bold tracking-tight flex-1"
-          style={{ fontFamily: "'Space Mono', monospace", color: TEAL }}
-        >
-          Shopping List
-        </span>
-        <button
-          className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-colors"
-          onClick={() => { setLoading(true); fetchItems(); }}
-          disabled={loading}
-        >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} style={{ color: loading ? TEAL : undefined }} />
-        </button>
-      </div>
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PageHeader
+        title="Shopping List"
+        color={TEAL}
+        onMenu={() => setMenuOpen(true)}
+        right={
+          <button
+            className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-colors"
+            onClick={() => { setLoading(true); fetchItems(); }}
+            disabled={loading}
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} style={{ color: loading ? TEAL : undefined }} />
+          </button>
+        }
+      />
 
       {/* Store filter chips */}
       <div className="px-4 py-3 border-b border-white/5 shrink-0">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { useLocation } from "wouter";
-import { ArrowLeft, RefreshCw, Loader2 } from "lucide-react";
+import { RefreshCw, Loader2 } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
 
@@ -66,8 +67,8 @@ function tomorrowISO(): string {
 }
 
 export default function Scheduler() {
-  const [, navigate] = useLocation();
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [tasks,       setTasks]       = useState<SchedulerTask[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -150,42 +151,25 @@ export default function Scheduler() {
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
 
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{
-          background: "var(--t-surface)",
-          paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
-          paddingBottom: "14px",
-        }}
-      >
-        <button
-          className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1"
-          onClick={() => navigate("/")}
-          data-testid="button-back"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <span
-          className="text-base font-bold tracking-tight flex-1"
-          style={{ fontFamily: "'Space Mono', monospace", color: remiColor }}
-        >
-          Scheduler
-        </span>
-        {!loading && tasks.length > 0 && (
-          <span className="text-xs mr-1" style={{ color: "var(--t-text6)" }}>
-            {tasks.length}
-          </span>
-        )}
-        <button
-          className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-colors"
-          onClick={load}
-          disabled={loading}
-          data-testid="button-refresh"
-        >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-        </button>
-      </div>
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PageHeader
+        title="Scheduler"
+        color={remiColor}
+        onMenu={() => setMenuOpen(true)}
+        right={<>
+          {!loading && tasks.length > 0 && (
+            <span className="text-xs mr-1" style={{ color: "var(--t-text6)" }}>{tasks.length}</span>
+          )}
+          <button
+            className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-colors"
+            onClick={load}
+            disabled={loading}
+            data-testid="button-refresh"
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          </button>
+        </>}
+      />
 
       {/* Two-panel body */}
       <div className="flex flex-1 overflow-hidden">

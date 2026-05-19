@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, Mic, MicOff, Loader2, Check, X, Lock } from "lucide-react";
+import { Mic, MicOff, Loader2, Check, X, Lock } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
@@ -723,34 +725,18 @@ function HintStrip({ pass }: { pass: 1 | 2 }) {
 
 // ── Page header ───────────────────────────────────────────────────────────────
 
-function Header({ label, accent, count }: { label: string; accent: string; count?: number }) {
-  const [, navigate] = useLocation();
+function Header({ label, accent, count, onMenu }: { label: string; accent: string; count?: number; onMenu: () => void }) {
   return (
-    <div
-      className="flex items-center gap-3 px-4 py-4 border-b border-white/5 shrink-0"
-      style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
-    >
-      <button
-        className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors active:scale-95"
-        onClick={() => navigate("/")}
-      >
-        <ArrowLeft size={18} />
-      </button>
-      <span
-        className="text-sm font-bold tracking-widest uppercase"
-        style={{ fontFamily: "'Space Mono', monospace", color: accent }}
-      >
-        {label}
-      </span>
-      {count !== undefined && count > 0 && (
-        <span
-          className="ml-auto text-xs text-white/30"
-          style={{ fontFamily: "'Space Mono', monospace" }}
-        >
+    <PageHeader
+      title={label}
+      color={accent}
+      onMenu={onMenu}
+      right={count !== undefined && count > 0 ? (
+        <span className="text-xs text-white/30 mr-1" style={{ fontFamily: "'Space Mono', monospace" }}>
           {count} left
         </span>
-      )}
-    </div>
+      ) : undefined}
+    />
   );
 }
 
@@ -760,6 +746,7 @@ const ZERO_COUNTS: Counts = { today: 0, tomorrow: 0, queue: 0, someday: 0, insig
 
 export default function Triage() {
   const [, navigate] = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [pass1Queue, setPass1Queue] = useState<TriageItem[]>([]);
   const [pass2Queue, setPass2Queue] = useState<TriageItem[]>([]);
   const [phase, setPhase]           = useState<Phase>("capture");
@@ -854,7 +841,8 @@ export default function Triage() {
                 + counts.insight + counts.memory + counts.gratitude + counts.bio;
     return (
       <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
-        <Header label="Triage" accent="#f59e0b" />
+        <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+        <Header label="Triage" accent="#f59e0b" onMenu={() => setMenuOpen(true)} />
         <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6">
           <div className="text-center space-y-2">
             <p
@@ -932,7 +920,8 @@ export default function Triage() {
   if (phase === "pass2") {
     return (
       <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
-        <Header label="What type?" accent="#94a3b8" count={pass2Queue.length} />
+        <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+        <Header label="What type?" accent="#94a3b8" count={pass2Queue.length} onMenu={() => setMenuOpen(true)} />
         <div className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto">
           <HintStrip pass={2} />
           <div className="flex flex-col gap-3" style={{ touchAction: "none" }}>
@@ -953,7 +942,8 @@ export default function Triage() {
   // ── Capture + Pass 1 screen ──────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
-      <Header label="Triage" accent="#f59e0b" count={pass1Queue.length > 0 ? pass1Queue.length : undefined} />
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <Header label="Triage" accent="#f59e0b" count={pass1Queue.length > 0 ? pass1Queue.length : undefined} onMenu={() => setMenuOpen(true)} />
       <div className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto">
         <TriageInputRow onAdd={addItem} />
         {pass1Queue.length === 0 && decomposing ? (

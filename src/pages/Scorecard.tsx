@@ -1,7 +1,9 @@
-import { useLocation } from "wouter";
-import { ArrowLeft, BarChart2, Zap, Target, Clock, TrendingUp, Lock } from "lucide-react";
+import { useState } from "react";
+import { BarChart2, Zap, Target, Clock, TrendingUp, Lock } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 
 const PREVIEW_ITEMS = [
   {
@@ -27,34 +29,13 @@ const PREVIEW_ITEMS = [
 ];
 
 export default function Scorecard() {
-  const [, navigate] = useLocation();
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{
-          background: "var(--t-surface)",
-          paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
-          paddingBottom: "14px",
-        }}
-      >
-        <button
-          className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1"
-          onClick={() => navigate("/")}
-          data-testid="button-back"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <span
-          className="text-base font-bold tracking-tight"
-          style={{ fontFamily: "'Space Mono', monospace", color: remiColor }}
-        >
-          Scorecard
-        </span>
-      </div>
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PageHeader title="Scorecard" color={remiColor} onMenu={() => setMenuOpen(true)} />
 
       {/* Body */}
       <div

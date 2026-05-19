@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X } from "lucide-react";
+import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X, Moon, Sun } from "lucide-react";
+import { useTheme } from "@/hooks/use-theme";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
@@ -39,8 +40,8 @@ function fmt(secs: number): string {
 }
 
 export default function Session() {
-  const [, navigate] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { isLight, toggleTheme } = useTheme();
   const [session, setSession] = useState<SessionState>({ active: false });
   const [notes, setNotes] = useState<NoteEntry[]>([]);
   const [elapsed, setElapsed] = useState(0);
@@ -498,7 +499,15 @@ export default function Session() {
         >
           Studio Session
         </span>
-        <div style={{ width: 36 }} />
+        <button
+          onClick={toggleTheme}
+          className="p-1.5 rounded-full hover:bg-white/5 transition-colors"
+          style={{ color: "var(--t-text6)" }}
+          title={isLight ? "Switch to dark mode" : "Switch to light mode"}
+          data-testid="button-theme-toggle"
+        >
+          {isLight ? <Moon size={16} /> : <Sun size={16} />}
+        </button>
       </div>
 
       {/* ── IDLE: start form ─────────────────────────────────────────── */}

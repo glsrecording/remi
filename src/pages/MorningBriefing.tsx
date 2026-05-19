@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
-import { useLocation } from "wouter";
-import { ArrowLeft, Sun, RefreshCw, Calendar, CheckSquare, CreditCard, Sparkles, Mail } from "lucide-react";
+import { Sun, RefreshCw, Calendar, CheckSquare, CreditCard, Sparkles, Mail } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
@@ -33,8 +34,8 @@ type BriefingData = {
 };
 
 export default function MorningBriefing() {
-  const [, navigate] = useLocation();
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
+  const [menuOpen, setMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   useGutterScroll(scrollRef);
   const [loading, setLoading]         = useState(false);
@@ -91,29 +92,12 @@ export default function MorningBriefing() {
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{
-          background: "var(--t-surface)",
-          paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
-          paddingBottom: "14px",
-        }}
-      >
-        <button
-          className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1"
-          onClick={() => navigate("/")}
-          data-testid="button-back"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <span
-          className="text-base font-bold tracking-tight flex-1"
-          style={{ fontFamily: "'Space Mono', monospace", color: remiColor }}
-        >
-          Morning Briefing
-        </span>
-        {data && (
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PageHeader
+        title="Morning Briefing"
+        color={remiColor}
+        onMenu={() => setMenuOpen(true)}
+        right={data ? (
           <button
             className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
             onClick={handleRefresh}
@@ -122,8 +106,8 @@ export default function MorningBriefing() {
             <RefreshCw size={12} />
             Refresh
           </button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       <div
         ref={scrollRef}

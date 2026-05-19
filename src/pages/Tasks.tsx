@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
-import { useLocation } from "wouter";
 import {
-  ArrowLeft, RefreshCw, Loader2, ChevronDown, ChevronRight,
+  RefreshCw, Loader2, ChevronDown, ChevronRight,
   Plus, Mic, MicOff, Check, X,
 } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
@@ -728,7 +729,7 @@ function BucketSection({
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function Tasks() {
-  const [, navigate] = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [loading,   setLoading]   = useState(true);
   const [bgLoading, setBgLoading] = useState(false);
   const [cacheHit,  setCacheHit]  = useState(false);
@@ -835,38 +836,24 @@ export default function Tasks() {
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg-deep)" }}>
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{
-          background: "var(--t-surface)",
-          paddingTop:    "calc(env(safe-area-inset-top, 0px) + 14px)",
-          paddingBottom: "14px",
-        }}
-      >
-        <button
-          className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1"
-          onClick={() => navigate("/")}
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <span
-          className="text-base font-bold tracking-tight flex-1"
-          style={{ fontFamily: "'Space Mono', monospace", color: ACCENT }}
-        >
-          Tasks
-        </span>
-        {!loading && (
-          <span className="text-xs text-white/25 mr-2">{totalCount} total</span>
-        )}
-        <button
-          className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-colors"
-          onClick={() => load(true)}
-          disabled={loading}
-        >
-          <RefreshCw size={16} className={loading || bgLoading ? "animate-spin" : ""} />
-        </button>
-      </div>
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PageHeader
+        title="Tasks"
+        color={ACCENT}
+        onMenu={() => setMenuOpen(true)}
+        right={<>
+          {!loading && (
+            <span className="text-xs text-white/25 mr-2">{totalCount} total</span>
+          )}
+          <button
+            className="p-1.5 rounded-lg text-white/30 hover:text-white hover:bg-white/5 transition-colors"
+            onClick={() => load(true)}
+            disabled={loading}
+          >
+            <RefreshCw size={16} className={loading || bgLoading ? "animate-spin" : ""} />
+          </button>
+        </>}
+      />
 
       {/* Swipe legend + cache status */}
       <div className="px-4 py-2 border-b border-white/5 shrink-0">

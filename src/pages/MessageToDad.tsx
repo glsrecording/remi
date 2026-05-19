@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
-import { useLocation } from "wouter";
-import { ArrowLeft, Mic, MicOff, MessageCircle, Copy, RefreshCw, Check, Clock, Loader2 } from "lucide-react";
+import { Mic, MicOff, MessageCircle, Copy, RefreshCw, Check, Clock, Loader2 } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import HamburgerMenu from "@/components/HamburgerMenu";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
 
@@ -20,8 +21,8 @@ function todayStr() {
 }
 
 export default function MessageToDad() {
-  const [, navigate] = useLocation();
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [userColor] = useLocalStorage<string>(STORAGE_KEYS.USER_COLOR, "#f59e0b");
   const [history, setHistory] = useLocalStorage<DadMessage[]>("remi:dad-messages", []);
 
@@ -153,37 +154,22 @@ export default function MessageToDad() {
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-4 border-b border-white/5 shrink-0"
-        style={{
-          background: "var(--t-surface)",
-          paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
-          paddingBottom: "14px",
-        }}
-      >
-        <button
-          className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-colors -ml-1"
-          onClick={() => navigate("/")}
-          data-testid="button-back"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <span
-          className="text-base font-bold tracking-tight flex-1"
-          style={{ fontFamily: "'Space Mono', monospace", color: remiColor }}
-        >
-          Message to Dad
-        </span>
-        <button
-          className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
-          onClick={() => setShowHistory((p) => !p)}
-          data-testid="button-toggle-history"
-        >
-          <Clock size={13} />
-          {history.length > 0 ? `${history.length}` : ""}
-        </button>
-      </div>
+      <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
+      <PageHeader
+        title="Message to Dad"
+        color={remiColor}
+        onMenu={() => setMenuOpen(true)}
+        right={
+          <button
+            className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
+            onClick={() => setShowHistory((p) => !p)}
+            data-testid="button-toggle-history"
+          >
+            <Clock size={13} />
+            {history.length > 0 ? `${history.length}` : ""}
+          </button>
+        }
+      />
 
       {showHistory ? (
         /* History panel */
