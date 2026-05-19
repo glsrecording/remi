@@ -639,7 +639,7 @@ export default function MainChat() {
       if (actx.state === "suspended") await actx.resume();
       setIsSpeaking(true);
       const ttsText = text
-        .replace(/\n_"[^\n]*"_\s*$/, "")
+        .replace(/_"[^"]*"_/g, "")
         .replace(/https?:\/\/\S+/g, "")
         .replace(/[*_`]/g, "")
         .replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{27BF}️]/gu, "")
@@ -741,6 +741,8 @@ export default function MainChat() {
           ]);
           const _ttsText = data.card?.type === "task_done"
             ? `Done — ${data.card.task_name}.`
+            : typeof data.tts === "string" && data.tts
+            ? data.tts
             : _aiText;
           speakResponse(_ttsText);
         })
