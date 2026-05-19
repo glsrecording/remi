@@ -19,6 +19,29 @@ const PRIORITY_CHIPS: { label: string; color: string }[] = [
   { label: "Warm", color: "#94a3b8" },
 ];
 
+const STATUS_COLORS: Record<string, string> = {
+  PrePro:    "#f59e0b",
+  Tracking:  "#3b82f6",
+  Editing:   "#f97316",
+  Outsource: "#92400e",
+  Mixing:    "#ec4899",
+  Revisions: "#ef4444",
+  Mastering: "#22c55e",
+  Stems:     "#84cc16",
+  Archive:   "#9ca3af",
+  Done:      "#4b5563",
+  Waiting:   "#f97316",
+  Proofing:  "#a78bfa",
+  Active:    "#14b8a6",
+};
+
+function priorityColor(priority: string): string {
+  if (priority === "P1") return "#4ade80";
+  if (priority === "P2") return "#c084fc";
+  if (priority === "P3") return "#60a5fa";
+  return "#94a3b8";
+}
+
 // These groups only show songs that have a next_action value
 const FILTER_NEXT_ACTION = new Set(["Active", "PrePro"]);
 
@@ -223,9 +246,9 @@ function EditSheet({
                 onClick={() => setSelectedStatus(chip)}
                 className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
                 style={{
-                  background: sel ? color + "22" : "var(--t-card)",
-                  color:      sel ? color        : "var(--t-text4)",
-                  border:     sel ? `1.5px solid ${color}60` : "1.5px solid var(--t-border-md)",
+                  background: sel ? (STATUS_COLORS[chip] ?? color) : "var(--t-card)",
+                  color:      sel ? "#ffffff"                       : "var(--t-text4)",
+                  border:     sel ? `1.5px solid ${STATUS_COLORS[chip] ?? color}` : "1.5px solid var(--t-border-md)",
                 }}
               >
                 {chip}
@@ -314,10 +337,10 @@ function SongCard({
         }}
       >
         <div className="flex items-baseline gap-2 flex-wrap">
-          <span className="text-xs font-medium tracking-wide shrink-0" style={{ color: "var(--t-text5)" }}>
+          <span className="text-xs font-medium tracking-wide shrink-0" style={{ color: priorityColor(song.priority) }}>
             {song.artist}
           </span>
-          <span className="text-sm font-semibold leading-snug min-w-0" style={{ color: "var(--t-text)" }}>
+          <span className="text-sm font-semibold leading-snug min-w-0" style={{ color: STATUS_COLORS[song.status] ?? "var(--t-text)" }}>
             {song.song}
           </span>
         </div>
@@ -325,7 +348,7 @@ function SongCard({
           {song.status && (
             <span
               className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
-              style={{ background: color + "1a", color }}
+              style={{ background: (STATUS_COLORS[song.status] ?? color) + "22", color: STATUS_COLORS[song.status] ?? color }}
             >
               {song.status}
             </span>
