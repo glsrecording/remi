@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, Terminal, Shuffle, Radio, BookOpen, RefreshCw, CalendarClock, ClipboardCheck, ShoppingCart, Layers, Phone } from "lucide-react";
+import { X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, Terminal, Shuffle, Radio, BookOpen, RefreshCw, CalendarClock, ClipboardCheck, ShoppingCart, Layers, Phone, Film } from "lucide-react";
 import { useEffect } from "react";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -13,6 +13,7 @@ interface HamburgerMenuProps {
 const menuItems = [
   { label: "Morning Briefing", icon: Sun,    path: "/morning-briefing" },
   { label: "Song Pipeline",    icon: Layers, path: "/song-pipeline" },
+  { label: "Content",          icon: Film,   path: "/content" },
   { label: "Tasks",            icon: Brain,  path: "/brain-dump" },
   { label: "Session", icon: Radio, path: "/session" },
   { label: "Call Notes", icon: Phone, path: "/call-notes" },
