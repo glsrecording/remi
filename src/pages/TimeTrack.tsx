@@ -31,10 +31,13 @@ export default function TimeTrack() {
   const [state, setState]       = useState<TrackState>("idle");
   const [activity, setActivity] = useState("");
   const [client, setClient]     = useState("");
+  const [category, setCategory] = useState("");
   const [elapsed, setElapsed]   = useState(0);
   const [notes, setNotes]       = useState("");
   const [toast, setToast]       = useState<string | null>(null);
   const [saving, setSaving]     = useState(false);
+
+  const CATEGORIES = ["Studio", "Build", "Content", "Admin", "Family", "Home", "Friends"];
 
   const startTimeRef = useRef<string>("");
   const endTimeRef   = useRef<string>("");
@@ -60,7 +63,7 @@ export default function TimeTrack() {
   }, [toast]);
 
   function handleStart() {
-    if (!activity.trim()) return;
+    if (!activity.trim() || !category) return;
     startEpoch.current = Date.now();
     startTimeRef.current = localISO();
     setElapsed(0);
@@ -84,6 +87,7 @@ export default function TimeTrack() {
         body: JSON.stringify({
           activity: activity.trim(),
           client: client.trim() || undefined,
+          category: category || undefined,
           start_iso: startTimeRef.current,
           end_iso: endTimeRef.current,
           duration_seconds: elapsed,
@@ -103,6 +107,7 @@ export default function TimeTrack() {
       setState("idle");
       setActivity("");
       setClient("");
+      setCategory("");
       setNotes("");
       setElapsed(0);
     }
@@ -110,6 +115,7 @@ export default function TimeTrack() {
 
   function handleDiscard() {
     setState("idle");
+    setCategory("");
     setNotes("");
     setElapsed(0);
   }
@@ -130,6 +136,25 @@ export default function TimeTrack() {
         {state === "idle" && (
           <>
             <div className="w-full flex flex-col gap-3">
+              {/* Category chips */}
+              <div className="flex flex-wrap gap-2">
+                {CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(category === cat ? "" : cat)}
+                    className="px-3 py-1.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+                    style={{
+                      background: category === cat ? remiColor : "var(--t-el-low)",
+                      color: category === cat ? "#111" : "var(--t-text5)",
+                      border: `1px solid ${category === cat ? remiColor : "var(--t-border-md)"}`,
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
               <input
                 autoFocus
                 value={activity}
@@ -160,12 +185,12 @@ export default function TimeTrack() {
             <button
               className="w-full py-5 rounded-2xl text-base font-bold tracking-wide transition-all active:scale-[0.97]"
               style={{
-                background: activity.trim() ? remiColor : "rgba(255,255,255,0.06)",
-                color: activity.trim() ? "#111" : "rgba(255,255,255,0.2)",
-                cursor: activity.trim() ? "pointer" : "default",
+                background: activity.trim() && category ? remiColor : "rgba(255,255,255,0.06)",
+                color: activity.trim() && category ? "#111" : "rgba(255,255,255,0.2)",
+                cursor: activity.trim() && category ? "pointer" : "default",
               }}
               onClick={handleStart}
-              disabled={!activity.trim()}
+              disabled={!activity.trim() || !category}
             >
               START
             </button>
@@ -191,6 +216,14 @@ export default function TimeTrack() {
               <p className="text-sm font-medium" style={{ color: "var(--t-text3)" }}>
                 {activity.trim()}
               </p>
+              {category && (
+                <span
+                  className="text-xs px-2 py-0.5 rounded-lg font-medium"
+                  style={{ background: remiColor + "20", color: remiColor }}
+                >
+                  {category}
+                </span>
+              )}
               {client.trim() && (
                 <p className="text-xs" style={{ color: "var(--t-text6)" }}>
                   {client.trim()}
@@ -227,6 +260,14 @@ export default function TimeTrack() {
               <p className="text-sm font-medium" style={{ color: "var(--t-text3)" }}>
                 {activity.trim()}
               </p>
+              {category && (
+                <span
+                  className="text-xs px-2 py-0.5 rounded-lg font-medium"
+                  style={{ background: remiColor + "20", color: remiColor }}
+                >
+                  {category}
+                </span>
+              )}
               {client.trim() && (
                 <p className="text-xs" style={{ color: "var(--t-text6)" }}>
                   {client.trim()}
