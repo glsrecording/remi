@@ -46,6 +46,9 @@ export default function CallNotes() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
 
+  // Text input state
+  const [noteText, setNoteText] = useState("");
+
   // Mic state
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -156,6 +159,12 @@ export default function CallNotes() {
     },
     [isFirstNote, toggleBlockId, selectedContact]
   );
+
+  const handleNoteSubmit = useCallback(() => {
+    if (!noteText.trim()) return;
+    sendNote(noteText.trim());
+    setNoteText("");
+  }, [noteText, sendNote]);
 
   // ─── Mic: 150ms hold-to-record (same pattern as Session.tsx) ─────────────
   function handleMicDown() {
@@ -483,7 +492,7 @@ export default function CallNotes() {
             >
               {notes.length === 0 ? (
                 <p className="text-sm text-white/25 p-4 text-center">
-                  Hold mic to speak — notes save to Notion in real time
+                  Type or hold mic — notes save to Notion in real time
                 </p>
               ) : (
                 <div className="p-3 space-y-2">
@@ -510,8 +519,8 @@ export default function CallNotes() {
             </div>
           </div>
 
-          {/* Spacer for fixed mic bar */}
-          <div className="shrink-0" style={{ height: 100 }} />
+          {/* Spacer for fixed input+mic bar */}
+          <div className="shrink-0" style={{ height: 140 }} />
 
           {/* Mic bar — fixed to bottom */}
           <div
@@ -581,10 +590,25 @@ export default function CallNotes() {
                 )}
               </div>
             )}
-            <div className="flex justify-end">
+            <div className="flex gap-2 items-center">
+              <input
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleNoteSubmit()}
+                placeholder="Type a note…"
+                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+              />
               <button
                 type="button"
-                className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-150"
+                onClick={handleNoteSubmit}
+                className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+                style={{ background: "#60a5fa", color: "#000" }}
+              >
+                Send
+              </button>
+              <button
+                type="button"
+                className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-150"
                 style={{
                   background: isRecording ? "#ef444422" : "#f59e0b14",
                   border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
