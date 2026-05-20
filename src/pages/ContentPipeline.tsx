@@ -186,7 +186,7 @@ export default function ContentPipeline() {
   useEffect(() => { load(); }, [load]);
 
   const tabScripts      = scripts.filter(s => s.content_type === tab);
-  const visible         = stage === "All" ? tabScripts : tabScripts.filter(s => s.draft_stage === stage);
+  const visible         = stage === "All" ? tabScripts : scripts.filter(s => s.draft_stage === stage);
   const showDragHandles = stage === "All";
 
   const shortCount = scripts.filter(s => s.content_type === "Short-Form").length;
