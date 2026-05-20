@@ -19,6 +19,14 @@ const STAGE_COLORS: Record<string, string> = {
   "Posted":     "#4ade80",
 };
 
+const STAGE_BORDER_COLORS: Record<string, string> = {
+  "AI Draft":   "#6b7280",
+  "My Rewrite": "#eab308",
+  "Final":      "#3b82f6",
+  "Filmed":     "#a855f7",
+  "Posted":     "#22c55e",
+};
+
 interface Script {
   page_id:      string;
   name:         string;
@@ -87,8 +95,9 @@ function ScriptCard({
   onDrop:         (e: React.DragEvent) => void;
   onDragEnd:      () => void;
 }) {
-  const stageColor = STAGE_COLORS[script.draft_stage] ?? "#9ca3af";
-  const isTop3     = rank < 3;
+  const stageColor  = STAGE_COLORS[script.draft_stage] ?? "#9ca3af";
+  const borderColor = STAGE_BORDER_COLORS[script.draft_stage] ?? "#6b7280";
+  const isTop3      = rank < 3;
 
   function handleCardTap() {
     if (script.script_file) {
@@ -120,7 +129,7 @@ function ScriptCard({
         onClick={handleCardTap}
         style={{
           background:   "var(--t-card)",
-          borderLeft:   isTop3 ? "3px solid #39b54a" : "3px solid var(--t-border)",
+          borderLeft:   isTop3 ? "3px solid #39b54a" : `3px solid ${borderColor}`,
           borderTop:    isDragOver ? "1.5px dashed var(--t-border-md)" : "1px solid var(--t-border)",
           borderRight:  isDragOver ? "1.5px dashed var(--t-border-md)" : "1px solid var(--t-border)",
           borderBottom: isDragOver ? "1.5px dashed var(--t-border-md)" : "1px solid var(--t-border)",
