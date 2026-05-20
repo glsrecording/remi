@@ -19,6 +19,7 @@ import Journal from "@/pages/Journal";
 import Scheduler from "@/pages/Scheduler";
 import ShoppingList from "@/pages/ShoppingList";
 import SongPipeline from "@/pages/SongPipeline";
+import CallNotes from "@/pages/CallNotes";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/scheduler" component={Scheduler} />
       <Route path="/shopping-list" component={ShoppingList} />
       <Route path="/song-pipeline" component={SongPipeline} />
+      <Route path="/call-notes" component={CallNotes} />
       <Route component={NotFound} />
     </Switch>
   );
