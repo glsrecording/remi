@@ -72,6 +72,12 @@ export default function CallNotes() {
   const pointerStartYRef = useRef<number>(0);
   const notesEndRef = useRef<HTMLDivElement>(null);
 
+  // Non-blocking note queue: first note POSTs and resolves toggle_block_id; queued
+  // notes fire the moment it resolves; notes 2+ are fire-and-forget.
+  const toggleBlockIdRef = useRef("");
+  const firstNoteInFlightRef = useRef(false);
+  const pendingQueueRef = useRef<string[]>([]);
+
   // Ghost-load CRM contacts in background
   useEffect(() => {
     fetch(`${JARVIS_URL}/crm_contacts`, { headers: AUTH_HEADERS })
@@ -117,6 +123,9 @@ export default function CallNotes() {
     setIsFirstNote(true);
     setNotes([]);
     setToggleBlockId("");
+    toggleBlockIdRef.current = "";
+    firstNoteInFlightRef.current = false;
+    pendingQueueRef.current = [];
   };
 
   const handleOpenNewLead = () => {
@@ -164,46 +173,85 @@ export default function CallNotes() {
     setIsFirstNote(true);
     setNotes([]);
     setElapsed(0);
+    toggleBlockIdRef.current = "";
+    firstNoteInFlightRef.current = false;
+    pendingQueueRef.current = [];
     if (timerRef.current) clearInterval(timerRef.current);
     navigate("/", { replace: true });
   }, [navigate]);
 
   const sendNote = useCallback(
-    async (text: string) => {
+    (text: string) => {
       if (!text.trim() || !selectedContact) return;
-      try {
-        const body = isFirstNote
-          ? {
-              contact_page_id: selectedContact.page_id,
-              note_text: text.trim(),
-              is_first_note: true,
-            }
-          : {
-              toggle_block_id: toggleBlockId,
-              note_text: text.trim(),
-              is_first_note: false,
-            };
-        const resp = await fetch(`${JARVIS_URL}/call_note`, {
+      const noteText = text.trim();
+
+      // First note: POST and capture toggle_block_id, then flush queue
+      if (!firstNoteInFlightRef.current && !toggleBlockIdRef.current) {
+        firstNoteInFlightRef.current = true;
+        fetch(`${JARVIS_URL}/call_note`, {
           method: "POST",
           headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await resp.json();
-        if (resp.ok) {
-          if (isFirstNote && data.toggle_block_id) {
-            setToggleBlockId(data.toggle_block_id);
-            setIsFirstNote(false);
-          }
-          setNotes((prev) => [
-            ...prev,
-            { text: text.trim(), ts: data.timestamp || "" },
-          ]);
-        }
-      } catch {
-        // non-fatal
+          body: JSON.stringify({
+            contact_page_id: selectedContact.page_id,
+            note_text: noteText,
+            is_first_note: true,
+          }),
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.toggle_block_id) {
+              toggleBlockIdRef.current = data.toggle_block_id;
+              setToggleBlockId(data.toggle_block_id);
+              setIsFirstNote(false);
+              setNotes((prev) => [...prev, { text: noteText, ts: data.timestamp || "" }]);
+              // Flush any notes queued while first POST was in flight
+              const queued = pendingQueueRef.current.splice(0);
+              for (const q of queued) {
+                fetch(`${JARVIS_URL}/call_note`, {
+                  method: "POST",
+                  headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    toggle_block_id: data.toggle_block_id,
+                    note_text: q,
+                    is_first_note: false,
+                  }),
+                })
+                  .then((r) => r.json())
+                  .then((d) => {
+                    setNotes((prev) => [...prev, { text: q, ts: d.timestamp || "" }]);
+                  })
+                  .catch(() => {});
+              }
+            }
+          })
+          .catch(() => {
+            // Reset so caller can retry
+            firstNoteInFlightRef.current = false;
+            pendingQueueRef.current = [];
+          });
+        return;
       }
+
+      // toggle_block_id not yet back from first note: queue and return immediately
+      if (!toggleBlockIdRef.current) {
+        pendingQueueRef.current.push(noteText);
+        return;
+      }
+
+      // Notes 2+: fire and forget — mic is already free
+      const tid = toggleBlockIdRef.current;
+      fetch(`${JARVIS_URL}/call_note`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ toggle_block_id: tid, note_text: noteText, is_first_note: false }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          setNotes((prev) => [...prev, { text: noteText, ts: data.timestamp || "" }]);
+        })
+        .catch(() => {});
     },
-    [isFirstNote, toggleBlockId, selectedContact]
+    [selectedContact]
   );
 
   const handleNoteSubmit = useCallback(() => {
@@ -241,34 +289,30 @@ export default function CallNotes() {
           setIsRecording(false);
           setIsLocked(false);
           // 800ms flush: Safari delivers dataavailable after onstop
-          setTimeout(async () => {
+          setTimeout(() => {
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
             audioChunksRef.current = [];
             if (blob.size === 0) return;
-            try {
-              setIsTranscribing(true);
-              const ext = mimeType.includes("mp4")
-                ? "mp4"
-                : mimeType.includes("ogg")
-                ? "ogg"
-                : "webm";
-              const formData = new FormData();
-              formData.append("file", blob, `audio.${ext}`);
-              formData.append("model", "whisper-1");
-              const resp = await fetch(`${JARVIS_URL}/transcribe`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${REMI_API_KEY}` },
-                body: formData,
-              });
-              const json = await resp.json();
-              const transcript = (json.text || "").trim();
-              if (transcript) await sendNote(transcript);
-              else setRecordingError("Nothing captured — try again.");
-            } catch {
-              setRecordingError("Transcription failed — check connection.");
-            } finally {
-              setIsTranscribing(false);
-            }
+            const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
+            const formData = new FormData();
+            formData.append("file", blob, `audio.${ext}`);
+            formData.append("model", "whisper-1");
+            setIsTranscribing(true);
+            fetch(`${JARVIS_URL}/transcribe`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+              body: formData,
+            })
+              .then((r) => r.json())
+              .then((json) => {
+                const transcript = (json.text || "").trim();
+                if (transcript) sendNote(transcript);
+                else setRecordingError("Nothing captured — try again.");
+              })
+              .catch(() => {
+                setRecordingError("Transcription failed — check connection.");
+              })
+              .finally(() => setIsTranscribing(false));
           }, 800);
         };
         recorder.start(100);
@@ -793,13 +837,7 @@ export default function CallNotes() {
                 onPointerLeave={handleMicUp}
                 data-testid="button-voice"
               >
-                {isTranscribing ? (
-                  <Loader2
-                    size={18}
-                    className="animate-spin"
-                    style={{ color: "#f59e0b" }}
-                  />
-                ) : isRecording ? (
+                {isRecording ? (
                   <MicOff size={18} style={{ color: "#ef4444" }} />
                 ) : (
                   <Mic size={18} style={{ color: "#f59e0b" }} />
