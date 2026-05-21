@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Menu, Mic, MicOff, Loader2, Moon, Sun, Phone, PhoneOff } from "lucide-react";
+import { Menu, Mic, MicOff, Loader2, Moon, Sun, Phone, PhoneOff, UserPlus, X } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
@@ -36,6 +36,15 @@ export default function CallNotes() {
   const [searchText, setSearchText] = useState("");
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
+
+  // New lead sheet
+  const [showNewLeadSheet, setShowNewLeadSheet] = useState(false);
+  const [newLeadName, setNewLeadName] = useState("");
+  const [newLeadPhone, setNewLeadPhone] = useState("");
+  const [newLeadEmail, setNewLeadEmail] = useState("");
+  const [newLeadSource, setNewLeadSource] = useState("");
+  const [newLeadSubmitting, setNewLeadSubmitting] = useState(false);
+  const [newLeadError, setNewLeadError] = useState<string | null>(null);
 
   // Call state
   const [callActive, setCallActive] = useState(false);
@@ -108,6 +117,43 @@ export default function CallNotes() {
     setIsFirstNote(true);
     setNotes([]);
     setToggleBlockId("");
+  };
+
+  const handleOpenNewLead = () => {
+    setNewLeadName(searchText);
+    setNewLeadPhone("");
+    setNewLeadEmail("");
+    setNewLeadSource("");
+    setNewLeadError(null);
+    setShowNewLeadSheet(true);
+  };
+
+  const handleNewLeadSubmit = async () => {
+    if (!newLeadName.trim()) return;
+    setNewLeadSubmitting(true);
+    setNewLeadError(null);
+    try {
+      const resp = await fetch(`${JARVIS_URL}/new-lead`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newLeadName.trim(),
+          phone: newLeadPhone.trim(),
+          email: newLeadEmail.trim(),
+          source_note: newLeadSource.trim(),
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Failed to create lead");
+      const newContact: Contact = { page_id: data.page_id, name: data.name };
+      setContacts((prev) => [...prev, newContact].sort((a, b) => a.name.localeCompare(b.name)));
+      handleSelectContact(newContact);
+      setShowNewLeadSheet(false);
+    } catch (err: unknown) {
+      setNewLeadError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setNewLeadSubmitting(false);
+    }
   };
 
   const handleEndCall = useCallback(() => {
@@ -412,6 +458,123 @@ export default function CallNotes() {
             >
               <Phone size={15} />
               Start Call
+            </button>
+
+            <button
+              onClick={handleOpenNewLead}
+              className="w-full py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95 flex items-center justify-center gap-2"
+              style={{
+                background: "rgba(34,197,94,0.10)",
+                color: "#22c55e",
+                border: "1px solid rgba(34,197,94,0.25)",
+              }}
+            >
+              <UserPlus size={14} />
+              + New Lead
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── NEW LEAD SHEET ───────────────────────────────────────────────────── */}
+      {showNewLeadSheet && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-end"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowNewLeadSheet(false); }}
+        >
+          <div
+            className="rounded-t-2xl px-5 pt-5 pb-10 space-y-4"
+            style={{ background: "var(--t-surface)", borderTop: "1px solid var(--t-border-md)" }}
+          >
+            {/* Sheet header */}
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm font-semibold" style={{ color: "var(--t-text)" }}>
+                New Lead
+              </span>
+              <button
+                onClick={() => setShowNewLeadSheet(false)}
+                className="p-1.5 rounded-lg"
+                style={{ color: "var(--t-text6)" }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Name */}
+            <div>
+              <label className="text-xs uppercase tracking-widest mb-1 block" style={{ color: "var(--t-text7)" }}>
+                Name *
+              </label>
+              <input
+                value={newLeadName}
+                onChange={(e) => setNewLeadName(e.target.value)}
+                placeholder="Full name"
+                autoFocus
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20"
+              />
+            </div>
+
+            {/* Phone */}
+            <div>
+              <label className="text-xs uppercase tracking-widest mb-1 block" style={{ color: "var(--t-text7)" }}>
+                Phone
+              </label>
+              <input
+                value={newLeadPhone}
+                onChange={(e) => setNewLeadPhone(e.target.value)}
+                placeholder="Optional"
+                type="tel"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20"
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="text-xs uppercase tracking-widest mb-1 block" style={{ color: "var(--t-text7)" }}>
+                Email
+              </label>
+              <input
+                value={newLeadEmail}
+                onChange={(e) => setNewLeadEmail(e.target.value)}
+                placeholder="Optional"
+                type="email"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20"
+              />
+            </div>
+
+            {/* Source / notes */}
+            <div>
+              <label className="text-xs uppercase tracking-widest mb-1 block" style={{ color: "var(--t-text7)" }}>
+                Source / Notes
+              </label>
+              <input
+                value={newLeadSource}
+                onChange={(e) => setNewLeadSource(e.target.value)}
+                placeholder="e.g. met at cannabis shop, does music"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20"
+              />
+            </div>
+
+            {newLeadError && (
+              <p className="text-xs text-red-400 text-center">{newLeadError}</p>
+            )}
+
+            {/* Confirm */}
+            <button
+              onClick={handleNewLeadSubmit}
+              disabled={!newLeadName.trim() || newLeadSubmitting}
+              className="w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 flex items-center justify-center gap-2"
+              style={{
+                background: newLeadName.trim() && !newLeadSubmitting ? "#22c55e" : "rgba(34,197,94,0.15)",
+                color: newLeadName.trim() && !newLeadSubmitting ? "#000" : "rgba(34,197,94,0.4)",
+              }}
+            >
+              {newLeadSubmitting ? (
+                <><Loader2 size={14} className="animate-spin" /> Creating…</>
+              ) : (
+                "Create & Select"
+              )}
             </button>
           </div>
         </div>
