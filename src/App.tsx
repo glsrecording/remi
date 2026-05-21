@@ -21,6 +21,7 @@ import ShoppingList from "@/pages/ShoppingList";
 import SongPipeline from "@/pages/SongPipeline";
 import CallNotes from "@/pages/CallNotes";
 import ContentPipeline from "@/pages/ContentPipeline";
+import QuickLinks from "@/pages/QuickLinks";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/song-pipeline" component={SongPipeline} />
       <Route path="/call-notes" component={CallNotes} />
       <Route path="/content" component={ContentPipeline} />
+      <Route path="/links" component={QuickLinks} />
       <Route component={NotFound} />
     </Switch>
   );
