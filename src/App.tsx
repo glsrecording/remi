@@ -22,6 +22,7 @@ import SongPipeline from "@/pages/SongPipeline";
 import CallNotes from "@/pages/CallNotes";
 import ContentPipeline from "@/pages/ContentPipeline";
 import QuickLinks from "@/pages/QuickLinks";
+import Exercise from "@/pages/Exercise";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ function Router() {
       <Route path="/call-notes" component={CallNotes} />
       <Route path="/content" component={ContentPipeline} />
       <Route path="/links" component={QuickLinks} />
+      <Route path="/exercise" component={Exercise} />
       <Route component={NotFound} />
     </Switch>
   );
