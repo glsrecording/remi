@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { RefreshCw, Loader2, ChevronDown, ChevronRight, X, Mic } from "lucide-react";
+import { RefreshCw, Loader2, ChevronDown, ChevronRight, X, Mic, Plus, Search } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
@@ -101,6 +101,137 @@ async function patchSong(pageId: string, status: string | undefined, nextAction:
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${res.status}`);
+}
+
+async function postNewSong(title: string, artist: string, priority: string, status: string) {
+  const res = await fetch(`${JARVIS_URL}/song/new`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ title, artist, priority, status }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
+
+// ── Add New bottom sheet ───────────────────────────────────────────────────
+
+function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const ACCENT = "#2dd4bf";
+  const [title,    setTitle]    = useState("");
+  const [artist,   setArtist]   = useState("");
+  const [priority, setPriority] = useState("P2");
+  const [status,   setStatus]   = useState("PrePro");
+  const [saving,   setSaving]   = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+
+  async function handleSave() {
+    if (!title.trim() || !artist.trim()) {
+      setError("Title and artist are required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await postNewSong(title.trim(), artist.trim(), priority, status);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="relative z-10 rounded-t-2xl px-5 pt-5 overflow-y-auto"
+        style={{
+          background: "var(--t-surface)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
+          maxHeight: "85vh",
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <p className="text-sm font-bold" style={{ color: "var(--t-text)" }}>Add Song</p>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/5 transition-colors"
+            style={{ color: "var(--t-text5)" }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Title */}
+        <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--t-text6)" }}>Song Title</p>
+        <input
+          className="w-full px-3 py-2.5 rounded-xl text-sm mb-4"
+          style={{ background: "var(--t-card)", color: "var(--t-text)", border: "1.5px solid var(--t-border-md)", outline: "none" }}
+          placeholder="Song title…"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          autoFocus
+        />
+
+        {/* Artist */}
+        <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--t-text6)" }}>Artist</p>
+        <input
+          className="w-full px-3 py-2.5 rounded-xl text-sm mb-5"
+          style={{ background: "var(--t-card)", color: "var(--t-text)", border: "1.5px solid var(--t-border-md)", outline: "none" }}
+          placeholder="Artist name…"
+          value={artist}
+          onChange={e => setArtist(e.target.value)}
+        />
+
+        {/* Priority */}
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>Priority</p>
+        <div className="flex gap-2 mb-5">
+          {PRIORITY_CHIPS.map(chip => {
+            const sel = priority === chip.label;
+            return (
+              <button key={chip.label} onClick={() => setPriority(chip.label)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: sel ? chip.color + "22" : "var(--t-card)",
+                  color:      sel ? chip.color        : "var(--t-text4)",
+                  border:     sel ? `1.5px solid ${chip.color}60` : "1.5px solid var(--t-border-md)",
+                }}>
+                {chip.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Status */}
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>Status</p>
+        <div className="flex flex-wrap gap-2 mb-5">
+          {STATUS_CHIPS.map(chip => {
+            const sel = status === chip;
+            return (
+              <button key={chip} onClick={() => setStatus(chip)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: sel ? (STATUS_COLORS[chip] ?? ACCENT) : "var(--t-card)",
+                  color:      sel ? "#ffffff"                        : "var(--t-text4)",
+                  border:     sel ? `1.5px solid ${STATUS_COLORS[chip] ?? ACCENT}` : "1.5px solid var(--t-border-md)",
+                }}>
+                {chip}
+              </button>
+            );
+          })}
+        </div>
+
+        {error && <p className="text-xs text-red-400/80 mb-3">{error}</p>}
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full py-3 rounded-xl text-sm font-semibold transition-all active:scale-[0.98]"
+          style={{ background: ACCENT + "22", color: ACCENT }}
+        >
+          {saving ? "Adding…" : "Add Song"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ── Edit bottom sheet ──────────────────────────────────────────────────────
@@ -425,12 +556,14 @@ function GroupSection({
 // ── Page ──────────────────────────────────────────────────────────────────
 
 export default function SongPipeline() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
-  const [groups,  setGroups]  = useState<Group[]>([]);
-  const [pulling, setPulling] = useState(false);
-  const [editing, setEditing] = useState<{ song: Song; color: string } | null>(null);
+  const [menuOpen,    setMenuOpen]    = useState(false);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState<string | null>(null);
+  const [groups,      setGroups]      = useState<Group[]>([]);
+  const [pulling,     setPulling]     = useState(false);
+  const [editing,     setEditing]     = useState<{ song: Song; color: string } | null>(null);
+  const [addingNew,   setAddingNew]   = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const scrollRef   = useRef<HTMLDivElement>(null);
   const touchStartY = useRef(0);
@@ -492,10 +625,18 @@ export default function SongPipeline() {
         onMenu={() => setMenuOpen(true)}
         right={<>
           {!loading && (
-            <span className="text-xs mr-2" style={{ color: "var(--t-text6)" }}>
+            <span className="text-xs mr-1" style={{ color: "var(--t-text6)" }}>
               {totalSongs} {totalSongs === 1 ? "song" : "songs"}
             </span>
           )}
+          <button
+            className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+            style={{ color: "var(--t-text5)" }}
+            onClick={() => setAddingNew(true)}
+            title="Add song"
+          >
+            <Plus size={16} />
+          </button>
           <button
             className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
             style={{ color: "var(--t-text5)" }}
@@ -507,10 +648,30 @@ export default function SongPipeline() {
         </>}
       />
 
+      {/* Search bar */}
+      <div className="px-4 pt-3 pb-1 shrink-0">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl"
+          style={{ background: "var(--t-surface)", border: "1.5px solid var(--t-border-md)" }}>
+          <Search size={14} style={{ color: "var(--t-text6)", shrink: 0 }} />
+          <input
+            className="flex-1 text-sm bg-transparent outline-none"
+            style={{ color: "var(--t-text)" }}
+            placeholder="Search songs or artists…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} style={{ color: "var(--t-text6)" }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Content */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-5"
+        className="flex-1 overflow-y-auto px-4 py-3"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}
         onScroll={handleScroll}
         onTouchStart={handleTouchStart}
@@ -544,7 +705,31 @@ export default function SongPipeline() {
           </div>
         )}
 
-        {groups.length > 0 && (
+        {/* Filtered search results */}
+        {searchQuery.trim() && groups.length > 0 && (() => {
+          const q = searchQuery.toLowerCase();
+          const matches = groups.flatMap(g =>
+            g.songs
+              .filter(s => s.song.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
+              .map(s => ({ song: s, color: (PRIORITY_META[g.priority] ?? { color: "#94a3b8" }).color }))
+          );
+          if (matches.length === 0) return (
+            <p className="text-sm text-center py-10" style={{ color: "var(--t-text6)" }}>
+              No songs match "{searchQuery}"
+            </p>
+          );
+          return (
+            <div className="space-y-1.5">
+              {matches.map(({ song, color }) => (
+                <SongCard key={song.id} song={song} color={color}
+                  onTap={s => setEditing({ song: s, color })} />
+              ))}
+            </div>
+          );
+        })()}
+
+        {/* Grouped pipeline (no search active) */}
+        {!searchQuery.trim() && groups.length > 0 && (
           <div className="space-y-6">
             {groups.map(group => (
               <GroupSection
@@ -565,6 +750,14 @@ export default function SongPipeline() {
           color={editing.color}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {/* Add sheet */}
+      {addingNew && (
+        <AddSheet
+          onClose={() => setAddingNew(false)}
+          onSaved={() => { setAddingNew(false); load(); }}
         />
       )}
     </div>
