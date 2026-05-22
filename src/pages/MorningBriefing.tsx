@@ -27,7 +27,8 @@ type TaskItem  = { id: string; title: string; url: string };
 type BillItem  = { name: string; due: string; auto: boolean };
 type EmailItem = { subject: string; sender: string; thread_id: string };
 type BriefingData = {
-  calendar: CalItem[];
+  calendar:          CalItem[];
+  calendar_tomorrow?: CalItem[];
   emails:   EmailItem[];
   tasks: { today: TaskItem[]; tonight: TaskItem[]; tomorrow: TaskItem[] };
   bills: BillItem[];
@@ -206,6 +207,11 @@ export default function MorningBriefing() {
                   Schedule
                 </p>
               </div>
+
+              {/* Today subsection */}
+              <p className="text-xs font-semibold px-1 pt-1" style={{ color: "var(--t-text5)" }}>
+                Today
+              </p>
               {data!.calendar.length === 0 ? (
                 <p className="text-xs text-white/25 px-1">No events today</p>
               ) : (
@@ -225,6 +231,35 @@ export default function MorningBriefing() {
                     <p className="text-sm text-white/85 font-medium leading-snug">{item.title}</p>
                   </div>
                 ))
+              )}
+
+              {/* Tomorrow subsection — only rendered if key exists (backwards compatible) */}
+              {data!.calendar_tomorrow !== undefined && (
+                <>
+                  <p className="text-xs font-semibold px-1 pt-2" style={{ color: "var(--t-text5)" }}>
+                    Tomorrow
+                  </p>
+                  {data!.calendar_tomorrow.length === 0 ? (
+                    <p className="text-xs text-white/25 px-1">No events tomorrow</p>
+                  ) : (
+                    data!.calendar_tomorrow.map((item, i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
+                        style={{ background: "var(--t-card)" }}
+                        data-testid={`calendar-tomorrow-item-${i}`}
+                      >
+                        <span
+                          className="text-xs font-mono mt-0.5 shrink-0"
+                          style={{ color: remiColor, opacity: 0.7 }}
+                        >
+                          {item.time}
+                        </span>
+                        <p className="text-sm text-white/85 font-medium leading-snug">{item.title}</p>
+                      </div>
+                    ))
+                  )}
+                </>
               )}
             </div>
 
