@@ -88,6 +88,15 @@ async function patchTaskReorder(pageId: string, sortOrder: number): Promise<void
   }).catch(() => {});
 }
 
+async function patchTaskTitle(pageId: string, title: string): Promise<void> {
+  const res = await fetch(`${JARVIS_URL}/task/${encodeURIComponent(pageId)}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
 async function fetchTasks(priorityOnly = false): Promise<TaskBuckets> {
   const url = priorityOnly ? `${JARVIS_URL}/tasks?priority=urgent` : `${JARVIS_URL}/tasks`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } });
@@ -441,13 +450,21 @@ interface SwipeableCardProps {
   task: Task;
   sourceBucket: Bucket;
   onMoved: (task: Task, action: SwipeAction) => void;
+  onTitleChanged: (task: Task, newTitle: string) => void;
 }
 
-function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
+function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged }: SwipeableCardProps) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [committing, setCommitting] = useState(false);
   const [committed, setCommitted] = useState(false);
   const [longPressing, setLongPressing] = useState(false);
+
+  // Inline title editing
+  const [editingTitle, setEditingTitle]   = useState(false);
+  const [draftTitle,   setDraftTitle]     = useState(task.title);
+  const [savingTitle,  setSavingTitle]    = useState(false);
+  const [titleError,   setTitleError]     = useState(false);
+  const commitInFlightRef                 = useRef(false);
 
   const startPos       = useRef<{ x: number; y: number } | null>(null);
   const dragging       = useRef(false);
@@ -562,6 +579,45 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
     resetDrag();
   }
 
+  function enterEditMode(e: React.MouseEvent) {
+    if (task.id.startsWith("temp-")) return;
+    e.stopPropagation();
+    setDraftTitle(task.title);
+    setTitleError(false);
+    setEditingTitle(true);
+  }
+
+  async function confirmEdit() {
+    if (commitInFlightRef.current) return;
+    const trimmed = draftTitle.trim();
+    if (!trimmed || trimmed === task.title) {
+      setEditingTitle(false);
+      setTitleError(false);
+      return;
+    }
+    commitInFlightRef.current = true;
+    setSavingTitle(true);
+    try {
+      await patchTaskTitle(task.id, trimmed);
+      onTitleChanged(task, trimmed);
+      setEditingTitle(false);
+      setTitleError(false);
+    } catch {
+      setTitleError(true);
+      setEditingTitle(false);
+      setTimeout(() => setTitleError(false), 3000);
+    } finally {
+      setSavingTitle(false);
+      commitInFlightRef.current = false;
+    }
+  }
+
+  function cancelEdit() {
+    setEditingTitle(false);
+    setDraftTitle(task.title);
+    setTitleError(false);
+  }
+
   if (committed) return null;
 
   const commitColor = commitColorRef.current;
@@ -628,7 +684,33 @@ function SwipeableCard({ task, sourceBucket, onMoved }: SwipeableCardProps) {
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       >
-        <p className="text-lg md:text-xl text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words">{task.title}</p>
+        {editingTitle ? (
+          <input
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); confirmEdit(); }
+              if (e.key === "Escape") cancelEdit();
+            }}
+            onBlur={confirmEdit}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+            autoFocus
+            className="flex-1 min-w-0 bg-transparent text-lg md:text-xl leading-snug outline-none"
+            style={{
+              color: savingTitle ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.9)",
+              borderBottom: "1.5px solid rgba(245,158,11,0.55)",
+            }}
+          />
+        ) : (
+          <p
+            className="text-lg md:text-xl leading-snug flex-1 min-w-0 whitespace-normal break-words"
+            style={{ color: titleError ? "#ef4444" : "rgba(255,255,255,0.85)" }}
+            onClick={enterEditMode}
+          >
+            {task.title}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -643,6 +725,7 @@ function BucketSection({
   onMoved,
   onTaskAdded,
   onReordered,
+  onTitleChanged,
 }: {
   bucket: Bucket;
   tasks: Task[];
@@ -650,6 +733,7 @@ function BucketSection({
   onMoved: (task: Task, fromBucket: Bucket, action: SwipeAction) => void;
   onTaskAdded: (title: string) => void;
   onReordered: (bucket: Bucket, newOrder: Task[]) => void;
+  onTitleChanged: (task: Task, newTitle: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [adding, setAdding] = useState(false);
@@ -813,6 +897,10 @@ function BucketSection({
                     task={task}
                     sourceBucket={bucket}
                     onMoved={(t, action) => onMoved(t, bucket, action)}
+                    onTitleChanged={(t, newTitle) => {
+                      setLocalTasks(prev => prev.map(lt => lt.id === t.id ? { ...lt, title: newTitle } : lt));
+                      onTitleChanged(t, newTitle);
+                    }}
                   />
                 </div>
               </div>
@@ -932,6 +1020,17 @@ export default function Tasks() {
     });
   }, []);
 
+  const handleTitleChanged = useCallback((task: Task, newTitle: string) => {
+    setBuckets(prev => {
+      const updated = { ...prev } as TaskBuckets;
+      for (const b of Object.keys(updated) as Bucket[]) {
+        updated[b] = updated[b].map(t => t.id === task.id ? { ...t, title: newTitle } : t);
+      }
+      saveCache(updated);
+      return updated;
+    });
+  }, []);
+
   const handleDismissUndo = useCallback(() => setUndoState(null), []);
 
   const handleUndo = useCallback(() => {
@@ -1025,6 +1124,7 @@ export default function Tasks() {
                 onMoved={handleMoved}
                 onTaskAdded={(title) => handleTaskAdded(title, b)}
                 onReordered={handleReordered}
+                onTitleChanged={handleTitleChanged}
               />
             ))}
           </div>
