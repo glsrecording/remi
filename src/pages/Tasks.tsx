@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
 import {
   RefreshCw, Loader2, ChevronDown, ChevronRight,
-  Plus, Mic, MicOff, Check, X, GripVertical,
+  Plus, Mic, MicOff, Check, X, GripVertical, Crosshair,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
@@ -38,6 +38,33 @@ const BUCKET_META: Record<Bucket, { label: string; emoji: string; color: string 
   tomorrow: { label: "Tomorrow", emoji: "🌅", color: "#60a5fa" },
   someday:  { label: "Someday",  emoji: "💭", color: "#94a3b8" },
 };
+
+// ── Per-bucket focus state (localStorage) ───────────────────────────────────
+
+type FocusBucket = "today" | "tonight" | "tomorrow";
+
+const FOCUS_BUCKETS = new Set<Bucket>(["today", "tonight", "tomorrow"]);
+
+const FOCUS_KEYS: Record<FocusBucket, string> = {
+  today:    "remi_focus_today",
+  tonight:  "remi_focus_tonight",
+  tomorrow: "remi_focus_tomorrow",
+};
+
+function loadFocus(): Record<FocusBucket, string | null> {
+  const r = { today: null, tonight: null, tomorrow: null } as Record<FocusBucket, string | null>;
+  for (const b of Object.keys(FOCUS_KEYS) as FocusBucket[]) {
+    try { r[b] = localStorage.getItem(FOCUS_KEYS[b]); } catch { /* ignore */ }
+  }
+  return r;
+}
+
+function saveFocusBucket(bucket: FocusBucket, id: string | null): void {
+  try {
+    if (id === null) localStorage.removeItem(FOCUS_KEYS[bucket]);
+    else localStorage.setItem(FOCUS_KEYS[bucket], id);
+  } catch { /* ignore */ }
+}
 
 // Index matches swipe direction: 0=up→Today, 1=right→Tonight, 2=down→Tomorrow, 3=left→Done
 const SWIPE_TARGETS: Array<{ action: SwipeAction; label: string; color: string; arrow: string }> = [
@@ -451,9 +478,12 @@ interface SwipeableCardProps {
   sourceBucket: Bucket;
   onMoved: (task: Task, action: SwipeAction) => void;
   onTitleChanged: (task: Task, newTitle: string) => void;
+  focusedTaskId?: string | null;
+  onToggleFocus?: () => void;
 }
 
-function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged }: SwipeableCardProps) {
+function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, focusedTaskId, onToggleFocus }: SwipeableCardProps) {
+  const isFocused = focusedTaskId === task.id;
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [committing, setCommitting] = useState(false);
   const [committed, setCommitted] = useState(false);
@@ -669,10 +699,10 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged }: Swipeabl
         className="relative flex items-start gap-3 px-4 py-3.5 md:px-5 md:py-4 rounded-xl select-none"
         style={{
           background: committing ? `${commitColor}22` : "var(--t-card)",
-          borderLeft: `3px solid ${BUCKET_META[sourceBucket].color}70`,
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          borderRight: "1px solid rgba(255,255,255,0.05)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          borderLeft: `3px solid ${BUCKET_META[sourceBucket].color}${isFocused ? "" : "70"}`,
+          borderTop: isFocused ? `1.5px solid ${BUCKET_META[sourceBucket].color}` : "1px solid rgba(255,255,255,0.05)",
+          borderRight: isFocused ? `1.5px solid ${BUCKET_META[sourceBucket].color}` : "1px solid rgba(255,255,255,0.05)",
+          borderBottom: isFocused ? `1.5px solid ${BUCKET_META[sourceBucket].color}` : "1px solid rgba(255,255,255,0.05)",
           transform: `translate(${offset.x}px, ${offset.y}px)`,
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
@@ -703,13 +733,30 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged }: Swipeabl
             }}
           />
         ) : (
-          <p
-            className="text-lg md:text-xl leading-snug flex-1 min-w-0 whitespace-normal break-words"
-            style={{ color: titleError ? "#ef4444" : "rgba(255,255,255,0.85)" }}
-            onClick={enterEditMode}
-          >
-            {task.title}
-          </p>
+          <>
+            <p
+              className="text-lg md:text-xl leading-snug flex-1 min-w-0 whitespace-normal break-words"
+              style={{ color: titleError ? "#ef4444" : "rgba(255,255,255,0.85)" }}
+              onClick={enterEditMode}
+            >
+              {task.title}
+            </p>
+            {onToggleFocus && (
+              <button
+                type="button"
+                className="shrink-0 flex items-center justify-center w-7 h-7 rounded-md transition-colors -mr-1 mt-0.5"
+                style={{
+                  background: "transparent",
+                  color: isFocused ? BUCKET_META[sourceBucket].color : "rgba(255,255,255,0.18)",
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onToggleFocus(); }}
+                aria-label={isFocused ? "Remove focus" : "Set as focus task"}
+              >
+                <Crosshair size={15} />
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -726,6 +773,8 @@ function BucketSection({
   onTaskAdded,
   onReordered,
   onTitleChanged,
+  focusedTaskId,
+  onToggleFocus,
 }: {
   bucket: Bucket;
   tasks: Task[];
@@ -734,6 +783,8 @@ function BucketSection({
   onTaskAdded: (title: string) => void;
   onReordered: (bucket: Bucket, newOrder: Task[]) => void;
   onTitleChanged: (task: Task, newTitle: string) => void;
+  focusedTaskId?: string | null;
+  onToggleFocus?: (taskId: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [adding, setAdding] = useState(false);
@@ -901,6 +952,8 @@ function BucketSection({
                       setLocalTasks(prev => prev.map(lt => lt.id === t.id ? { ...lt, title: newTitle } : lt));
                       onTitleChanged(t, newTitle);
                     }}
+                    focusedTaskId={focusedTaskId}
+                    onToggleFocus={onToggleFocus ? () => onToggleFocus(task.id) : undefined}
                   />
                 </div>
               </div>
@@ -931,6 +984,7 @@ export default function Tasks() {
     today: [], tonight: [], tomorrow: [], someday: [],
   });
   const [undoState, setUndoState] = useState<UndoState | null>(null);
+  const [focus, setFocus] = useState<Record<FocusBucket, string | null>>(loadFocus);
   const initialLoaded = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   useGutterScroll(scrollRef);
@@ -987,6 +1041,30 @@ export default function Tasks() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Clear stale focus IDs when task list changes (task deleted/moved externally)
+  useEffect(() => {
+    setFocus(prev => {
+      let changed = false;
+      const updated = { ...prev };
+      for (const b of Object.keys(FOCUS_KEYS) as FocusBucket[]) {
+        if (updated[b] !== null && !buckets[b].some(t => t.id === updated[b])) {
+          updated[b] = null;
+          saveFocusBucket(b, null);
+          changed = true;
+        }
+      }
+      return changed ? updated : prev;
+    });
+  }, [buckets]);
+
+  const handleToggleFocus = useCallback((bucket: FocusBucket, taskId: string) => {
+    setFocus(prev => {
+      const newId = prev[bucket] === taskId ? null : taskId;
+      saveFocusBucket(bucket, newId);
+      return { ...prev, [bucket]: newId };
+    });
+  }, []);
+
   // Optimistically add task, then refresh + re-cache after 2s to get the real page_id
   const handleTaskAdded = useCallback((title: string, bucket: Bucket) => {
     const tempTask: Task = { id: `temp-${Date.now()}`, title, url: "" };
@@ -1008,6 +1086,18 @@ export default function Tasks() {
       ...prev,
       [fromBucket]: prev[fromBucket].filter((t) => t.id !== task.id),
     }));
+
+    // Clear focus if the moved/completed task was the focused one for its bucket
+    if (FOCUS_BUCKETS.has(fromBucket)) {
+      setFocus(prev => {
+        const fb = fromBucket as FocusBucket;
+        if (prev[fb] === task.id) {
+          saveFocusBucket(fb, null);
+          return { ...prev, [fb]: null };
+        }
+        return prev;
+      });
+    }
 
     setUndoState({ task, fromBucket, action });
   }, []);
@@ -1125,6 +1215,8 @@ export default function Tasks() {
                 onTaskAdded={(title) => handleTaskAdded(title, b)}
                 onReordered={handleReordered}
                 onTitleChanged={handleTitleChanged}
+                focusedTaskId={FOCUS_BUCKETS.has(b) ? focus[b as FocusBucket] : undefined}
+                onToggleFocus={FOCUS_BUCKETS.has(b) ? (taskId) => handleToggleFocus(b as FocusBucket, taskId) : undefined}
               />
             ))}
           </div>
