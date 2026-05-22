@@ -288,16 +288,19 @@ export default function CallNotes() {
           streamRef.current = null;
           setIsRecording(false);
           setIsLocked(false);
+          setIsTranscribing(true);
           // 800ms flush: Safari delivers dataavailable after onstop
           setTimeout(() => {
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
             audioChunksRef.current = [];
-            if (blob.size === 0) return;
+            if (blob.size === 0) {
+              setIsTranscribing(false);
+              return;
+            }
             const ext = mimeType.includes("mp4") ? "mp4" : mimeType.includes("ogg") ? "ogg" : "webm";
             const formData = new FormData();
             formData.append("file", blob, `audio.${ext}`);
             formData.append("model", "whisper-1");
-            setIsTranscribing(true);
             fetch(`${JARVIS_URL}/transcribe`, {
               method: "POST",
               headers: { Authorization: `Bearer ${REMI_API_KEY}` },
