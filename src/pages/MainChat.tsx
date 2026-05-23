@@ -890,13 +890,6 @@ export default function MainChat() {
   });
   return (
     <div style={{ width: "100%", height: "100dvh", overflow: "hidden", position: "relative", background: "var(--t-bg-deep)" }}>
-      <style>{`
-        @keyframes micWave {
-          0%, 100% { height: 4px; }
-          50%       { height: 14px; }
-        }
-        .mic-wave-bar { animation: micWave 0.7s ease-in-out infinite; }
-      `}</style>
       <div style={{ width: "100%", height: "100%", position: "relative" }}>
     <div
       className="flex flex-col h-full w-full select-none"
@@ -1444,7 +1437,7 @@ export default function MainChat() {
                 {[0, 120, 240, 360].map((delay, i) => (
                   <div
                     key={i}
-                    className="mic-wave-bar w-0.5 rounded-full"
+                    className="mic-wave-bar"
                     style={{ animationDelay: `${delay}ms`, background: userColor }}
                   />
                 ))}
