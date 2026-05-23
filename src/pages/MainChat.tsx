@@ -1411,6 +1411,7 @@ export default function MainChat() {
               border: `1.5px solid ${isRecording ? userColor : `${userColor}50`}`,
               marginRight: "20px",
               touchAction: "none",
+              overflow: "visible",
             }}
             onPointerDown={(e) => {
               if (navigator.vibrate) navigator.vibrate(15); // FIX 1: haptic, synchronous, no conditions
@@ -1433,12 +1434,12 @@ export default function MainChat() {
               <Loader2 size={16} className="animate-spin" style={{ color: userColor }} />
             ) : isRecording ? (
               /* FIX 2: animated waveform bars while recording */
-              <div className="flex items-end gap-0.5">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "3px", height: "24px", overflow: "visible" }}>
                 {[0, 120, 240, 360].map((delay, i) => (
                   <div
                     key={i}
                     className="mic-wave-bar"
-                    style={{ animationDelay: `${delay}ms`, background: userColor }}
+                    style={{ background: userColor, animationDelay: `${delay}ms` }}
                   />
                 ))}
               </div>

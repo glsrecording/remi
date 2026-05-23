@@ -405,15 +405,16 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
 
 /* Mic waveform bars — MainChat recording indicator */
 @keyframes micWave {
-  0%, 100% { height: 4px; }
-  50%       { height: 14px; }
+  from { height: 4px; }
+  to   { height: 16px; }
 }
 
 .mic-wave-bar {
   width: 3px;
   height: 4px;
+  min-height: 4px;
   border-radius: 2px;
-  animation: micWave 0.7s ease-in-out infinite;
+  animation: micWave 0.7s ease-in-out infinite alternate;
 }
 
 .prose-dark p { margin: 0 0 0.4em; }
