@@ -1402,24 +1402,25 @@ export default function MainChat() {
             Send
           </button>
 
-          {/* Mic — FIX 1 haptic on press, FIX 2 immediate waveform, FIX 5 userColor */}
+          {/* Mic — haptic first line, button color-change on recording */}
           <button
             type="button"
-            className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-150"
+            className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center"
             style={{
-              background: isRecording ? `${userColor}22` : `${userColor}14`,
+              background: isRecording ? userColor : `${userColor}14`,
               border: `1.5px solid ${isRecording ? userColor : `${userColor}50`}`,
+              transform: isRecording ? "scale(1.15)" : "scale(1)",
+              transition: "all 0.1s ease",
               marginRight: "20px",
               touchAction: "none",
-              overflow: "visible",
             }}
             onPointerDown={(e) => {
-              if (navigator.vibrate) navigator.vibrate(15); // FIX 1: haptic, synchronous, no conditions
+              if (navigator.vibrate) navigator.vibrate(15); // haptic — absolute first line
               e.currentTarget.setPointerCapture(e.pointerId);
               e.preventDefault();
               pointerStartYRef.current = e.clientY;
               if (isRecording || isTranscribing) return; // busy guard
-              setIsRecording(true); // FIX 2: immediate visual — fires same frame as press
+              setIsRecording(true); // immediate visual — fires same frame as press
               handleMicDown();
             }}
             onPointerMove={(e) => {
@@ -1432,19 +1433,8 @@ export default function MainChat() {
           >
             {isTranscribing ? (
               <Loader2 size={16} className="animate-spin" style={{ color: userColor }} />
-            ) : isRecording ? (
-              /* FIX 2: animated waveform bars while recording */
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "3px", height: "24px", overflow: "visible" }}>
-                {[0, 120, 240, 360].map((delay, i) => (
-                  <div
-                    key={i}
-                    className="mic-wave-bar"
-                    style={{ background: userColor, animationDelay: `${delay}ms` }}
-                  />
-                ))}
-              </div>
             ) : (
-              <Mic size={16} style={{ color: userColor }} />
+              <Mic size={16} style={{ color: isRecording ? "#ffffff" : userColor }} />
             )}
           </button>
 
