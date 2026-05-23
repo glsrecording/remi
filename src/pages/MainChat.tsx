@@ -528,6 +528,11 @@ export default function MainChat() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  // WebSocket TTS streaming refs
+  const wsRef = useRef<WebSocket | null>(null);
+  const wsPlaybackEndTimeRef = useRef<number>(0);
+  const wsActiveSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const wsStreamDoneRef = useRef<boolean>(false);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -634,38 +639,129 @@ export default function MainChat() {
 
   const speakResponse = useCallback(async (text: string) => {
     if (!voiceEnabledRef.current || !text.trim()) return;
+
+    // Stop any ongoing playback (REST or WS)
     if (audioRef.current) { try { audioRef.current.stop(); } catch { /* already stopped */ } audioRef.current = null; }
+    if (wsRef.current) { try { wsRef.current.close(); } catch {} wsRef.current = null; }
+    wsActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
+    wsActiveSourcesRef.current = [];
+    wsStreamDoneRef.current = false;
+
     if (!audioContextRef.current) audioContextRef.current = new AudioContext();
     const actx = audioContextRef.current;
-    try {
-      if (actx.state === "suspended") await actx.resume();
-      setIsSpeaking(true);
-      const ttsText = text
-        .replace(/_"[^"]*"_/g, "")
-        .replace(/https?:\/\/\S+/g, "")
-        .replace(/[*_`]/g, "")
-        .replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{27BF}️]/gu, "")
-        .replace(/\s+/g, " ")
-        .trim();
-      const resp = await fetch(`${JARVIS_URL}/tts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${REMI_API_KEY}` },
-        body: JSON.stringify({ text: ttsText }),
-      });
-      if (!resp.ok) throw new Error(`TTS ${resp.status}`);
-      const buf = await resp.arrayBuffer();
-      const audioBuffer = await actx.decodeAudioData(buf);
-      const source = actx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(actx.destination);
-      audioRef.current = source;
-      source.onended = () => { setIsSpeaking(false); audioRef.current = null; };
-      source.start();
-    } catch (e) {
-      console.warn("[speakResponse]", (e as Error).message);
-      setIsSpeaking(false);
-    }
-  }, []);
+    try { if (actx.state === "suspended") await actx.resume(); } catch {}
+
+    const ttsText = text
+      .replace(/_"[^"]*"_/g, "")
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/[*_`]/g, "")
+      .replace(/[\u{1F000}-\u{1FFFF}\u{2190}-\u{27BF}️]/gu, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!ttsText) return;
+
+    setIsSpeaking(true);
+
+    // REST fallback — used if WS fails to open within 3s or errors pre-stream
+    const _restFallback = async () => {
+      try {
+        const resp = await fetch(`${JARVIS_URL}/tts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${REMI_API_KEY}` },
+          body: JSON.stringify({ text: ttsText }),
+        });
+        if (!resp.ok) throw new Error(`TTS ${resp.status}`);
+        const buf = await resp.arrayBuffer();
+        const audioBuffer = await actx.decodeAudioData(buf);
+        const source = actx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(actx.destination);
+        audioRef.current = source;
+        source.onended = () => { setIsSpeaking(false); audioRef.current = null; };
+        source.start();
+      } catch (e) {
+        console.warn("[speakResponse/rest]", (e as Error).message);
+        setIsSpeaking(false);
+      }
+    };
+
+    // WebSocket path — Gemini Live streams WAV frames (24kHz Int16 LE mono)
+    // Auth via query param (browsers can't set headers on WebSocket constructor)
+    const JARVIS_WS_URL = JARVIS_URL.replace("https://", "wss://").replace("http://", "ws://");
+    let settled = false;    // true once WS opened OR fallback fired
+    let fallbackFired = false;
+
+    const fallbackTimer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        fallbackFired = true;
+        if (wsRef.current) { try { wsRef.current.close(); } catch {} wsRef.current = null; }
+        _restFallback();
+      }
+    }, 3000);
+
+    const ws = new WebSocket(`${JARVIS_WS_URL}/ws/tts?key=${encodeURIComponent(REMI_API_KEY)}`);
+    wsRef.current = ws;
+    ws.binaryType = "arraybuffer";
+    wsPlaybackEndTimeRef.current = 0;
+
+    ws.onopen = () => {
+      clearTimeout(fallbackTimer);
+      settled = true;
+      wsPlaybackEndTimeRef.current = actx.currentTime;
+      ws.send(ttsText);
+    };
+
+    ws.onmessage = async (event) => {
+      if (fallbackFired || !(event.data instanceof ArrayBuffer)) return;
+      if (event.data.byteLength === 0) {
+        // Empty binary frame = end of audio stream
+        wsStreamDoneRef.current = true;
+        if (wsRef.current === ws) wsRef.current = null;
+        if (wsActiveSourcesRef.current.length === 0) setIsSpeaking(false);
+        return;
+      }
+      try {
+        // Each frame is a complete WAV file — decodeAudioData handles it natively
+        const audioBuffer = await actx.decodeAudioData(event.data.slice(0));
+        const source = actx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(actx.destination);
+        // Chain chunks gaplessly: schedule each to start when previous ends
+        const startAt = Math.max(actx.currentTime, wsPlaybackEndTimeRef.current);
+        wsPlaybackEndTimeRef.current = startAt + audioBuffer.duration;
+        wsActiveSourcesRef.current.push(source);
+        source.onended = () => {
+          wsActiveSourcesRef.current = wsActiveSourcesRef.current.filter(s => s !== source);
+          if (wsActiveSourcesRef.current.length === 0 && wsStreamDoneRef.current) {
+            setIsSpeaking(false);
+          }
+        };
+        source.start(startAt);
+      } catch (e) {
+        console.warn("[speakResponse/ws] decode:", e);
+      }
+    };
+
+    ws.onerror = () => {
+      clearTimeout(fallbackTimer);
+      if (!fallbackFired) {
+        fallbackFired = true;
+        settled = true;
+        if (wsRef.current === ws) wsRef.current = null;
+        _restFallback();
+      }
+    };
+
+    ws.onclose = () => {
+      clearTimeout(fallbackTimer);
+      if (wsRef.current === ws) wsRef.current = null;
+      // Closed without end frame and no fallback — clear speaking if nothing queued
+      if (!wsStreamDoneRef.current && !fallbackFired && wsActiveSourcesRef.current.length === 0) {
+        setIsSpeaking(false);
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
@@ -1071,6 +1167,9 @@ export default function MainChat() {
                   try { audioRef.current.stop(); } catch { /* already stopped */ }
                   audioRef.current = null;
                 }
+                if (wsRef.current) { try { wsRef.current.close(); } catch {} wsRef.current = null; }
+                wsActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
+                wsActiveSourcesRef.current = [];
                 setIsSpeaking(false);
               } else {
                 if (!audioContextRef.current) {
