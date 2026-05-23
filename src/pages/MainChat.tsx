@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
   Mic,
-  MicOff,
   Menu,
   CornerDownRight,
   Pin,
@@ -523,12 +522,6 @@ export default function MainChat() {
   const [isLocked, setIsLocked] = useState(false);
   const pointerStartYRef = useRef<number>(0);
 
-  // Web Speech API voice mode
-  const [voiceMode, setVoiceMode] = useState(false);
-  const [previewText, setPreviewText] = useState("");
-  const [srSupported, setSrSupported] = useState(false);
-  const recognitionRef = useRef<any>(null);
-
   // Voice mode
   const [voiceEnabled, setVoiceEnabled] = useLocalStorage<boolean>("remi_voice_enabled", false);
   const voiceEnabledRef = useRef(false);
@@ -569,16 +562,11 @@ export default function MainChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const mountTimeRef = useRef(new Date());
+  const typewriterRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Cleanup typewriter on unmount
+  useEffect(() => () => { if (typewriterRef.current) clearInterval(typewriterRef.current); }, []);
 
   useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
-
-  // Detect Web Speech API support at mount; log active mic path
-  useEffect(() => {
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const supported = !!SR;
-    setSrSupported(supported);
-    console.log(`[Remi] mic path: ${supported ? "Web Speech API" : "Whisper (fallback)"}`);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     document.documentElement.style.setProperty("--remi-accent", remiColor);
@@ -784,62 +772,9 @@ export default function MainChat() {
     [messages, setMessages, recordRecentCommand, navigate, speakResponse],
   );
 
-  // ─── Web Speech API voice mode ────────────────────────────────────────────
-  function enterVoiceMode() {
-    if (navigator.vibrate) navigator.vibrate(15);
-    setVoiceMode(true);
-    setPreviewText("");
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const rec = new SR();
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.lang = "en-US";
-    rec.onresult = (e: any) => {
-      const transcript = Array.from(e.results as any[])
-        .map((r: any) => r[0].transcript)
-        .join("");
-      setPreviewText(transcript);
-      const lastResult = e.results[e.results.length - 1];
-      if (lastResult.isFinal) {
-        recognitionRef.current = null;
-        setVoiceMode(false);
-        setPreviewText("");
-        if (transcript.trim()) sendMessage(transcript.trim(), true);
-      }
-    };
-    rec.onerror = () => {
-      recognitionRef.current = null;
-      setVoiceMode(false);
-      setPreviewText("");
-    };
-    rec.onend = () => {
-      recognitionRef.current = null;
-      setVoiceMode(false);
-    };
-    recognitionRef.current = rec;
-    try { rec.start(); } catch { setVoiceMode(false); }
-  }
-
-  function exitVoiceMode(keepText = false) {
-    const rec = recognitionRef.current;
-    if (rec) {
-      rec.onresult = null;
-      rec.onerror = null;
-      rec.onend = null;
-      try { rec.stop(); } catch { /* already stopped */ }
-      recognitionRef.current = null;
-    }
-    if (keepText && previewText.trim()) {
-      setInputText(previewText.trim());
-    }
-    setVoiceMode(false);
-    setPreviewText("");
-  }
-  // ─────────────────────────────────────────────────────────────────────────
-
   // ─── Mic: 150ms hold-to-record ───────────────────────────────────────────
   function handleMicDown() {
-    if (isRecording) return;
+    if (mediaRecorderRef.current) return; // already recording
     holdActiveRef.current = false;
     setRecordingError(null);
     holdTimerRef.current = setTimeout(async () => {
@@ -868,9 +803,10 @@ export default function MainChat() {
           setTimeout(() => {
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
             audioChunksRef.current = [];
-            if (blob.size === 0) return;
+            if (blob.size === 0) { setIsTranscribing(false); return; }
             transcribeAudio(blob)
               .then((transcript) => {
+                setIsTranscribing(false);
                 if (transcript) {
                   const _vm = transcript.match(/\b(mix(?:ed)?\s*notes?|mixnode)\s*session[\s,;.:]*(.+)/i);
                   if (_vm) {
@@ -880,15 +816,30 @@ export default function MainChat() {
                     navigate("/mix-notes");
                     return;
                   }
-                  sendMessage(transcript, true);
+                  // FIX 4: typewriter reveal — 18ms/char, then auto-send
+                  let i = 0;
+                  setInputText("");
+                  if (typewriterRef.current) clearInterval(typewriterRef.current);
+                  typewriterRef.current = setInterval(() => {
+                    i++;
+                    setInputText(transcript.slice(0, i));
+                    if (i >= transcript.length) {
+                      clearInterval(typewriterRef.current!);
+                      typewriterRef.current = null;
+                      sendMessage(transcript, true);
+                    }
+                  }, 18);
                 } else setRecordingError("Nothing captured — try again.");
               })
-              .catch(() => setRecordingError("Transcription failed — check connection."));
+              .catch(() => {
+                setIsTranscribing(false);
+                setRecordingError("Transcription failed — check connection.");
+              });
           }, 800);
         };
         recorder.start(100);
-        setIsRecording(true);
       } catch {
+        setIsRecording(false);
         setRecordingError("Microphone permission is blocked or unavailable.");
       }
     }, 150);
@@ -901,6 +852,7 @@ export default function MainChat() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current = null;
+      setIsTranscribing(true); // FIX 3: immediate transcribing feedback on release
     }
     setIsRecording(false);
   }
@@ -925,6 +877,7 @@ export default function MainChat() {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current = null;
+      setIsTranscribing(true); // FIX 3: show transcribing on locked send too
     }
   }
   // ─────────────────────────────────────────────────────────────────────────
@@ -937,6 +890,13 @@ export default function MainChat() {
   });
   return (
     <div style={{ width: "100%", height: "100dvh", overflow: "hidden", position: "relative", background: "var(--t-bg-deep)" }}>
+      <style>{`
+        @keyframes micWave {
+          0%, 100% { height: 4px; }
+          50%       { height: 14px; }
+        }
+        .mic-wave-bar { animation: micWave 0.7s ease-in-out infinite; }
+      `}</style>
       <div style={{ width: "100%", height: "100%", position: "relative" }}>
     <div
       className="flex flex-col h-full w-full select-none"
@@ -1360,12 +1320,10 @@ export default function MainChat() {
             </button>
           </div>
         )}
-        {/* Recording / transcribing indicator */}
-        {(isRecording || isTranscribing) && !isLocked && (
+        {/* Recording indicator — shown above bar while mic is active */}
+        {isRecording && !isLocked && (
           <div className="flex items-center justify-center gap-2 mb-2 h-5">
-            {isTranscribing
-              ? <><Loader2 size={13} className="animate-spin" style={{ color: userColor }} /><span className="text-xs" style={{ color: userColor }}>Transcribing...</span></>
-              : <span className="text-xs" style={{ color: "#ef4444" }}>Recording…</span>}
+            <span className="text-xs" style={{ color: userColor }}>Recording…</span>
           </div>
         )}
 
@@ -1410,35 +1368,27 @@ export default function MainChat() {
           </div>
         )}
 
-        {/* Unified input bar — TEXT MODE and VOICE MODE */}
+        {/* Input row: [text input or transcribing zone] [Send] [mic] */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (!voiceMode) sendMessage(inputText);
+            sendMessage(inputText);
           }}
           className="w-full flex gap-2 items-center"
         >
-          {/* Text input or voice preview zone */}
-          {voiceMode ? (
+          {/* FIX 3: input area shows "Transcribing…" in place of placeholder while processing */}
+          {isTranscribing ? (
             <div
-              className="flex-1 flex items-center px-4 rounded-xl cursor-pointer"
+              className="flex-1 flex items-center px-4 rounded-xl"
               style={{
                 background: "rgba(255,255,255,0.05)",
-                border: `1.5px solid ${userColor}60`,
+                border: "1px solid rgba(255,255,255,0.10)",
                 minHeight: "42px",
-                touchAction: "none",
               }}
-              onClick={() => exitVoiceMode(true)}
             >
-              {previewText ? (
-                <span style={{ color: userColor, fontSize: "0.875rem", fontStyle: "italic", flex: 1 }}>
-                  {previewText}
-                </span>
-              ) : (
-                <span style={{ color: "rgba(255,255,255,0.25)", fontSize: "0.875rem", flex: 1 }}>
-                  Listening…
-                </span>
-              )}
+              <span style={{ color: userColor, fontSize: "0.875rem", fontStyle: "italic" }}>
+                Transcribing…
+              </span>
             </div>
           ) : (
             <input
@@ -1450,64 +1400,58 @@ export default function MainChat() {
             />
           )}
 
-          {/* Send button — hidden in voice mode (auto-sends on final result) */}
-          {!voiceMode && (
-            <button
-              type="submit"
-              className="shrink-0 px-4 py-2.5 md:py-3 rounded-xl text-sm font-medium transition-all active:scale-95"
-              style={{ background: userColor, color: "#111111" }}
-              data-testid="button-send"
-            >
-              Send
-            </button>
-          )}
+          <button
+            type="submit"
+            className="shrink-0 px-4 py-2.5 md:py-3 rounded-xl text-sm font-medium transition-all active:scale-95"
+            style={{ background: userColor, color: "#111111" }}
+            data-testid="button-send"
+          >
+            Send
+          </button>
 
-          {/* Mic — userColor cohesion; tap empty input + SR → voice mode; hold → Whisper fallback */}
+          {/* Mic — FIX 1 haptic on press, FIX 2 immediate waveform, FIX 5 userColor */}
           <button
             type="button"
             className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-150"
             style={{
-              background: voiceMode
-                ? `${userColor}22`
-                : isRecording
-                ? "#ef444422"
-                : `${userColor}14`,
-              border: `1.5px solid ${voiceMode ? userColor : isRecording ? "#ef4444" : `${userColor}50`}`,
+              background: isRecording ? `${userColor}22` : `${userColor}14`,
+              border: `1.5px solid ${isRecording ? userColor : `${userColor}50`}`,
               marginRight: "20px",
               touchAction: "none",
             }}
             onPointerDown={(e) => {
+              if (navigator.vibrate) navigator.vibrate(15); // FIX 1: haptic, synchronous, no conditions
               e.currentTarget.setPointerCapture(e.pointerId);
               e.preventDefault();
               pointerStartYRef.current = e.clientY;
-              if (!voiceMode) handleMicDown();
+              if (isRecording || isTranscribing) return; // busy guard
+              setIsRecording(true); // FIX 2: immediate visual — fires same frame as press
+              handleMicDown();
             }}
             onPointerMove={(e) => {
-              if (!isRecording || isLocked || voiceMode) return;
+              if (!isRecording || isLocked) return;
               if (pointerStartYRef.current - e.clientY > 60) setIsLocked(true);
             }}
-            onPointerUp={() => {
-              if (voiceMode) { exitVoiceMode(false); return; }
-              if (!holdActiveRef.current && !isRecording) {
-                if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
-                if (inputText === "" && srSupported) enterVoiceMode();
-                return;
-              }
-              handleMicUp();
-            }}
-            onPointerLeave={() => {
-              if (voiceMode) return;
-              handleMicUp();
-            }}
+            onPointerUp={handleMicUp}
+            onPointerLeave={handleMicUp}
             data-testid="button-voice"
           >
-            {isTranscribing
-              ? <Loader2 size={16} className="animate-spin" style={{ color: userColor }} />
-              : voiceMode
-              ? <Mic size={16} className="animate-pulse" style={{ color: userColor }} />
-              : isRecording
-              ? <MicOff size={16} style={{ color: "#ef4444" }} />
-              : <Mic size={16} style={{ color: userColor }} />}
+            {isTranscribing ? (
+              <Loader2 size={16} className="animate-spin" style={{ color: userColor }} />
+            ) : isRecording ? (
+              /* FIX 2: animated waveform bars while recording */
+              <div className="flex items-end gap-0.5">
+                {[0, 120, 240, 360].map((delay, i) => (
+                  <div
+                    key={i}
+                    className="mic-wave-bar w-0.5 rounded-full"
+                    style={{ animationDelay: `${delay}ms`, background: userColor }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <Mic size={16} style={{ color: userColor }} />
+            )}
           </button>
 
         </form>
