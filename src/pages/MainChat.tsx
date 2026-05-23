@@ -533,6 +533,10 @@ export default function MainChat() {
   const wsPlaybackEndTimeRef = useRef<number>(0);
   const wsActiveSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const wsStreamDoneRef = useRef<boolean>(false);
+  // Voice diagnostic overlay
+  const [voiceDebug, setVoiceDebug] = useState<{ label: string; color: string } | null>(null);
+  const voiceDebugTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wsChunkCountRef = useRef<number>(0);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -646,6 +650,9 @@ export default function MainChat() {
     wsActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
     wsActiveSourcesRef.current = [];
     wsStreamDoneRef.current = false;
+    wsChunkCountRef.current = 0;
+    if (voiceDebugTimerRef.current) { clearTimeout(voiceDebugTimerRef.current); voiceDebugTimerRef.current = null; }
+    setVoiceDebug(null);
 
     if (!audioContextRef.current) audioContextRef.current = new AudioContext();
     const actx = audioContextRef.current;
@@ -696,10 +703,14 @@ export default function MainChat() {
         settled = true;
         fallbackFired = true;
         if (wsRef.current) { try { wsRef.current.close(); } catch {} wsRef.current = null; }
+        console.log("[voice] 3s timeout — fallback to REST");
+        setVoiceDebug({ label: "REST (timeout)", color: "#f59e0b" });
+        voiceDebugTimerRef.current = setTimeout(() => setVoiceDebug(null), 2000);
         _restFallback();
       }
     }, 3000);
 
+    console.log("[voice] WebSocket constructor called:", `${JARVIS_WS_URL}/ws/tts`);
     const ws = new WebSocket(`${JARVIS_WS_URL}/ws/tts?key=${encodeURIComponent(REMI_API_KEY)}`);
     wsRef.current = ws;
     ws.binaryType = "arraybuffer";
@@ -708,6 +719,8 @@ export default function MainChat() {
     ws.onopen = () => {
       clearTimeout(fallbackTimer);
       settled = true;
+      console.log("[voice] onopen fired");
+      setVoiceDebug({ label: "WS", color: "#22c55e" });
       wsPlaybackEndTimeRef.current = actx.currentTime;
       ws.send(ttsText);
     };
@@ -716,11 +729,19 @@ export default function MainChat() {
       if (fallbackFired || !(event.data instanceof ArrayBuffer)) return;
       if (event.data.byteLength === 0) {
         // Empty binary frame = end of audio stream
+        console.log("[voice] empty frame received — stream done");
         wsStreamDoneRef.current = true;
         if (wsRef.current === ws) wsRef.current = null;
+        setVoiceDebug({ label: `WS done: ${wsChunkCountRef.current} chunks`, color: "#22c55e" });
+        voiceDebugTimerRef.current = setTimeout(() => setVoiceDebug(null), 2000);
         if (wsActiveSourcesRef.current.length === 0) setIsSpeaking(false);
         return;
       }
+      if (wsChunkCountRef.current === 0) {
+        console.log("[voice] first binary frame arrived — byteLength:", event.data.byteLength);
+      }
+      wsChunkCountRef.current += 1;
+      setVoiceDebug({ label: `WS: ${wsChunkCountRef.current} chunks`, color: "#22c55e" });
       try {
         // Each frame is a complete WAV file — decodeAudioData handles it natively
         const audioBuffer = await actx.decodeAudioData(event.data.slice(0));
@@ -743,12 +764,16 @@ export default function MainChat() {
       }
     };
 
-    ws.onerror = () => {
+    ws.onerror = (event) => {
+      console.log("[voice] onerror fired:", event);
       clearTimeout(fallbackTimer);
       if (!fallbackFired) {
         fallbackFired = true;
         settled = true;
         if (wsRef.current === ws) wsRef.current = null;
+        console.log("[voice] fallback to REST (WS error)");
+        setVoiceDebug({ label: "REST (WS error)", color: "#f59e0b" });
+        voiceDebugTimerRef.current = setTimeout(() => setVoiceDebug(null), 2000);
         _restFallback();
       }
     };
@@ -1396,6 +1421,23 @@ export default function MainChat() {
           padding: "8px 16px 48px",
         }}
       >
+        {/* Voice diagnostic badge — shows WS vs REST path for debugging */}
+        {voiceDebug && (
+          <div className="flex items-center justify-center mb-1">
+            <span style={{
+              background: `${voiceDebug.color}18`,
+              border: `1px solid ${voiceDebug.color}50`,
+              color: voiceDebug.color,
+              fontFamily: "'Space Mono', monospace",
+              fontSize: "0.7rem",
+              padding: "1px 8px",
+              borderRadius: "4px",
+            }}>
+              {voiceDebug.label}
+            </span>
+          </div>
+        )}
+
         {/* Lock bar: visible when user slides up to lock recording */}
         {isLocked && (
           <div className="flex items-center justify-between mb-2 px-1">
