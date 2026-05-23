@@ -1,12 +1,27 @@
 import { useState } from "react";
 import { Delete } from "lucide-react";
 
-const STORAGE_KEY = "remi_unlocked_v1";
-const CORRECT_PIN = import.meta.env.VITE_REMI_PIN as string | undefined;
+const STORAGE_KEY   = "remi_unlocked_v1";
+const UNLOCK_TS_KEY = "remi_unlock_ts_v1";
+const CORRECT_PIN   = import.meta.env.VITE_REMI_PIN as string | undefined;
+const SESSION_TIMEOUT_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 export function isPinUnlocked(): boolean {
   if (!CORRECT_PIN) return true;
-  return localStorage.getItem(STORAGE_KEY) === CORRECT_PIN;
+  if (localStorage.getItem(STORAGE_KEY) !== CORRECT_PIN) return false;
+  const ts = parseInt(localStorage.getItem(UNLOCK_TS_KEY) ?? "0", 10);
+  if (!ts || Date.now() - ts > SESSION_TIMEOUT_MS) {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(UNLOCK_TS_KEY);
+    return false;
+  }
+  return true;
+}
+
+/** Clear PIN session — call when server signals session_expired. */
+export function clearPinUnlock(): void {
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(UNLOCK_TS_KEY);
 }
 
 const ACCENT = "#f59e0b";
@@ -24,6 +39,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
     if (next.length < pinLength) return;
     if (next === CORRECT_PIN) {
       localStorage.setItem(STORAGE_KEY, CORRECT_PIN!);
+      localStorage.setItem(UNLOCK_TS_KEY, Date.now().toString());
       onUnlock();
     } else {
       setShaking(true);

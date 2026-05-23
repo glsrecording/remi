@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -58,6 +58,15 @@ function Router() {
 
 function App() {
   const [unlocked, setUnlocked] = useState(isPinUnlocked);
+
+  // Periodic 5-minute check — re-gates PIN if 4 hours have elapsed since unlock
+  useEffect(() => {
+    if (!unlocked) return;
+    const id = setInterval(() => {
+      if (!isPinUnlocked()) setUnlocked(false);
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [unlocked]);
 
   if (!unlocked) {
     return <PinLock onUnlock={() => setUnlocked(true)} />;

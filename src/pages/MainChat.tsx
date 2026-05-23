@@ -16,6 +16,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import UndoBar from "@/components/UndoBar";
+import { clearPinUnlock } from "@/components/PinLock";
 import SundaySweep, { SundaySweepChip } from "@/components/SundaySweep";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { useToast } from "@/hooks/use-toast";
@@ -710,6 +711,11 @@ export default function MainChat() {
       })
         .then((r) => r.json())
         .then((data) => {
+          if (data.error === "session_expired") {
+            clearPinUnlock();
+            window.location.reload();
+            return;
+          }
           setIsJarvisLoading(false);
           if (data.type === "triage_redirect" && Array.isArray(data.items)) {
             sessionStorage.setItem("triage_preload", JSON.stringify(data.items));
