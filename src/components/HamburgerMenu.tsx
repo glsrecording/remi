@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, Terminal, Shuffle, Radio, BookOpen, RefreshCw, CalendarClock, ClipboardCheck, ShoppingCart, Layers, Phone, Film, Link2, Dumbbell, Bell } from "lucide-react";
+import { X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, Terminal, Shuffle, Radio, BookOpen, RefreshCw, CalendarClock, ClipboardCheck, ShoppingCart, Layers, Phone, Film, Link2, Dumbbell, Bell, Archive } from "lucide-react";
 import { useEffect } from "react";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -16,6 +16,7 @@ const menuItems = [
   { label: "Content",          icon: Film,   path: "/content" },
   { label: "Tasks",            icon: Brain,  path: "/tasks" },
   { label: "Session", icon: Radio, path: "/session" },
+  { label: "Wrap Up",  icon: Archive, path: "/wrap-up" },
   { label: "Call Notes", icon: Phone, path: "/call-notes" },
   { label: "Reminders",  icon: Bell,  path: "/reminders" },
   { label: "Links",      icon: Link2,    path: "/links" },
