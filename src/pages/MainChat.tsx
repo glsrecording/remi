@@ -808,6 +808,12 @@ export default function MainChat() {
               .then((transcript) => {
                 setIsTranscribing(false);
                 if (transcript) {
+                  // Discard Whisper silence artifacts (common hallucinations on short/silent recordings)
+                  const SILENCE_ARTIFACTS = ["you", "thanks", "thank you", "thank you.", "thanks.", "bye", "bye.", ""];
+                  const cleaned = transcript.trim().toLowerCase();
+                  if (cleaned.length < 8 && SILENCE_ARTIFACTS.includes(cleaned)) {
+                    return; // discard silently — isTranscribing and isRecording already cleared above
+                  }
                   const _vm = transcript.match(/\b(mix(?:ed)?\s*notes?|mixnode)\s*session[\s,;.:]*(.+)/i);
                   if (_vm) {
                     const _rest = _vm[2].trim().replace(/^for[\s,;.]+/i, "").replace(/[.!?]+$/, "").trim();
@@ -1420,9 +1426,7 @@ export default function MainChat() {
               marginRight: "20px",
               touchAction: "none",
             }}
-            onTouchStart={() => { if (navigator.vibrate) navigator.vibrate(15); }}
             onPointerDown={(e) => {
-              if (!('ontouchstart' in window) && navigator.vibrate) navigator.vibrate(15); // haptic fallback — touchstart fires first on Android
               e.currentTarget.setPointerCapture(e.pointerId);
               e.preventDefault();
               pointerStartYRef.current = e.clientY;
