@@ -125,6 +125,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
   const [isRecording, setIsRecording] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [justSubmitted, setJustSubmitted] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
@@ -157,6 +158,8 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
   function submit() {
     const t = text.trim(); if (!t) return;
     onAdd(t); setText("");
+    setJustSubmitted(true);
+    setTimeout(() => setJustSubmitted(false), 1500);
     setTimeout(() => taRef.current?.focus(), 50);
   }
 
@@ -192,7 +195,11 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
         if (blob.size === 0) { setIsProcessing(false); return; }
         try {
           const transcript = await transcribeAudio(blob);
-          if (transcript) onAdd(transcript);
+          if (transcript) {
+            onAdd(transcript);
+            setJustSubmitted(true);
+            setTimeout(() => setJustSubmitted(false), 1500);
+          }
         } catch { /* silent */ }
         finally { setIsProcessing(false); }
       }, 800);
@@ -266,6 +273,13 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
           <span className="text-xs text-white/25 ml-2">↑ slide to lock</span>
         </div>
       )}
+      {/* Capture feedback — brief amber ✓ after text or voice submit */}
+      {justSubmitted && !isRecording && !isProcessing && !isLocked && (
+        <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 border-b border-white/5">
+          <Check size={11} style={{ color: "#f59e0b" }} />
+          <span className="text-xs" style={{ color: "#f59e0b" }}>Added</span>
+        </div>
+      )}
       {/* Input row */}
       <div className="flex items-end gap-1.5 px-3 py-2">
         <textarea
@@ -303,6 +317,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
           }}
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
+            e.preventDefault();
             pointerStartYRef.current = e.clientY;
             holdActiveRef.current = false;
             setIsLocked(false);
@@ -944,8 +959,8 @@ export default function Triage() {
     <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <Header label="Triage" accent="#f59e0b" count={pass1Queue.length > 0 ? pass1Queue.length : undefined} onMenu={() => setMenuOpen(true)} />
-      <div className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto">
-        <TriageInputRow onAdd={addItem} />
+      {/* Scrollable card area — input row is NOT here */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
         {pass1Queue.length === 0 && decomposing ? (
           <div className="flex flex-col gap-3">
             <SkeletonCard />
@@ -958,7 +973,7 @@ export default function Triage() {
               className="text-white/30 text-sm text-center leading-loose"
               style={{ fontFamily: "'Space Mono', monospace" }}
             >
-              Add items above,<br />then swipe to sort.
+              Type or speak below,<br />then swipe to sort.
             </p>
           </div>
         ) : (
@@ -976,6 +991,10 @@ export default function Triage() {
             </div>
           </>
         )}
+      </div>
+      {/* Input row pinned to bottom — matches Session.tsx pattern */}
+      <div className="shrink-0 px-4 pt-2" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}>
+        <TriageInputRow onAdd={addItem} />
       </div>
     </div>
   );
