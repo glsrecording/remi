@@ -1420,8 +1420,9 @@ export default function MainChat() {
               marginRight: "20px",
               touchAction: "none",
             }}
+            onTouchStart={() => { if (navigator.vibrate) navigator.vibrate(15); }}
             onPointerDown={(e) => {
-              if (navigator.vibrate) navigator.vibrate(15); // haptic — absolute first line
+              if (!('ontouchstart' in window) && navigator.vibrate) navigator.vibrate(15); // haptic fallback — touchstart fires first on Android
               e.currentTarget.setPointerCapture(e.pointerId);
               e.preventDefault();
               pointerStartYRef.current = e.clientY;
