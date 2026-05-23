@@ -32,7 +32,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={MainChat} />
-      <Route path="/brain-dump" component={Tasks} />
+      <Route path="/tasks" component={Tasks} />
       <Route path="/commands" component={Commands} />
       <Route path="/mix-notes" component={MixNotes} />
       <Route path="/time-track" component={TimeTrack} />

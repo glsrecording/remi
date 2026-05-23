@@ -14,7 +14,7 @@ const menuItems = [
   { label: "Morning Briefing", icon: Sun,    path: "/morning-briefing" },
   { label: "Song Pipeline",    icon: Layers, path: "/song-pipeline" },
   { label: "Content",          icon: Film,   path: "/content" },
-  { label: "Tasks",            icon: Brain,  path: "/brain-dump" },
+  { label: "Tasks",            icon: Brain,  path: "/tasks" },
   { label: "Session", icon: Radio, path: "/session" },
   { label: "Call Notes", icon: Phone, path: "/call-notes" },
   { label: "Reminders",  icon: Bell,  path: "/reminders" },

@@ -921,7 +921,7 @@ export default function Triage() {
             <button
               className="px-6 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
               style={{ background: "#f59e0b22", color: "#f59e0b", border: "1px solid #f59e0b40" }}
-              onClick={() => navigate("/brain-dump")}
+              onClick={() => navigate("/tasks")}
             >
               Task view
             </button>
