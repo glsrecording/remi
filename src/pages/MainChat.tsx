@@ -1313,12 +1313,6 @@ export default function MainChat() {
             </button>
           </div>
         )}
-        {/* Recording indicator — shown above bar while mic is active */}
-        {isRecording && !isLocked && (
-          <div className="flex items-center justify-center gap-2 mb-2 h-5">
-            <span className="text-xs" style={{ color: userColor }}>Recording…</span>
-          </div>
-        )}
 
         {recordingError && (
           <div className="flex items-center gap-2 mb-1.5">
@@ -1369,8 +1363,20 @@ export default function MainChat() {
           }}
           className="w-full flex gap-2 items-center"
         >
-          {/* FIX 3: input area shows "Transcribing…" in place of placeholder while processing */}
-          {isTranscribing ? (
+          {isRecording ? (
+            <div
+              className="flex-1 flex items-center px-4 rounded-xl record-zone"
+              style={{
+                background: `${userColor}26`,
+                border: `1.5px solid ${userColor}`,
+                minHeight: "42px",
+              }}
+            >
+              <span style={{ color: userColor, fontSize: "0.875rem", fontStyle: "italic" }}>
+                Recording…
+              </span>
+            </div>
+          ) : isTranscribing ? (
             <div
               className="flex-1 flex items-center px-4 rounded-xl"
               style={{
