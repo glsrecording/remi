@@ -103,11 +103,13 @@ async function patchSong(pageId: string, status: string | undefined, nextAction:
   if (!res.ok) throw new Error(`${res.status}`);
 }
 
-async function postNewSong(title: string, artist: string, priority: string, status: string) {
+async function postNewSong(title: string, artist: string, priority: string, status: string, bpm?: number) {
+  const body: Record<string, unknown> = { title, artist, priority, status };
+  if (bpm !== undefined && bpm > 0) body.bpm = bpm;
   const res = await fetch(`${JARVIS_URL}/song/new`, {
     method: "POST",
     headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ title, artist, priority, status }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
@@ -119,8 +121,9 @@ function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
   const ACCENT = "#2dd4bf";
   const [title,    setTitle]    = useState("");
   const [artist,   setArtist]   = useState("");
-  const [priority, setPriority] = useState("P2");
+  const [priority, setPriority] = useState("P3");
   const [status,   setStatus]   = useState("PrePro");
+  const [bpmInput, setBpmInput] = useState("");
   const [saving,   setSaving]   = useState(false);
   const [error,    setError]    = useState<string | null>(null);
 
@@ -131,8 +134,9 @@ function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
     }
     setSaving(true);
     setError(null);
+    const bpmVal = bpmInput.trim() ? parseInt(bpmInput.trim(), 10) : undefined;
     try {
-      await postNewSong(title.trim(), artist.trim(), priority, status);
+      await postNewSong(title.trim(), artist.trim(), priority, status, bpmVal);
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -174,11 +178,25 @@ function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
         {/* Artist */}
         <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--t-text6)" }}>Artist</p>
         <input
-          className="w-full px-3 py-2.5 rounded-xl text-sm mb-5"
+          className="w-full px-3 py-2.5 rounded-xl text-sm mb-4"
           style={{ background: "var(--t-card)", color: "var(--t-text)", border: "1.5px solid var(--t-border-md)", outline: "none" }}
           placeholder="Artist name…"
           value={artist}
           onChange={e => setArtist(e.target.value)}
+        />
+
+        {/* BPM */}
+        <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--t-text6)" }}>BPM <span style={{ color: "var(--t-text8)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>optional</span></p>
+        <input
+          type="number"
+          inputMode="numeric"
+          className="w-full px-3 py-2.5 rounded-xl text-sm mb-5"
+          style={{ background: "var(--t-card)", color: "var(--t-text)", border: "1.5px solid var(--t-border-md)", outline: "none" }}
+          placeholder="e.g. 120"
+          value={bpmInput}
+          onChange={e => setBpmInput(e.target.value)}
+          min={40}
+          max={300}
         />
 
         {/* Priority */}
