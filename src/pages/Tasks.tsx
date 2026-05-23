@@ -728,7 +728,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, focusedTas
             autoFocus
             className="flex-1 min-w-0 bg-transparent text-lg md:text-xl leading-snug outline-none"
             style={{
-              color: savingTitle ? "rgba(255,255,255,0.45)" : "rgba(255,255,255,0.9)",
+              color: savingTitle ? "var(--t-text4)" : "var(--t-text)",
               borderBottom: "1.5px solid rgba(245,158,11,0.55)",
             }}
           />
@@ -736,7 +736,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, focusedTas
           <>
             <p
               className="text-lg md:text-xl leading-snug flex-1 min-w-0 whitespace-normal break-words"
-              style={{ color: titleError ? "#ef4444" : "rgba(255,255,255,0.85)" }}
+              style={{ color: titleError ? "#ef4444" : "var(--t-text2)" }}
               onClick={enterEditMode}
             >
               {task.title}
