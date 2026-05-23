@@ -523,6 +523,12 @@ export default function MainChat() {
   const [isLocked, setIsLocked] = useState(false);
   const pointerStartYRef = useRef<number>(0);
 
+  // Web Speech API voice mode
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [previewText, setPreviewText] = useState("");
+  const [srSupported, setSrSupported] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
   // Voice mode
   const [voiceEnabled, setVoiceEnabled] = useLocalStorage<boolean>("remi_voice_enabled", false);
   const voiceEnabledRef = useRef(false);
@@ -566,6 +572,13 @@ export default function MainChat() {
 
   useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
 
+  // Detect Web Speech API support at mount; log active mic path
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const supported = !!SR;
+    setSrSupported(supported);
+    console.log(`[Remi] mic path: ${supported ? "Web Speech API" : "Whisper (fallback)"}`);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     document.documentElement.style.setProperty("--remi-accent", remiColor);
@@ -770,6 +783,59 @@ export default function MainChat() {
     },
     [messages, setMessages, recordRecentCommand, navigate, speakResponse],
   );
+
+  // ─── Web Speech API voice mode ────────────────────────────────────────────
+  function enterVoiceMode() {
+    if (navigator.vibrate) navigator.vibrate(15);
+    setVoiceMode(true);
+    setPreviewText("");
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const rec = new SR();
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+    rec.onresult = (e: any) => {
+      const transcript = Array.from(e.results as any[])
+        .map((r: any) => r[0].transcript)
+        .join("");
+      setPreviewText(transcript);
+      const lastResult = e.results[e.results.length - 1];
+      if (lastResult.isFinal) {
+        recognitionRef.current = null;
+        setVoiceMode(false);
+        setPreviewText("");
+        if (transcript.trim()) sendMessage(transcript.trim(), true);
+      }
+    };
+    rec.onerror = () => {
+      recognitionRef.current = null;
+      setVoiceMode(false);
+      setPreviewText("");
+    };
+    rec.onend = () => {
+      recognitionRef.current = null;
+      setVoiceMode(false);
+    };
+    recognitionRef.current = rec;
+    try { rec.start(); } catch { setVoiceMode(false); }
+  }
+
+  function exitVoiceMode(keepText = false) {
+    const rec = recognitionRef.current;
+    if (rec) {
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      try { rec.stop(); } catch { /* already stopped */ }
+      recognitionRef.current = null;
+    }
+    if (keepText && previewText.trim()) {
+      setInputText(previewText.trim());
+    }
+    setVoiceMode(false);
+    setPreviewText("");
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // ─── Mic: 150ms hold-to-record ───────────────────────────────────────────
   function handleMicDown() {
@@ -1344,52 +1410,104 @@ export default function MainChat() {
           </div>
         )}
 
-        {/* Input row: [text input] [Send] [amber mic] */}
+        {/* Unified input bar — TEXT MODE and VOICE MODE */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            sendMessage(inputText);
+            if (!voiceMode) sendMessage(inputText);
           }}
           className="w-full flex gap-2 items-center"
         >
-          <input
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder='Try "Mix note for [song] — [note]"'
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 md:py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
-            data-testid="input-text-command"
-          />
+          {/* Text input or voice preview zone */}
+          {voiceMode ? (
+            <div
+              className="flex-1 flex items-center px-4 rounded-xl cursor-pointer"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: `1.5px solid ${userColor}60`,
+                minHeight: "42px",
+                touchAction: "none",
+              }}
+              onClick={() => exitVoiceMode(true)}
+            >
+              {previewText ? (
+                <span style={{ color: userColor, fontSize: "0.875rem", fontStyle: "italic", flex: 1 }}>
+                  {previewText}
+                </span>
+              ) : (
+                <span style={{ color: "rgba(255,255,255,0.25)", fontSize: "0.875rem", flex: 1 }}>
+                  Listening…
+                </span>
+              )}
+            </div>
+          ) : (
+            <input
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder='Try "Mix note for [song] — [note]"'
+              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 md:py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+              data-testid="input-text-command"
+            />
+          )}
 
-          <button
-            type="submit"
-            className="shrink-0 px-4 py-2.5 md:py-3 rounded-xl text-sm font-medium transition-all active:scale-95"
-            style={{ background: userColor, color: "#111111" }}
-            data-testid="button-send"
-          >
-            Send
-          </button>
+          {/* Send button — hidden in voice mode (auto-sends on final result) */}
+          {!voiceMode && (
+            <button
+              type="submit"
+              className="shrink-0 px-4 py-2.5 md:py-3 rounded-xl text-sm font-medium transition-all active:scale-95"
+              style={{ background: userColor, color: "#111111" }}
+              data-testid="button-send"
+            >
+              Send
+            </button>
+          )}
 
-          {/* Amber hold-to-send mic: hold 150ms → record, release → transcribe + send */}
+          {/* Mic — userColor cohesion; tap empty input + SR → voice mode; hold → Whisper fallback */}
           <button
             type="button"
             className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-150"
             style={{
-              background: isRecording ? "#ef444422" : "#f59e0b14",
-              border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+              background: voiceMode
+                ? `${userColor}22`
+                : isRecording
+                ? "#ef444422"
+                : `${userColor}14`,
+              border: `1.5px solid ${voiceMode ? userColor : isRecording ? "#ef4444" : `${userColor}50`}`,
               marginRight: "20px",
               touchAction: "none",
             }}
-            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); pointerStartYRef.current = e.clientY; handleMicDown(); }}
-            onPointerMove={(e) => { if (!isRecording || isLocked) return; if (pointerStartYRef.current - e.clientY > 60) setIsLocked(true); }}
-            onPointerUp={handleMicUp}
-            onPointerLeave={handleMicUp}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              e.preventDefault();
+              pointerStartYRef.current = e.clientY;
+              if (!voiceMode) handleMicDown();
+            }}
+            onPointerMove={(e) => {
+              if (!isRecording || isLocked || voiceMode) return;
+              if (pointerStartYRef.current - e.clientY > 60) setIsLocked(true);
+            }}
+            onPointerUp={() => {
+              if (voiceMode) { exitVoiceMode(false); return; }
+              if (!holdActiveRef.current && !isRecording) {
+                if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
+                if (inputText === "" && srSupported) enterVoiceMode();
+                return;
+              }
+              handleMicUp();
+            }}
+            onPointerLeave={() => {
+              if (voiceMode) return;
+              handleMicUp();
+            }}
             data-testid="button-voice"
           >
             {isTranscribing
-              ? <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+              ? <Loader2 size={16} className="animate-spin" style={{ color: userColor }} />
+              : voiceMode
+              ? <Mic size={16} className="animate-pulse" style={{ color: userColor }} />
               : isRecording
               ? <MicOff size={16} style={{ color: "#ef4444" }} />
-              : <Mic size={16} style={{ color: "#f59e0b" }} />}
+              : <Mic size={16} style={{ color: userColor }} />}
           </button>
 
         </form>
