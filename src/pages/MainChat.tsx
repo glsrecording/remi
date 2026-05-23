@@ -534,9 +534,7 @@ export default function MainChat() {
   const wsActiveSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const wsStreamDoneRef = useRef<boolean>(false);
   // Voice diagnostic overlay
-  const [voiceDebug, setVoiceDebug] = useState<{ label: string; color: string } | null>(null);
-  const voiceDebugTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wsChunkCountRef = useRef<number>(0);
+  const wsBatchQueueRef = useRef<ArrayBuffer[]>([]);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -650,9 +648,7 @@ export default function MainChat() {
     wsActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
     wsActiveSourcesRef.current = [];
     wsStreamDoneRef.current = false;
-    wsChunkCountRef.current = 0;
-    if (voiceDebugTimerRef.current) { clearTimeout(voiceDebugTimerRef.current); voiceDebugTimerRef.current = null; }
-    setVoiceDebug(null);
+    wsBatchQueueRef.current = [];
 
     if (!audioContextRef.current) audioContextRef.current = new AudioContext();
     const actx = audioContextRef.current;
@@ -692,8 +688,60 @@ export default function MainChat() {
       }
     };
 
-    // WebSocket path — Gemini Live streams WAV frames (24kHz Int16 LE mono)
+    // WebSocket path — Gemini Live streams WAV frames (44-byte RIFF header + PCM, 24kHz Int16 LE mono)
     // Auth via query param (browsers can't set headers on WebSocket constructor)
+    //
+    // Batching: accumulate BATCH_SIZE chunks, concatenate into one WAV, decode as a single
+    // AudioBuffer. Serial promise chain (batchChain) guarantees scheduling order regardless
+    // of decode speed — eliminates gaps from concurrent decodeAudioData races.
+    const WAV_HEADER_SIZE = 44;
+    const BATCH_SIZE = 8;
+
+    const concatWavChunks = (chunks: ArrayBuffer[]): ArrayBuffer => {
+      if (chunks.length === 1) return chunks[0];
+      const totalPcm = chunks.reduce((sum, c) => sum + c.byteLength - WAV_HEADER_SIZE, 0);
+      const combined = new ArrayBuffer(WAV_HEADER_SIZE + totalPcm);
+      const view = new DataView(combined);
+      // Copy 44-byte header from first chunk, then patch the size fields
+      new Uint8Array(combined).set(new Uint8Array(chunks[0], 0, WAV_HEADER_SIZE));
+      view.setUint32(4, totalPcm + 36, true);  // RIFF chunk size
+      view.setUint32(40, totalPcm, true);       // data chunk size
+      // Append raw PCM from every chunk (skip their headers)
+      let offset = WAV_HEADER_SIZE;
+      for (const chunk of chunks) {
+        const pcm = new Uint8Array(chunk, WAV_HEADER_SIZE);
+        new Uint8Array(combined, offset).set(pcm);
+        offset += pcm.byteLength;
+      }
+      return combined;
+    };
+
+    let batchChain: Promise<void> = Promise.resolve();
+
+    const scheduleBatch = (batch: ArrayBuffer[]) => {
+      batchChain = batchChain.then(async () => {
+        try {
+          const combined = concatWavChunks(batch);
+          const audioBuffer = await actx.decodeAudioData(combined);
+          const source = actx.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(actx.destination);
+          const startAt = Math.max(actx.currentTime, wsPlaybackEndTimeRef.current);
+          wsPlaybackEndTimeRef.current = startAt + audioBuffer.duration;
+          wsActiveSourcesRef.current.push(source);
+          source.onended = () => {
+            wsActiveSourcesRef.current = wsActiveSourcesRef.current.filter(s => s !== source);
+            if (wsActiveSourcesRef.current.length === 0 && wsStreamDoneRef.current) {
+              setIsSpeaking(false);
+            }
+          };
+          source.start(startAt);
+        } catch (e) {
+          console.warn("[speakResponse/ws] batch decode:", e);
+        }
+      });
+    };
+
     const JARVIS_WS_URL = JARVIS_URL.replace("https://", "wss://").replace("http://", "ws://");
     let settled = false;    // true once WS opened OR fallback fired
     let fallbackFired = false;
@@ -703,14 +751,10 @@ export default function MainChat() {
         settled = true;
         fallbackFired = true;
         if (wsRef.current) { try { wsRef.current.close(); } catch {} wsRef.current = null; }
-        console.log("[voice] 3s timeout — fallback to REST");
-        setVoiceDebug({ label: "REST (timeout)", color: "#f59e0b" });
-        voiceDebugTimerRef.current = setTimeout(() => setVoiceDebug(null), 2000);
         _restFallback();
       }
     }, 3000);
 
-    console.log("[voice] WebSocket constructor called:", `${JARVIS_WS_URL}/ws/tts`);
     const ws = new WebSocket(`${JARVIS_WS_URL}/ws/tts?key=${encodeURIComponent(REMI_API_KEY)}`);
     wsRef.current = ws;
     ws.binaryType = "arraybuffer";
@@ -719,61 +763,40 @@ export default function MainChat() {
     ws.onopen = () => {
       clearTimeout(fallbackTimer);
       settled = true;
-      console.log("[voice] onopen fired");
-      setVoiceDebug({ label: "WS", color: "#22c55e" });
       wsPlaybackEndTimeRef.current = actx.currentTime;
       ws.send(ttsText);
     };
 
-    ws.onmessage = async (event) => {
+    ws.onmessage = (event) => {
       if (fallbackFired || !(event.data instanceof ArrayBuffer)) return;
       if (event.data.byteLength === 0) {
-        // Empty binary frame = end of audio stream
-        console.log("[voice] empty frame received — stream done");
+        // Empty binary frame = end of stream — flush whatever remains in the queue
         wsStreamDoneRef.current = true;
         if (wsRef.current === ws) wsRef.current = null;
-        setVoiceDebug({ label: `WS done: ${wsChunkCountRef.current} chunks`, color: "#22c55e" });
-        voiceDebugTimerRef.current = setTimeout(() => setVoiceDebug(null), 2000);
-        if (wsActiveSourcesRef.current.length === 0) setIsSpeaking(false);
-        return;
-      }
-      if (wsChunkCountRef.current === 0) {
-        console.log("[voice] first binary frame arrived — byteLength:", event.data.byteLength);
-      }
-      wsChunkCountRef.current += 1;
-      setVoiceDebug({ label: `WS: ${wsChunkCountRef.current} chunks`, color: "#22c55e" });
-      try {
-        // Each frame is a complete WAV file — decodeAudioData handles it natively
-        const audioBuffer = await actx.decodeAudioData(event.data.slice(0));
-        const source = actx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(actx.destination);
-        // Chain chunks gaplessly: schedule each to start when previous ends
-        const startAt = Math.max(actx.currentTime, wsPlaybackEndTimeRef.current);
-        wsPlaybackEndTimeRef.current = startAt + audioBuffer.duration;
-        wsActiveSourcesRef.current.push(source);
-        source.onended = () => {
-          wsActiveSourcesRef.current = wsActiveSourcesRef.current.filter(s => s !== source);
+        const remaining = wsBatchQueueRef.current.splice(0);
+        if (remaining.length > 0) scheduleBatch(remaining);
+        // After all batches are decoded and scheduled, check if anything is still playing
+        batchChain.then(() => {
           if (wsActiveSourcesRef.current.length === 0 && wsStreamDoneRef.current) {
             setIsSpeaking(false);
           }
-        };
-        source.start(startAt);
-      } catch (e) {
-        console.warn("[speakResponse/ws] decode:", e);
+        });
+        return;
+      }
+      // Accumulate raw WAV chunk; schedule once we have a full batch
+      wsBatchQueueRef.current.push(event.data.slice(0));
+      if (wsBatchQueueRef.current.length >= BATCH_SIZE) {
+        const batch = wsBatchQueueRef.current.splice(0);
+        scheduleBatch(batch);
       }
     };
 
-    ws.onerror = (event) => {
-      console.log("[voice] onerror fired:", event);
+    ws.onerror = () => {
       clearTimeout(fallbackTimer);
       if (!fallbackFired) {
         fallbackFired = true;
         settled = true;
         if (wsRef.current === ws) wsRef.current = null;
-        console.log("[voice] fallback to REST (WS error)");
-        setVoiceDebug({ label: "REST (WS error)", color: "#f59e0b" });
-        voiceDebugTimerRef.current = setTimeout(() => setVoiceDebug(null), 2000);
         _restFallback();
       }
     };
@@ -1421,23 +1444,6 @@ export default function MainChat() {
           padding: "8px 16px 48px",
         }}
       >
-        {/* Voice diagnostic badge — shows WS vs REST path for debugging */}
-        {voiceDebug && (
-          <div className="flex items-center justify-center mb-1">
-            <span style={{
-              background: `${voiceDebug.color}18`,
-              border: `1px solid ${voiceDebug.color}50`,
-              color: voiceDebug.color,
-              fontFamily: "'Space Mono', monospace",
-              fontSize: "0.7rem",
-              padding: "1px 8px",
-              borderRadius: "4px",
-            }}>
-              {voiceDebug.label}
-            </span>
-          </div>
-        )}
-
         {/* Lock bar: visible when user slides up to lock recording */}
         {isLocked && (
           <div className="flex items-center justify-between mb-2 px-1">
