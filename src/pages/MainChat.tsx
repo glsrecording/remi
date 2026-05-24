@@ -10,6 +10,8 @@ import {
   Volume2,
   VolumeX,
   ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -565,6 +567,7 @@ export default function MainChat() {
     message: string;
     onUndo: () => void;
   } | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -618,6 +621,13 @@ export default function MainChat() {
     }, 280);
     return () => clearTimeout(timer);
   }, [inputText, dismissedTrigger]);
+
+  const copyMessage = useCallback((id: string, text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 1500);
+    }).catch(() => {});
+  }, []);
 
   const recordRecentCommand = useCallback(
     (trigger: string) => {
@@ -1404,9 +1414,23 @@ export default function MainChat() {
               ) : (
                 <p>{msg.text}</p>
               )}
-              <p className="text-xs mt-1 opacity-30 text-right">
-                {msg.timestamp}
-              </p>
+              <div className="flex items-center justify-end gap-1.5 mt-1">
+                <p className="text-xs opacity-30">{msg.timestamp}</p>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); copyMessage(msg.id, msg.text); }}
+                  className="transition-colors shrink-0 active:scale-90"
+                  style={{
+                    color: copiedId === msg.id
+                      ? (msg.role === "user" ? userColor : remiColor)
+                      : "rgba(255,255,255,0.25)",
+                    padding: "2px",
+                  }}
+                  aria-label="Copy message"
+                >
+                  {copiedId === msg.id ? <Check size={11} /> : <Copy size={11} />}
+                </button>
+              </div>
             </div>
           </div>
         ))}
