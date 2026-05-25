@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Copy,
   Check,
+  ChevronDown,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -568,8 +569,10 @@ export default function MainChat() {
     onUndo: () => void;
   } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const mountTimeRef = useRef(new Date());
   const typewriterRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -627,6 +630,17 @@ export default function MainChat() {
       setCopiedId(id);
       setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 1500);
     }).catch(() => {});
+  }, []);
+
+  const handleScrollCheck = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowScrollBtn(distFromBottom > 100);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
   const recordRecentCommand = useCallback(
@@ -1299,9 +1313,11 @@ export default function MainChat() {
       )}
 
       <div
+        ref={scrollContainerRef}
         className="flex-1 overflow-y-auto p-4"
         data-testid="chat-history"
         style={{ fontSize: FONT_SIZES[fontSizeStep] }}
+        onScroll={handleScrollCheck}
         onClick={() => {
           setOpenPicker(null);
           setStatusOpen(false);
@@ -1455,6 +1471,35 @@ export default function MainChat() {
         <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {/* Scroll-to-bottom button — appears when scrolled > 100px from bottom */}
+      {showScrollBtn && (
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          aria-label="Scroll to bottom"
+          className="active:scale-90 transition-transform"
+          style={{
+            position: "fixed",
+            bottom: 110,
+            right: 20,
+            zIndex: 9,
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            background: "var(--t-surface)",
+            border: "1px solid var(--t-border)",
+            color: "var(--t-text4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+            cursor: "pointer",
+          }}
+        >
+          <ChevronDown size={18} />
+        </button>
+      )}
 
       <div
         className="remi-chat-input-bar"
