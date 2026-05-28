@@ -570,6 +570,8 @@ export default function MainChat() {
   } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [deadlineCount, setDeadlineCount] = useState<number>(0);
+  const [deadlineDismissed, setDeadlineDismissed] = useState<boolean>(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -607,6 +609,27 @@ export default function MainChat() {
       })
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // On mount: check for upcoming deadlines — show banner in background, don't block chat
+  useEffect(() => {
+    if (sessionStorage.getItem("deadline_banner_dismissed") === "1") return;
+    fetch(`${JARVIS_URL}/deadlines/check`, {
+      headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.has_upcoming && d.count > 0) setDeadlineCount(d.count);
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto-dismiss deadline banner after 10 seconds; cleanup on unmount
+  useEffect(() => {
+    if (!deadlineCount || deadlineDismissed) return;
+    const timer = setTimeout(() => {
+      sessionStorage.setItem("deadline_banner_dismissed", "1");
+      setDeadlineDismissed(true);
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [deadlineCount, deadlineDismissed]);
   useEffect(() => {
     if (inputText.length < 3) {
       setSuggestion(null);
@@ -657,6 +680,10 @@ export default function MainChat() {
     if (suggestion) setDismissedTrigger(suggestion.trigger);
     setSuggestion(null);
   }, [suggestion]);
+  const handleDismissDeadlineBanner = useCallback(() => {
+    sessionStorage.setItem("deadline_banner_dismissed", "1");
+    setDeadlineDismissed(true);
+  }, []);
   const handleUseSuggestion = useCallback((trigger: string) => {
     setInputText(trigger);
     setSuggestion(null);
@@ -1282,6 +1309,27 @@ export default function MainChat() {
           <button
             className="p-1 rounded-lg text-white/20 hover:text-white/50 transition-colors shrink-0"
             onClick={() => setPwaNudgeDismissed(true)}
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {deadlineCount > 0 && !deadlineDismissed && (
+        <div
+          className="flex items-center gap-3 px-4 py-2.5 border-b border-amber-500/20"
+          style={{ background: "#f59e0b1a" }}
+        >
+          <span
+            className="text-xs flex-1 leading-snug font-medium"
+            style={{ color: "#f59e0b" }}
+          >
+            You have {deadlineCount} upcoming deadline{deadlineCount !== 1 ? "s" : ""} — check your briefing
+          </span>
+          <button
+            className="p-1 rounded-lg text-white/20 hover:text-white/50 transition-colors shrink-0"
+            onClick={handleDismissDeadlineBanner}
+            aria-label="Dismiss deadline banner"
           >
             <X size={13} />
           </button>
