@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X, Moon, Sun } from "lucide-react";
+import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X, Moon, Sun, Check } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
@@ -32,6 +32,12 @@ interface NoteEntry {
   ts: string;
 }
 
+interface SessionTask {
+  block_id: string;
+  text: string;
+  checked: boolean;
+}
+
 function fmt(secs: number): string {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
@@ -45,6 +51,7 @@ export default function Session() {
   const { isLight, toggleTheme } = useTheme();
   const [session, setSession] = useState<SessionState>({ active: false });
   const [notes, setNotes] = useState<NoteEntry[]>([]);
+  const [sessionTasks, setSessionTasks] = useState<SessionTask[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
   const [onBreak, setOnBreak] = useState(false);
@@ -142,6 +149,44 @@ export default function Session() {
   useEffect(() => {
     notesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [notes]);
+
+  // Poll session sub-tasks (page-body to_do blocks) every 10 seconds
+  useEffect(() => {
+    const song = session.song;
+    if (!song) {
+      setSessionTasks([]);
+      return;
+    }
+    const poll = () => {
+      fetch(`${JARVIS_URL}/session-tasks?song=${encodeURIComponent(song)}`, { headers: AUTH_HEADERS })
+        .then((r) => r.json())
+        .then((data: { tasks?: SessionTask[] }) => {
+          if (Array.isArray(data.tasks)) setSessionTasks(data.tasks);
+        })
+        .catch(() => {});
+    };
+    poll();
+    const id = setInterval(poll, 10000);
+    return () => clearInterval(id);
+  }, [session.song]);
+
+  const toggleTask = useCallback(async (blockId: string, checked: boolean) => {
+    setSessionTasks((prev) =>
+      prev.map((t) => (t.block_id === blockId ? { ...t, checked } : t))
+    );
+    try {
+      await fetch(`${JARVIS_URL}/session-tasks/toggle`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ block_id: blockId, checked }),
+      });
+    } catch {
+      // Revert optimistic update on failure
+      setSessionTasks((prev) =>
+        prev.map((t) => (t.block_id === blockId ? { ...t, checked: !checked } : t))
+      );
+    }
+  }, []);
 
   // Timer tick
   useEffect(() => {
@@ -852,6 +897,52 @@ export default function Session() {
               )}
             </div>
           </div>
+
+          {/* Session sub-tasks — hidden until the song page has a to_do block */}
+          {sessionTasks.length > 0 && (
+            <div className="px-5 mb-3 shrink-0">
+              <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--t-text6)" }}>
+                Session Tasks
+              </p>
+              <div
+                className="rounded-xl border overflow-y-auto"
+                style={{ background: "var(--t-surface)", borderColor: "var(--t-border)", maxHeight: "200px" }}
+              >
+                <div className="p-3 space-y-1">
+                  {sessionTasks.map((t) => (
+                    <button
+                      key={t.block_id}
+                      type="button"
+                      onClick={() => toggleTask(t.block_id, !t.checked)}
+                      className="w-full flex items-center gap-3 py-2 px-3 rounded-lg text-left"
+                      style={{ background: "var(--t-el-low)" }}
+                    >
+                      <span
+                        className="shrink-0 grid place-content-center rounded"
+                        style={{
+                          width: 18,
+                          height: 18,
+                          border: `1.5px solid ${t.checked ? "#f59e0b" : "var(--t-border-md)"}`,
+                          background: t.checked ? "#f59e0b" : "transparent",
+                        }}
+                      >
+                        {t.checked && <Check className="h-3 w-3" style={{ color: "#1a1a1a" }} />}
+                      </span>
+                      <span
+                        className="text-sm leading-snug"
+                        style={{
+                          color: t.checked ? "var(--t-text3)" : "var(--t-text)",
+                          textDecoration: t.checked ? "line-through" : "none",
+                        }}
+                      >
+                        {t.text}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Spacer for fixed bottom bar */}
           <div className="shrink-0" style={{ height: 120 }} />
