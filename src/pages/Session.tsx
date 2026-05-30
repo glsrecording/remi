@@ -52,6 +52,7 @@ export default function Session() {
   const [session, setSession] = useState<SessionState>({ active: false });
   const [notes, setNotes] = useState<NoteEntry[]>([]);
   const [sessionTasks, setSessionTasks] = useState<SessionTask[]>([]);
+  const [taskInput, setTaskInput] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
   const [onBreak, setOnBreak] = useState(false);
@@ -150,25 +151,50 @@ export default function Session() {
     notesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [notes]);
 
-  // Poll session sub-tasks (page-body to_do blocks) every 10 seconds
-  useEffect(() => {
+  // Fetch session sub-tasks (page-body to_do blocks) for the active song
+  const refetchSessionTasks = useCallback(() => {
     const song = session.song;
     if (!song) {
       setSessionTasks([]);
       return;
     }
-    const poll = () => {
-      fetch(`${JARVIS_URL}/session-tasks?song=${encodeURIComponent(song)}`, { headers: AUTH_HEADERS })
-        .then((r) => r.json())
-        .then((data: { tasks?: SessionTask[] }) => {
-          if (Array.isArray(data.tasks)) setSessionTasks(data.tasks);
-        })
-        .catch(() => {});
-    };
-    poll();
-    const id = setInterval(poll, 10000);
-    return () => clearInterval(id);
+    fetch(`${JARVIS_URL}/session-tasks?song=${encodeURIComponent(song)}`, { headers: AUTH_HEADERS })
+      .then((r) => r.json())
+      .then((data: { tasks?: SessionTask[] }) => {
+        if (Array.isArray(data.tasks)) setSessionTasks(data.tasks);
+      })
+      .catch(() => {});
   }, [session.song]);
+
+  // Poll session sub-tasks every 10 seconds
+  useEffect(() => {
+    refetchSessionTasks();
+    if (!session.song) return;
+    const id = setInterval(refetchSessionTasks, 10000);
+    return () => clearInterval(id);
+  }, [refetchSessionTasks, session.song]);
+
+  // Add a session sub-task by typing — reuses the voice handler path (/remi
+  // trigger phrase), then refreshes the list. UI-only; no backend changes.
+  const addTask = useCallback(async () => {
+    const text = taskInput.trim();
+    const song = session.song;
+    if (!text || !song) return;
+    try {
+      await fetch(`${JARVIS_URL}/remi`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `add session task for ${song}: ${text}`,
+          user_id: "remi-session",
+        }),
+      });
+      setTaskInput("");
+      refetchSessionTasks();
+    } catch {
+      // non-fatal — leave the text so the user can retry
+    }
+  }, [taskInput, session.song, refetchSessionTasks]);
 
   const toggleTask = useCallback(async (blockId: string, checked: boolean) => {
     setSessionTasks((prev) =>
@@ -898,48 +924,77 @@ export default function Session() {
             </div>
           </div>
 
-          {/* Session sub-tasks — hidden until the song page has a to_do block */}
-          {sessionTasks.length > 0 && (
+          {/* Session sub-tasks — input always visible; checklist shows when tasks exist */}
+          {session.song && (
             <div className="px-5 mb-3 shrink-0">
               <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--t-text6)" }}>
                 Session Tasks
               </p>
-              <div
-                className="rounded-xl border overflow-y-auto"
-                style={{ background: "var(--t-surface)", borderColor: "var(--t-border)", maxHeight: "200px" }}
-              >
-                <div className="p-3 space-y-1">
-                  {sessionTasks.map((t) => (
-                    <button
-                      key={t.block_id}
-                      type="button"
-                      onClick={() => toggleTask(t.block_id, !t.checked)}
-                      className="w-full flex items-center gap-3 py-2 px-3 rounded-lg text-left"
-                      style={{ background: "var(--t-el-low)" }}
-                    >
-                      <span
-                        className="shrink-0 grid place-content-center rounded"
-                        style={{
-                          width: 18,
-                          height: 18,
-                          border: `1.5px solid ${t.checked ? "#f59e0b" : "var(--t-border-md)"}`,
-                          background: t.checked ? "#f59e0b" : "transparent",
-                        }}
+              {sessionTasks.length > 0 && (
+                <div
+                  className="rounded-xl border overflow-y-auto mb-2"
+                  style={{ background: "var(--t-surface)", borderColor: "var(--t-border)", maxHeight: "200px" }}
+                >
+                  <div className="p-3 space-y-1">
+                    {sessionTasks.map((t) => (
+                      <button
+                        key={t.block_id}
+                        type="button"
+                        onClick={() => toggleTask(t.block_id, !t.checked)}
+                        className="w-full flex items-center gap-3 py-2 px-3 rounded-lg text-left"
+                        style={{ background: "var(--t-el-low)" }}
                       >
-                        {t.checked && <Check className="h-3 w-3" style={{ color: "#1a1a1a" }} />}
-                      </span>
-                      <span
-                        className="text-sm leading-snug"
-                        style={{
-                          color: t.checked ? "var(--t-text3)" : "var(--t-text)",
-                          textDecoration: t.checked ? "line-through" : "none",
-                        }}
-                      >
-                        {t.text}
-                      </span>
-                    </button>
-                  ))}
+                        <span
+                          className="shrink-0 grid place-content-center rounded"
+                          style={{
+                            width: 18,
+                            height: 18,
+                            border: `1.5px solid ${t.checked ? "#f59e0b" : "var(--t-border-md)"}`,
+                            background: t.checked ? "#f59e0b" : "transparent",
+                          }}
+                        >
+                          {t.checked && <Check className="h-3 w-3" style={{ color: "#1a1a1a" }} />}
+                        </span>
+                        <span
+                          className="text-sm leading-snug"
+                          style={{
+                            color: t.checked ? "var(--t-text3)" : "var(--t-text)",
+                            textDecoration: t.checked ? "line-through" : "none",
+                          }}
+                        >
+                          {t.text}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              )}
+
+              {/* Add-task input — always visible */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={taskInput}
+                  onChange={(e) => setTaskInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTask();
+                    }
+                  }}
+                  placeholder="Add session task..."
+                  className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
+                  style={{ background: "var(--t-surface)", borderColor: "var(--t-border)", color: "var(--t-text)" }}
+                />
+                <button
+                  type="button"
+                  onClick={addTask}
+                  disabled={!taskInput.trim()}
+                  className="px-4 rounded-lg text-sm font-semibold disabled:opacity-40"
+                  style={{ background: "#f59e0b", color: "#1a1a1a" }}
+                >
+                  Add
+                </button>
               </div>
             </div>
           )}
