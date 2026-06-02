@@ -124,6 +124,7 @@ export default function MixNotes() {
 
   const [sessionNotes, setSessionNotes]     = useState<SessionNote[]>([]);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [noteText, setNoteText]             = useState("");
 
   // ── View Notes state ────────────────────────────────────────────────────────
   const [viewGroups,  setViewGroups]  = useState<ViewGroup[]>([]);
@@ -201,6 +202,13 @@ export default function MixNotes() {
     } catch {
       setRecordingError("Connection error — note saved locally.");
     }
+  }
+
+  function submitTextNote() {
+    const t = noteText.trim();
+    if (!t) return;
+    setNoteText("");
+    postMixNote(t);   // same POST /mix_note path the mic uses
   }
 
   function handleMicDown() {
@@ -394,7 +402,27 @@ export default function MixNotes() {
                 <span className="text-xs" style={{ color: "#ef4444" }}>Recording…</span>
               </div>
             )}
-            <div className="flex justify-end">
+            <form
+              onSubmit={(e) => { e.preventDefault(); submitTextNote(); }}
+              className="flex gap-2 items-center"
+            >
+              <input
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                placeholder={
+                  artist || song
+                    ? `Mix note for ${artist}${artist && song ? " / " : ""}${song}…`
+                    : "Type a mix note…"
+                }
+                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+              />
+              <button
+                type="submit"
+                className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+                style={{ background: ACCENT, color: "#111111" }}
+              >
+                Send
+              </button>
               <button
                 type="button"
                 className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-150"
@@ -413,7 +441,7 @@ export default function MixNotes() {
                   ? <MicOff size={16} style={{ color: "#ef4444" }} />
                   : <Mic size={16} style={{ color: "#f59e0b" }} />}
               </button>
-            </div>
+            </form>
           </div>
         </>
       )}
