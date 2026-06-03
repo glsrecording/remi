@@ -13,6 +13,8 @@ import {
   Copy,
   Check,
   ChevronDown,
+  RotateCcw,
+  Square,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -538,6 +540,13 @@ export default function MainChat() {
   const wsStreamDoneRef = useRef<boolean>(false);
   // Voice diagnostic overlay
   const wsBatchQueueRef = useRef<ArrayBuffer[]>([]);
+  // TTS replay (Bug V) — keep the most recent response's decoded audio so the
+  // user can replay it client-side, no re-fetch.
+  const lastAudioRef = useRef<AudioBuffer | null>(null);
+  const replaySourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const replayChunksRef = useRef<ArrayBuffer[]>([]);
+  const [hasReplay, setHasReplay] = useState(false);
+  const [isReplaying, setIsReplaying] = useState(false);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -700,6 +709,10 @@ export default function MainChat() {
     wsActiveSourcesRef.current = [];
     wsStreamDoneRef.current = false;
     wsBatchQueueRef.current = [];
+    // New response → stop any in-progress replay and reset the replay accumulator
+    if (replaySourceRef.current) { try { replaySourceRef.current.stop(); } catch {} replaySourceRef.current = null; }
+    setIsReplaying(false);
+    replayChunksRef.current = [];
 
     if (!audioContextRef.current) audioContextRef.current = new AudioContext();
     const actx = audioContextRef.current;
@@ -727,6 +740,7 @@ export default function MainChat() {
         if (!resp.ok) throw new Error(`TTS ${resp.status}`);
         const buf = await resp.arrayBuffer();
         const audioBuffer = await actx.decodeAudioData(buf);
+        lastAudioRef.current = audioBuffer; setHasReplay(true);   // store for replay (Bug V)
         const source = actx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(actx.destination);
@@ -832,10 +846,20 @@ export default function MainChat() {
             setIsSpeaking(false);
           }
         });
+        // Build one replayable AudioBuffer from the full response (Bug V) — no re-fetch
+        if (replayChunksRef.current.length > 0 && audioContextRef.current) {
+          try {
+            const fullWav = concatWavChunks(replayChunksRef.current.slice());
+            audioContextRef.current.decodeAudioData(fullWav)
+              .then((b) => { lastAudioRef.current = b; setHasReplay(true); })
+              .catch(() => {});
+          } catch { /* ignore replay-buffer build errors */ }
+        }
         return;
       }
       // Accumulate raw WAV chunk; schedule once we have a full batch
       wsBatchQueueRef.current.push(event.data.slice(0));
+      replayChunksRef.current.push(event.data.slice(0));   // keep full copy for replay (Bug V)
       if (wsBatchQueueRef.current.length >= BATCH_SIZE) {
         const batch = wsBatchQueueRef.current.splice(0);
         scheduleBatch(batch);
@@ -861,6 +885,31 @@ export default function MainChat() {
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bug V — replay the most recent TTS audio, client-side only (no re-fetch).
+  // Toggles: tap to play from the start, tap again to stop.
+  const replayLastAudio = useCallback(async () => {
+    const actx = audioContextRef.current;
+    const buf = lastAudioRef.current;
+    if (!actx || !buf) return;
+    if (replaySourceRef.current) {            // already replaying → stop
+      try { replaySourceRef.current.stop(); } catch {}
+      replaySourceRef.current = null;
+      setIsReplaying(false);
+      return;
+    }
+    try { if (actx.state === "suspended") await actx.resume(); } catch {}
+    const src = actx.createBufferSource();
+    src.buffer = buf;
+    src.connect(actx.destination);
+    src.onended = () => {
+      if (replaySourceRef.current === src) replaySourceRef.current = null;
+      setIsReplaying(false);
+    };
+    replaySourceRef.current = src;
+    setIsReplaying(true);
+    src.start();
+  }, []);
 
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
@@ -1677,6 +1726,27 @@ export default function MainChat() {
           >
             Send
           </button>
+
+          {/* Replay last TTS audio (Bug V) — only after a response has played; client-side replay, no re-fetch */}
+          {hasReplay && (
+            <button
+              type="button"
+              onClick={replayLastAudio}
+              className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all active:scale-95"
+              style={{
+                background: isReplaying ? userColor : `${userColor}14`,
+                border: `1.5px solid ${isReplaying ? userColor : `${userColor}50`}`,
+                touchAction: "none",
+              }}
+              data-testid="button-replay-tts"
+              title={isReplaying ? "Stop replay" : "Replay last response"}
+              aria-label={isReplaying ? "Stop replay" : "Replay last response"}
+            >
+              {isReplaying
+                ? <Square size={15} style={{ color: "#ffffff" }} />
+                : <RotateCcw size={16} style={{ color: userColor }} />}
+            </button>
+          )}
 
           {/* Mic — haptic first line, button color-change on recording */}
           <button
