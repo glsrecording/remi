@@ -376,13 +376,13 @@ export default function MixNotes() {
                 value={artist}
                 onChange={(e) => setArtist(e.target.value)}
                 placeholder="Artist"
-                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+                className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
               />
               <input
                 value={song}
                 onChange={(e) => setSong(e.target.value)}
                 placeholder="Song"
-                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+                className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
               />
             </div>
           </div>
@@ -520,32 +520,34 @@ export default function MixNotes() {
           {!viewLoading && !viewError && viewGroups.map((group) => (
             <div key={`${group.artist}||${group.song}`}>
               <div className="flex items-baseline gap-2 mb-2 px-1">
-                {(group.artist || group.song) ? (
-                  <>
-                    {group.artist && (
-                      <span
-                        className="text-xs font-bold tracking-wide uppercase"
-                        style={{ color: ACCENT, fontFamily: "'Space Mono', monospace" }}
-                      >
-                        {group.artist}
-                      </span>
-                    )}
-                    {group.song && (
-                      <span className="text-xs" style={{ color: "var(--t-text5)" }}>
-                        {group.artist ? "/ " : ""}{group.song}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span
-                    className="text-xs font-bold uppercase tracking-wide"
-                    style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
-                  >
-                    Untitled
-                  </span>
-                )}
+                <div className="flex-1 min-w-0 truncate">
+                  {(group.artist || group.song) ? (
+                    <>
+                      {group.artist && (
+                        <span
+                          className="text-xs font-bold tracking-wide uppercase"
+                          style={{ color: ACCENT, fontFamily: "'Space Mono', monospace" }}
+                        >
+                          {group.artist}
+                        </span>
+                      )}
+                      {group.song && (
+                        <span className="text-xs" style={{ color: "var(--t-text5)" }}>
+                          {group.artist ? "/ " : ""}{group.song}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span
+                      className="text-xs font-bold uppercase tracking-wide"
+                      style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
+                    >
+                      Untitled
+                    </span>
+                  )}
+                </div>
                 <span
-                  className="text-xs font-mono px-1.5 py-0.5 rounded-full"
+                  className="text-xs font-mono px-1.5 py-0.5 rounded-full shrink-0"
                   style={{ background: ACCENT + "18", color: ACCENT }}
                 >
                   {group.notes.length}
@@ -575,7 +577,7 @@ export default function MixNotes() {
         >
           {/* Session context — same artist/song as New Note */}
           {(artist || song) && (
-            <div className="mb-10 text-center">
+            <div className="mb-10 w-full max-w-full text-center truncate px-2">
               {artist && (
                 <span
                   className="text-sm font-bold tracking-wide uppercase"
