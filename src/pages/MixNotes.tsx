@@ -108,7 +108,12 @@ function fmtDateTime(iso: string): string {
 export default function MixNotes() {
   const [ACCENT] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [mode, setMode] = useState<"new" | "view">("new");
+  const [mode, setMode] = useState<"new" | "view" | "jog">("new");
+
+  // ── Jog Mode feedback (observes the shared capture path, never modifies it) ──
+  const [jogFlash, setJogFlash]   = useState<null | "saved" | "error">(null);
+  const prevNotesLenRef           = useRef(0);
+  const jogFlashTimerRef          = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── New Note state ──────────────────────────────────────────────────────────
   const [artist, setArtist] = useState(() => {
@@ -171,6 +176,25 @@ export default function MixNotes() {
   useEffect(() => {
     if (mode === "view") loadViewNotes();
   }, [mode, loadViewNotes]);
+
+  // Jog Mode flashes "saved" when a new note lands in the shared list, and
+  // "error" if the capture path reports a failure. Pure observation — the
+  // recording/transcription/submit path is untouched.
+  useEffect(() => {
+    if (mode === "jog" && sessionNotes.length > prevNotesLenRef.current) {
+      setJogFlash("saved");
+      if (jogFlashTimerRef.current) clearTimeout(jogFlashTimerRef.current);
+      jogFlashTimerRef.current = setTimeout(() => setJogFlash(null), 1600);
+    }
+    prevNotesLenRef.current = sessionNotes.length;
+  }, [sessionNotes.length, mode]);
+
+  useEffect(() => {
+    if (mode !== "jog" || !recordingError) return;
+    setJogFlash("error");
+    if (jogFlashTimerRef.current) clearTimeout(jogFlashTimerRef.current);
+    jogFlashTimerRef.current = setTimeout(() => setJogFlash(null), 2200);
+  }, [recordingError, mode]);
 
   // ── Mic state ───────────────────────────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -319,18 +343,22 @@ export default function MixNotes() {
           className="flex p-0.5 rounded-xl"
           style={{ background: "var(--t-card)", border: "1px solid var(--t-border-md)" }}
         >
-          {(["New Note", "View Notes"] as const).map((label) => {
-            const isActive = label === "New Note" ? mode === "new" : mode === "view";
+          {([
+            { label: "New Note",   value: "new"  },
+            { label: "View Notes", value: "view" },
+            { label: "Jog",        value: "jog"  },
+          ] as const).map(({ label, value }) => {
+            const isActive = mode === value;
             return (
               <button
-                key={label}
+                key={value}
                 className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
                 style={{
                   background: isActive ? ACCENT + "22" : "transparent",
                   color:      isActive ? ACCENT : "var(--t-text5)",
                   border:     isActive ? `1px solid ${ACCENT}50` : "1px solid transparent",
                 }}
-                onClick={() => setMode(label === "New Note" ? "new" : "view")}
+                onClick={() => setMode(value)}
               >
                 {label}
               </button>
@@ -536,6 +564,85 @@ export default function MixNotes() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── JOG mode — single large mic, nothing else to mis-tap ──────────────── */}
+      {mode === "jog" && (
+        <div
+          className="flex-1 flex flex-col items-center justify-center px-6"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}
+        >
+          {/* Session context — same artist/song as New Note */}
+          {(artist || song) && (
+            <div className="mb-10 text-center">
+              {artist && (
+                <span
+                  className="text-sm font-bold tracking-wide uppercase"
+                  style={{ color: ACCENT, fontFamily: "'Space Mono', monospace" }}
+                >
+                  {artist}
+                </span>
+              )}
+              {song && (
+                <span className="text-sm" style={{ color: "var(--t-text5)" }}>
+                  {artist ? " / " : ""}{song}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Large centered mic — hold to record, release to send (reuses the
+              exact handlers from New Note: handleMicDown / handleMicUp + slide-lock) */}
+          <button
+            type="button"
+            aria-label="Hold to record mix note"
+            className={`rounded-full flex items-center justify-center transition-all duration-150 active:scale-95 ${isRecording ? "animate-pulse" : ""}`}
+            style={{
+              width: 120,
+              height: 120,
+              background: isRecording ? "#ef444422" : ACCENT + "1f",
+              border: `3px solid ${isRecording ? "#ef4444" : ACCENT}`,
+              boxShadow: isRecording ? "0 0 0 10px #ef444412" : `0 0 0 8px ${ACCENT}12`,
+              touchAction: "none",
+              WebkitTapHighlightColor: "transparent",
+            }}
+            onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); e.preventDefault(); pointerStartYRef.current = e.clientY; handleMicDown(); }}
+            onPointerMove={(e) => { if (!isRecording || isLocked) return; if (pointerStartYRef.current - e.clientY > 60) setIsLocked(true); }}
+            onPointerUp={handleMicUp}
+            onPointerLeave={handleMicUp}
+          >
+            {isRecording
+              ? <MicOff size={48} style={{ color: "#ef4444" }} />
+              : <Mic size={48} style={{ color: ACCENT }} />}
+          </button>
+
+          {/* Status line — saved/error flash, recording prompt, or idle hint */}
+          <div className="mt-10 h-6 flex items-center justify-center px-4 text-center">
+            {jogFlash === "saved" ? (
+              <span className="text-sm font-semibold" style={{ color: "#22c55e" }}>✓ Note saved</span>
+            ) : jogFlash === "error" ? (
+              <span className="text-sm font-medium" style={{ color: "#ef4444" }}>{recordingError || "Error — try again"}</span>
+            ) : isRecording ? (
+              <span className="text-sm" style={{ color: "#ef4444" }}>Recording… release to send</span>
+            ) : (
+              <span className="text-sm" style={{ color: "var(--t-text5)" }}>Hold to record</span>
+            )}
+          </div>
+
+          {/* Slide-to-lock controls (same as New Note's locked bar) */}
+          {isLocked && (
+            <div className="flex items-center gap-4 mt-6">
+              <button type="button" onClick={handleCancelLocked} className="text-sm px-4 py-2 rounded-xl"
+                style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}>
+                ✕ Cancel
+              </button>
+              <button type="button" onClick={handleSendLocked} className="text-sm px-4 py-2 rounded-xl"
+                style={{ background: "#22c55e20", border: "1px solid #22c55e40", color: "#22c55e" }}>
+                Send ↑
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
