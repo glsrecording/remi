@@ -533,11 +533,10 @@ export default function MainChat() {
   const audioContextRef = useRef<AudioContext | null>(null);
   // WebSocket TTS streaming refs
   const wsRef = useRef<WebSocket | null>(null);
-  const wsPlaybackEndTimeRef = useRef<number>(0);
   const wsActiveSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const wsStreamDoneRef = useRef<boolean>(false);
-  // Voice diagnostic overlay
-  const wsBatchQueueRef = useRef<ArrayBuffer[]>([]);
+  // Accumulates raw PCM (header-stripped) across all stream frames; decoded once at end.
+  const wsRawPcmRef = useRef<Uint8Array[]>([]);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -699,7 +698,7 @@ export default function MainChat() {
     wsActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
     wsActiveSourcesRef.current = [];
     wsStreamDoneRef.current = false;
-    wsBatchQueueRef.current = [];
+    wsRawPcmRef.current = [];
 
     if (!audioContextRef.current) audioContextRef.current = new AudioContext();
     const actx = audioContextRef.current;
@@ -739,46 +738,59 @@ export default function MainChat() {
       }
     };
 
-    // WebSocket path — Gemini Live streams WAV frames (44-byte RIFF header + PCM, 24kHz Int16 LE mono)
-    // Auth via query param (browsers can't set headers on WebSocket constructor)
+    // WebSocket path — backend streams WAV frames (44-byte RIFF header + raw PCM,
+    // 24kHz Int16 LE mono) per ElevenLabs chunk. Auth via query param (browsers
+    // can't set headers on the WebSocket constructor).
     //
-    // Batching: accumulate BATCH_SIZE chunks, concatenate into one WAV, decode as a single
-    // AudioBuffer. Serial promise chain (batchChain) guarantees scheduling order regardless
-    // of decode speed — eliminates gaps from concurrent decodeAudioData races.
+    // Single-buffer decode: strip the 44-byte header off every frame, accumulate
+    // the raw PCM, and decode the ENTIRE stream as one AudioBuffer when the empty
+    // end-frame arrives. This avoids the per-batch resampling seams and the 16-bit
+    // sample misalignment that produced loud static — ElevenLabs chunk boundaries
+    // are not sample-aligned. Replaces the old BATCH_SIZE=8 pipeline.
     const WAV_HEADER_SIZE = 44;
-    const BATCH_SIZE = 8;
 
-    const concatWavChunks = (chunks: ArrayBuffer[]): ArrayBuffer => {
-      if (chunks.length === 1) return chunks[0];
-      const totalPcm = chunks.reduce((sum, c) => sum + c.byteLength - WAV_HEADER_SIZE, 0);
-      const combined = new ArrayBuffer(WAV_HEADER_SIZE + totalPcm);
-      const view = new DataView(combined);
-      // Copy 44-byte header from first chunk, then patch the size fields
-      new Uint8Array(combined).set(new Uint8Array(chunks[0], 0, WAV_HEADER_SIZE));
-      view.setUint32(4, totalPcm + 36, true);  // RIFF chunk size
-      view.setUint32(40, totalPcm, true);       // data chunk size
-      // Append raw PCM from every chunk (skip their headers)
-      let offset = WAV_HEADER_SIZE;
-      for (const chunk of chunks) {
-        const pcm = new Uint8Array(chunk, WAV_HEADER_SIZE);
-        new Uint8Array(combined, offset).set(pcm);
-        offset += pcm.byteLength;
+    const finalizeAndPlay = () => {
+      const chunks = wsRawPcmRef.current;
+      wsRawPcmRef.current = [];
+      let totalPcm = chunks.reduce((sum, c) => sum + c.byteLength, 0);
+      // Drop a trailing odd byte so every 16-bit sample stays aligned.
+      if (totalPcm % 2 !== 0) totalPcm -= 1;
+      if (totalPcm <= 0) { setIsSpeaking(false); return; }
+
+      // One valid WAV envelope around the complete PCM stream.
+      const wav = new ArrayBuffer(WAV_HEADER_SIZE + totalPcm);
+      const view = new DataView(wav);
+      const SR = 24000;
+      view.setUint32(0, 0x52494646, false);    // "RIFF"
+      view.setUint32(4, 36 + totalPcm, true);  // RIFF chunk size
+      view.setUint32(8, 0x57415645, false);    // "WAVE"
+      view.setUint32(12, 0x666d7420, false);   // "fmt "
+      view.setUint32(16, 16, true);            // fmt chunk size (PCM)
+      view.setUint16(20, 1, true);             // audio format = PCM
+      view.setUint16(22, 1, true);             // channels = mono
+      view.setUint32(24, SR, true);            // sample rate
+      view.setUint32(28, SR * 2, true);        // byte rate = SR * channels * bytesPerSample
+      view.setUint16(32, 2, true);             // block align
+      view.setUint16(34, 16, true);            // bits per sample
+      view.setUint32(36, 0x64617461, false);   // "data"
+      view.setUint32(40, totalPcm, true);      // data chunk size
+
+      const out = new Uint8Array(wav, WAV_HEADER_SIZE);
+      let offset = 0;
+      for (const c of chunks) {
+        const remaining = totalPcm - offset;
+        if (remaining <= 0) break;
+        const slice = c.byteLength <= remaining ? c : c.subarray(0, remaining);
+        out.set(slice, offset);
+        offset += slice.byteLength;
       }
-      return combined;
-    };
 
-    let batchChain: Promise<void> = Promise.resolve();
-
-    const scheduleBatch = (batch: ArrayBuffer[]) => {
-      batchChain = batchChain.then(async () => {
-        try {
-          const combined = concatWavChunks(batch);
-          const audioBuffer = await actx.decodeAudioData(combined);
+      // Single decode → single AudioBuffer → single scheduled source. No seams.
+      actx.decodeAudioData(wav)
+        .then((audioBuffer) => {
           const source = actx.createBufferSource();
           source.buffer = audioBuffer;
           source.connect(actx.destination);
-          const startAt = Math.max(actx.currentTime, wsPlaybackEndTimeRef.current);
-          wsPlaybackEndTimeRef.current = startAt + audioBuffer.duration;
           wsActiveSourcesRef.current.push(source);
           source.onended = () => {
             wsActiveSourcesRef.current = wsActiveSourcesRef.current.filter(s => s !== source);
@@ -786,11 +798,12 @@ export default function MainChat() {
               setIsSpeaking(false);
             }
           };
-          source.start(startAt);
-        } catch (e) {
-          console.warn("[speakResponse/ws] batch decode:", e);
-        }
-      });
+          source.start();
+        })
+        .catch((e) => {
+          console.warn("[speakResponse/ws] decode:", e);
+          setIsSpeaking(false);
+        });
     };
 
     const JARVIS_WS_URL = JARVIS_URL.replace("https://", "wss://").replace("http://", "ws://");
@@ -809,37 +822,26 @@ export default function MainChat() {
     const ws = new WebSocket(`${JARVIS_WS_URL}/ws/tts?key=${encodeURIComponent(REMI_API_KEY)}`);
     wsRef.current = ws;
     ws.binaryType = "arraybuffer";
-    wsPlaybackEndTimeRef.current = 0;
+    wsRawPcmRef.current = [];
 
     ws.onopen = () => {
       clearTimeout(fallbackTimer);
       settled = true;
-      wsPlaybackEndTimeRef.current = actx.currentTime;
       ws.send(ttsText);
     };
 
     ws.onmessage = (event) => {
       if (fallbackFired || !(event.data instanceof ArrayBuffer)) return;
-      if (event.data.byteLength === 0) {
-        // Empty binary frame = end of stream — flush whatever remains in the queue
+      // Empty frame (or a header-only/short frame) = end of stream.
+      // Decode the whole accumulated PCM stream as a single buffer.
+      if (event.data.byteLength <= WAV_HEADER_SIZE) {
         wsStreamDoneRef.current = true;
         if (wsRef.current === ws) wsRef.current = null;
-        const remaining = wsBatchQueueRef.current.splice(0);
-        if (remaining.length > 0) scheduleBatch(remaining);
-        // After all batches are decoded and scheduled, check if anything is still playing
-        batchChain.then(() => {
-          if (wsActiveSourcesRef.current.length === 0 && wsStreamDoneRef.current) {
-            setIsSpeaking(false);
-          }
-        });
+        finalizeAndPlay();
         return;
       }
-      // Accumulate raw WAV chunk; schedule once we have a full batch
-      wsBatchQueueRef.current.push(event.data.slice(0));
-      if (wsBatchQueueRef.current.length >= BATCH_SIZE) {
-        const batch = wsBatchQueueRef.current.splice(0);
-        scheduleBatch(batch);
-      }
+      // Strip this frame's 44-byte WAV header; keep only the raw PCM bytes.
+      wsRawPcmRef.current.push(new Uint8Array(event.data.slice(WAV_HEADER_SIZE)));
     };
 
     ws.onerror = () => {
