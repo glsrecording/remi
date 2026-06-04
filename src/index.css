@@ -256,6 +256,9 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
   }
 
   html {
+    /* Mobile readability bump: was browser default 16px → 18px.
+       Cascades through all rem-based sizing; no component sizes changed. */
+    font-size: 18px;
     height: 100%;
     width: 100%;
     overflow: hidden;
@@ -449,7 +452,7 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
 
 /* ── Tablet / desktop layout (768px+) ──────────────────────────────────────── */
 @media (min-width: 768px) {
-  html { font-size: 17px; }
+  html { font-size: 19px; }  /* desktop bump: was 17px (~+12%) so the 768px breakpoint stays >= mobile */
 
   body {
     background: #0a0a0a;
