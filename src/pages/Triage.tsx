@@ -527,7 +527,7 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
         onPointerCancel={onUp}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <p className="text-lg md:text-xl text-white/85 leading-snug min-w-0 whitespace-normal break-words pr-5">
+        <p className="text-base md:text-lg text-white/85 leading-snug min-w-0 whitespace-normal break-words pr-5">
           {item.text}
         </p>
         <p
@@ -672,7 +672,7 @@ function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
         onPointerCancel={onUp}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <p className="text-lg md:text-xl text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words pr-5">
+        <p className="text-base md:text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words pr-5">
           {item.text}
         </p>
         <button
@@ -852,10 +852,10 @@ export default function Triage() {
 
   // ── Done screen ─────────────────────────────────────────────────────────────
   if (phase === "done") {
-    const total = counts.today + counts.tonight + counts.tomorrow + counts.someday
+    const total = counts.today + counts.queue + counts.tomorrow + counts.someday
                 + counts.insight + counts.memory + counts.gratitude + counts.bio;
     return (
-      <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
+      <div className="flex flex-col h-[100dvh]" style={{ background: "var(--t-surface)" }}>
         <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
         <Header label="Triage" accent="#f59e0b" onMenu={() => setMenuOpen(true)} />
         <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6">
@@ -934,7 +934,7 @@ export default function Triage() {
   // ── Pass 2 screen ────────────────────────────────────────────────────────────
   if (phase === "pass2") {
     return (
-      <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
+      <div className="flex flex-col h-[100dvh]" style={{ background: "var(--t-surface)" }}>
         <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
         <Header label="What type?" accent="#94a3b8" count={pass2Queue.length} onMenu={() => setMenuOpen(true)} />
         <div className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto">
@@ -956,7 +956,7 @@ export default function Triage() {
 
   // ── Capture + Pass 1 screen ──────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-screen" style={{ background: "var(--t-surface)" }}>
+    <div className="flex flex-col h-[100dvh]" style={{ background: "var(--t-surface)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <Header label="Triage" accent="#f59e0b" count={pass1Queue.length > 0 ? pass1Queue.length : undefined} onMenu={() => setMenuOpen(true)} />
       {/* Scrollable card area — input row is NOT here */}
