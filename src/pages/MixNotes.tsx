@@ -520,7 +520,7 @@ export default function MixNotes() {
           {!viewLoading && !viewError && viewGroups.map((group) => (
             <div key={`${group.artist}||${group.song}`}>
               <div className="flex items-baseline gap-2 mb-2 px-1">
-                <div className="flex-1 min-w-0 truncate">
+                <div className="flex-1 min-w-0">
                   {(group.artist || group.song) ? (
                     <>
                       {group.artist && (
@@ -577,7 +577,7 @@ export default function MixNotes() {
         >
           {/* Session context — same artist/song as New Note */}
           {(artist || song) && (
-            <div className="mb-10 w-full max-w-full text-center truncate px-2">
+            <div className="mb-10 w-full max-w-full text-center px-2">
               {artist && (
                 <span
                   className="text-sm font-bold tracking-wide uppercase"
