@@ -9,6 +9,7 @@ import {
   Loader2,
   Volume2,
   VolumeX,
+  RefreshCw,
   ExternalLink,
   Copy,
   Check,
@@ -556,6 +557,7 @@ export default function MainChat() {
   const [openPicker, setOpenPicker] = useState<"user" | "remi" | null>(null);
   const [systemOnline] = useState(true);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [inputText, setInputText] = useState("");
   const [recentCommands, setRecentCommands] = useLocalStorage<string[]>(
     STORAGE_KEYS.RECENT_COMMANDS,
@@ -1100,14 +1102,14 @@ export default function MainChat() {
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 border-b border-white/5 shrink-0"
+        className="flex items-center px-4 border-b border-white/5 shrink-0"
         style={{
           background: "var(--t-surface)",
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 14px)",
           paddingBottom: "14px",
         }}
       >
-        <div className="flex items-center -ml-1">
+        <div className="flex items-center flex-1 -ml-1">
         <div className="relative">
           <button
             className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
@@ -1154,15 +1156,36 @@ export default function MainChat() {
               color: "inherit",
             }}>A</span>
           </button>
+          <button
+            className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
+            onClick={() => {
+              setSyncing(true);
+              // Let the single spin play, then hard-reload to re-render from current Jarvis state.
+              setTimeout(() => window.location.reload(), 400);
+            }}
+            data-testid="button-sync-refresh"
+            title="Sync / refresh"
+            aria-label="Sync and refresh"
+          >
+            <RefreshCw
+              size={18}
+              style={{
+                transition: "transform 400ms ease",
+                transform: syncing ? "rotate(360deg)" : "rotate(0deg)",
+              }}
+            />
+          </button>
         </div>
-        <span
-          className="text-lg font-bold tracking-tighter"
-          style={{ fontFamily: "'Space Mono', monospace", color: remiColor }}
-          data-testid="logo-remi"
-        >
-          Remi
-        </span>
-        <div className="flex items-center gap-3" ref={pickerRef}>
+        <div className="flex items-center justify-center shrink-0">
+          <span
+            className="text-lg font-bold tracking-tighter"
+            style={{ fontFamily: "'Space Mono', monospace", color: remiColor }}
+            data-testid="logo-remi"
+          >
+            Remi
+          </span>
+        </div>
+        <div className="flex items-center justify-end flex-1 gap-3" ref={pickerRef}>
           <div className="flex items-center gap-0">
             <div className="relative flex flex-col items-center">
               <button
@@ -1216,48 +1239,6 @@ export default function MainChat() {
                 />
               )}
             </div>
-          </div>
-          <div className="relative flex flex-col items-center">
-            <button
-              className="w-5 h-5 flex items-center justify-center rounded-full transition-all active:scale-90"
-              onClick={() => setStatusOpen((p) => !p)}
-              data-testid="button-status-dot"
-            >
-              <div
-                className="w-2 h-2 rounded-full"
-                style={{
-                  background: systemOnline ? "#22c55e" : "#ef4444",
-                  boxShadow: systemOnline
-                    ? "0 0 6px rgba(34,197,94,0.8)"
-                    : "0 0 6px rgba(239,68,68,0.8)",
-                }}
-                data-testid="status-system-dot"
-              />
-            </button>
-            {statusOpen && (
-              <div
-                className="absolute top-7 right-0 z-30 overlay-fade-in"
-                style={{ minWidth: 140 }}
-              >
-                <div
-                  className="rounded-xl border border-white/10 px-3 py-2"
-                  style={{
-                    background: "var(--t-surface)",
-                    boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
-                  }}
-                >
-                  <p
-                    className="text-xs font-medium"
-                    style={{ color: "#22c55e" }}
-                  >
-                    ● Online
-                  </p>
-                  <p className="text-xs text-white/30 mt-0.5">
-                    Last restart {restartLabel}
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
           <button
             className="p-1.5 rounded-lg transition-colors"

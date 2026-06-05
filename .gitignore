@@ -34,3 +34,6 @@ Thumbs.db
 
 # Local pnpm store (used on Hostinger to bypass corrupted shared store)
 .pnpm-store/
+
+# Claude Code local session/config dir
+.claude/
