@@ -1668,8 +1668,10 @@ export default function MainChat() {
             style={{
               background: isRecording ? userColor : `${userColor}14`,
               border: `1.5px solid ${isRecording ? userColor : `${userColor}50`}`,
-              transform: isRecording ? "scale(1.15)" : "scale(1)",
-              transition: "all 0.1s ease",
+              // No scale on recording — a size change shifted the button under the
+              // user's finger. Recording feedback is the bg/border/icon-color change.
+              // Fixed dimensions (w-10 h-10 / md:w-12 h-12) keep position identical.
+              transition: "background 0.1s ease, border-color 0.1s ease",
               marginRight: "20px",
               touchAction: "none",
             }}
