@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X, Moon, Sun, Check } from "lucide-react";
+import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X, Moon, Sun, Check, ArrowLeftRight } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
@@ -89,6 +89,12 @@ export default function Session() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  // Switch Song (mid-session) — picker overlay + request state
+  const [switching, setSwitching]         = useState(false);
+  const [switchInput, setSwitchInput]     = useState("");
+  const [switchBusy, setSwitchBusy]       = useState(false);
+  const [switchError, setSwitchError]     = useState<string | null>(null);
+  const [switchConfirm, setSwitchConfirm] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -505,6 +511,41 @@ export default function Session() {
     navigate("/", { replace: true });
   }, [navigate]);
 
+  // Switch the active song mid-session. Backend resolves {artist, song} → page_id
+  // (no session reset) and redirects notes to a fresh toggle on the new page.
+  // Timer is NOT touched. On failure the UI stays on the current song.
+  const handleSwitchSong = useCallback(async () => {
+    const song = switchInput.trim();
+    if (!song) return;
+    setSwitchBusy(true);
+    setSwitchError(null);
+    try {
+      const resp = await fetch(`${JARVIS_URL}/session_switch`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ artist: session.artist || "", song }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data.status === "switched") {
+        // Part 3 — reflect the new song immediately (timer untouched).
+        setSession((prev) => ({ ...prev, song: data.song, artist: data.artist || prev.artist }));
+        setSwitchConfirm(`Now on: ${data.song}`);
+        setTimeout(() => setSwitchConfirm(null), 4000);
+        setSwitching(false);
+        setSwitchInput("");
+      } else if (resp.status === 404) {
+        setSwitchError(`No match for "${song}" — try the full title.`);
+      } else {
+        // 500 (toggle creation failed) or other — stay on current song, no UI update.
+        setSwitchError(`Couldn't switch — notes still going to ${session.song || "the current song"}.`);
+      }
+    } catch {
+      setSwitchError("Connection error — try again.");
+    } finally {
+      setSwitchBusy(false);
+    }
+  }, [switchInput, session.artist, session.song]);
+
   const handleStop = useCallback(async () => {
     if (!running) return;
     setStopping(true);
@@ -759,6 +800,12 @@ export default function Session() {
             </div>
           </div>
 
+          {switchConfirm && (
+            <div className="px-5 -mt-1 pb-1">
+              <p className="text-xs text-center font-medium" style={{ color: "#4ade80" }}>{switchConfirm}</p>
+            </div>
+          )}
+
           {/* Timer */}
           <div className="px-5 py-4">
             <div
@@ -819,6 +866,14 @@ export default function Session() {
                     >
                       <Square size={16} />
                       {stopping ? "Logging…" : "Stop"}
+                    </button>
+                    <button
+                      onClick={() => { setSwitchInput(""); setSwitchError(null); setSwitching(true); }}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
+                      style={{ background: "transparent", borderColor: "#60a5fa", color: "#60a5fa" }}
+                    >
+                      <ArrowLeftRight size={16} />
+                      Switch
                     </button>
                   </>
                 )}
@@ -1125,6 +1180,62 @@ export default function Session() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Switch Song picker — opens over the active session */}
+      {switching && session.active && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-6"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => setSwitching(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-2xl p-5 space-y-3"
+            style={{ background: "var(--t-surface)", border: "1px solid var(--t-border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-center text-xs uppercase tracking-widest" style={{ color: "var(--t-text7)" }}>
+              Switch Song
+            </p>
+            {session.artist && (
+              <p className="text-center text-xs" style={{ color: "var(--t-text6)" }}>
+                {session.artist} · currently {session.song || "—"}
+              </p>
+            )}
+            <input
+              value={switchInput}
+              onChange={(e) => setSwitchInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSwitchSong()}
+              placeholder="New song title"
+              autoFocus
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+            />
+            {switchError && (
+              <p className="text-xs text-center" style={{ color: "#ef4444" }}>{switchError}</p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={handleSwitchSong}
+                disabled={!switchInput.trim() || switchBusy}
+                className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 flex items-center justify-center gap-2"
+                style={{
+                  background: (switchInput.trim() && !switchBusy) ? "#4ade80" : "rgba(74,222,128,0.12)",
+                  color: (switchInput.trim() && !switchBusy) ? "#000" : "rgba(74,222,128,0.35)",
+                }}
+              >
+                {switchBusy && <Loader2 size={15} className="animate-spin" />}
+                Switch
+              </button>
+              <button
+                onClick={() => setSwitching(false)}
+                className="flex-1 py-3 rounded-xl font-semibold text-sm border transition-all active:scale-95"
+                style={{ background: "transparent", borderColor: "var(--t-border-lg)", color: "var(--t-text3)" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
