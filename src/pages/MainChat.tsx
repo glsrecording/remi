@@ -945,10 +945,13 @@ export default function MainChat() {
               ...(data.card ? { card: data.card } : {}),
             },
           ]);
-          const _ttsText = data.card?.type === "task_done"
-            ? `${data.card.task_name} marked complete`
-            : typeof data.tts === "string" && data.tts
+          // Prefer the backend's clean tts string when present (e.g. reminder
+          // confirmations); only fall back to "marked complete" for a task_done
+          // card with no tts (the voice mark-done flow).
+          const _ttsText = typeof data.tts === "string" && data.tts
             ? data.tts
+            : data.card?.type === "task_done"
+            ? `${data.card.task_name} marked complete`
             : _aiText;
           speakResponse(_ttsText);
         })
@@ -1431,9 +1434,9 @@ export default function MainChat() {
                     </div>
                   )}
                   {msg.card?.type === "task_done" && (
-                    <div style={{ marginTop: "10px", padding: "10px 12px", borderRadius: "10px", background: "rgba(20,184,166,0.07)", border: "1px solid rgba(20,184,166,0.2)" }}>
+                    <div style={{ marginTop: "10px", padding: "10px 12px", borderRadius: "10px", background: msg.card.show_undo ? "rgba(20,184,166,0.07)" : "rgba(245,158,11,0.07)", border: msg.card.show_undo ? "1px solid rgba(20,184,166,0.2)" : "1px solid rgba(245,158,11,0.2)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "9px" }}>
-                        <span style={{ color: "#22c55e", fontSize: "1em", lineHeight: 1 }}>✓</span>
+                        <span style={{ color: msg.card.show_undo ? "#22c55e" : "#f59e0b", fontSize: "1em", lineHeight: 1 }}>{msg.card.show_undo ? "✓" : "⏰"}</span>
                         <span style={{ color: "var(--t-text2)", fontSize: "0.85em", fontWeight: 500, lineHeight: 1.3 }}>{msg.card.task_name}</span>
                       </div>
                       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -1441,7 +1444,7 @@ export default function MainChat() {
                           href={msg.card.notion_url}
                           target="_blank"
                           rel="noreferrer"
-                          style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "6px", background: "rgba(20,184,166,0.12)", border: "1px solid rgba(20,184,166,0.25)", color: "#14b8a6", fontSize: "0.78em", textDecoration: "none", lineHeight: 1 }}
+                          style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "6px", background: msg.card.show_undo ? "rgba(20,184,166,0.12)" : "rgba(245,158,11,0.12)", border: msg.card.show_undo ? "1px solid rgba(20,184,166,0.25)" : "1px solid rgba(245,158,11,0.25)", color: msg.card.show_undo ? "#14b8a6" : "#f59e0b", fontSize: "0.78em", textDecoration: "none", lineHeight: 1 }}
                         >
                           <ExternalLink size={11} />
                           View in Notion
