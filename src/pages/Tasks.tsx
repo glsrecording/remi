@@ -3,6 +3,7 @@ import { useGutterScroll } from "@/hooks/useGutterScroll";
 import {
   RefreshCw, Loader2, ChevronDown, ChevronRight,
   Plus, Mic, MicOff, Check, X, GripVertical, Crosshair,
+  Square, CheckSquare, Archive, Calendar,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
@@ -974,8 +975,290 @@ function BucketSection({
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
+// ── List Mode — bulk archive + reschedule (separate from card/swipe mode) ────
+
+type ListFilter = "todayTonight" | "overdue" | "both";
+
+interface ListTask {
+  id: string;
+  title: string;
+  dateLabel: string;
+}
+
+const LIST_FILTERS: Array<{ key: ListFilter; label: string }> = [
+  { key: "todayTonight", label: "Today / Tonight" },
+  { key: "overdue",      label: "Overdue" },
+  { key: "both",         label: "Both" },
+];
+
+function fmtDate(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+// Today/Tonight = the existing /tasks today + tonight buckets (Active + Priority
+// Today/Tonight). These carry no scheduled_date, so they're labelled by bucket.
+async function listFetchTodayTonight(): Promise<ListTask[]> {
+  const res = await fetch(`${JARVIS_URL}/tasks`, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const data = await res.json();
+  const b = (data.tasks ?? {}) as { today?: Task[]; tonight?: Task[] };
+  return [
+    ...(b.today   ?? []).map((t) => ({ id: t.id, title: t.title, dateLabel: "Today" })),
+    ...(b.tonight ?? []).map((t) => ({ id: t.id, title: t.title, dateLabel: "Tonight" })),
+  ];
+}
+
+// Overdue = existing /weekly-review/overdue (Active + Scheduled Date < today,
+// excludes Someday). Carries the real scheduled date.
+async function listFetchOverdue(): Promise<ListTask[]> {
+  const res = await fetch(`${JARVIS_URL}/weekly-review/overdue`, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const data = (await res.json()) as Array<{ id: string; title: string; scheduled_date: string }>;
+  return data.map((t) => ({ id: t.id, title: t.title, dateLabel: fmtDate(t.scheduled_date) }));
+}
+
+async function listFetch(filter: ListFilter): Promise<ListTask[]> {
+  if (filter === "todayTonight") return listFetchTodayTonight();
+  if (filter === "overdue")      return listFetchOverdue();
+  // both — union by id (overdue's real date wins for tasks in both)
+  const [tt, od] = await Promise.all([listFetchTodayTonight(), listFetchOverdue()]);
+  const map = new Map<string, ListTask>();
+  for (const t of tt) map.set(t.id, t);
+  for (const t of od) map.set(t.id, t);
+  return [...map.values()];
+}
+
+async function listArchive(id: string): Promise<void> {
+  const r = await fetch(`${JARVIS_URL}/scheduler/update`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ id, action: "done" }),
+  });
+  if (!r.ok) throw new Error(`${r.status}`);
+}
+
+async function listReschedule(id: string, isoDate: string): Promise<void> {
+  const r = await fetch(`${JARVIS_URL}/scheduler/update`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ id, scheduled_date: isoDate }),
+  });
+  if (!r.ok) throw new Error(`${r.status}`);
+}
+
+function ListMode() {
+  const [filter, setFilter]   = useState<ListFilter>("todayTonight");
+  const [tasks, setTasks]     = useState<ListTask[]>([]);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+  const [busy, setBusy]       = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [status, setStatus]   = useState<{ ok: boolean; text: string } | null>(null);
+
+  const load = useCallback(async (f: ListFilter) => {
+    setLoading(true); setError(null); setStatus(null); setChecked(new Set()); setPicking(false);
+    try {
+      setTasks(await listFetch(f));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+      setTasks([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch on filter switch + first mount only. No timer / no date-change refresh
+  // (midnight boundary: list stays stable until the user switches filter or refreshes).
+  useEffect(() => { load(filter); }, [filter, load]);
+
+  function toggle(id: string) {
+    setChecked((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      return s;
+    });
+  }
+
+  const allSelected = tasks.length > 0 && checked.size === tasks.length;
+  function toggleAll() {
+    setChecked(allSelected ? new Set() : new Set(tasks.map((t) => t.id)));
+  }
+
+  async function runBulk(kind: "archive" | "reschedule", isoDate?: string) {
+    const sel = tasks.filter((t) => checked.has(t.id));
+    if (sel.length === 0) return;
+    setBusy(true); setStatus(null); setPicking(false);
+    const results = await Promise.allSettled(
+      sel.map((t) => (kind === "archive" ? listArchive(t.id) : listReschedule(t.id, isoDate!)))
+    );
+    const okIds = new Set<string>();
+    const failed: ListTask[] = [];
+    results.forEach((r, i) => { if (r.status === "fulfilled") okIds.add(sel[i].id); else failed.push(sel[i]); });
+    // Succeeded tasks leave the current view (archived, or rescheduled off the filter).
+    setTasks((prev) => prev.filter((t) => !okIds.has(t.id)));
+    setChecked(new Set());
+    setBusy(false);
+    const noun = okIds.size === 1 ? "task" : "tasks";
+    const done = kind === "archive" ? "archived" : `moved to ${fmtDate(isoDate!)}`;
+    setStatus(
+      failed.length
+        ? { ok: false, text: `${okIds.size} ${done} · ${failed.length} failed: ${failed.map((t) => t.title).join(", ")}` }
+        : { ok: true, text: `${okIds.size} ${noun} ${done}` }
+    );
+  }
+
+  const selectedCount = checked.size;
+  const today = new Date().toISOString().slice(0, 10);
+  const actionsEnabled = selectedCount > 0 && !busy;
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Filter chips */}
+      <div className="px-4 py-2 border-b border-white/5 shrink-0 flex items-center justify-center gap-2">
+        {LIST_FILTERS.map((f) => {
+          const active = filter === f.key;
+          return (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className="px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95"
+              style={{
+                background: active ? ACCENT + "22" : "var(--t-el-low)",
+                border: `1px solid ${active ? ACCENT + "55" : "var(--t-border)"}`,
+                color: active ? ACCENT : "var(--t-text5)",
+              }}
+            >
+              {f.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Select all + count + manual refresh */}
+      {!loading && !error && tasks.length > 0 && (
+        <div className="px-4 py-2 flex items-center justify-between shrink-0">
+          <button onClick={toggleAll} className="text-xs font-semibold transition-colors active:scale-95" style={{ color: ACCENT }}>
+            {allSelected ? "Deselect All" : "Select All"}
+          </button>
+          <div className="flex items-center gap-3">
+            <span className="text-xs" style={{ color: "var(--t-text6)" }}>
+              {selectedCount > 0 ? `${selectedCount} selected` : `${tasks.length} task${tasks.length !== 1 ? "s" : ""}`}
+            </span>
+            <button onClick={() => load(filter)} className="p-1 rounded-md text-white/30 hover:text-white transition-colors" aria-label="Refresh list">
+              <RefreshCw size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-1.5">
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-12">
+            <Loader2 size={18} className="animate-spin" style={{ color: ACCENT }} />
+            <span className="text-sm text-white/40">Loading…</span>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center gap-3 py-12">
+            <p className="text-sm text-red-400/80">Could not load ({error})</p>
+            <button className="px-4 py-2 rounded-xl text-sm font-medium" style={{ background: ACCENT + "20", color: ACCENT }} onClick={() => load(filter)}>
+              Retry
+            </button>
+          </div>
+        ) : tasks.length === 0 ? (
+          <p className="text-center text-sm text-white/30 py-12">Nothing here.</p>
+        ) : (
+          tasks.map((t) => {
+            const isChk = checked.has(t.id);
+            return (
+              <button
+                key={t.id}
+                onClick={() => toggle(t.id)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all active:scale-[0.99]"
+                style={{ background: "var(--t-card)", border: `1px solid ${isChk ? ACCENT + "66" : "var(--t-border)"}` }}
+              >
+                {isChk
+                  ? <CheckSquare size={18} style={{ color: ACCENT, flexShrink: 0 }} />
+                  : <Square size={18} style={{ color: "var(--t-text6)", flexShrink: 0 }} />}
+                <span className="flex-1 min-w-0 text-sm leading-snug whitespace-normal break-words" style={{ color: "var(--t-text2)" }}>
+                  {t.title}
+                </span>
+                <span className="shrink-0 text-xs" style={{ color: "var(--t-text6)" }}>{t.dateLabel}</span>
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      {/* Status / per-task result */}
+      {status && (
+        <div className="px-4 py-1.5 shrink-0">
+          <p className="text-xs text-center leading-snug" style={{ color: status.ok ? "#22c55e" : "#f87171" }}>{status.text}</p>
+        </div>
+      )}
+
+      {/* Reschedule date picker */}
+      {picking && (
+        <div className="px-4 py-2 shrink-0 flex items-center gap-2 border-t border-white/5">
+          <input
+            type="date"
+            min={today}
+            autoFocus
+            className="flex-1 text-sm rounded-lg px-3 py-2"
+            style={{ background: "var(--t-el-med)", border: "1px solid var(--t-border-md)", color: "var(--t-text3)", minHeight: "38px" }}
+            onChange={(e) => { if (e.target.value) runBulk("reschedule", e.target.value); }}
+          />
+          <button onClick={() => setPicking(false)} className="px-3 py-2 text-xs font-medium" style={{ color: "var(--t-text6)" }}>
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Bottom bulk actions */}
+      <div
+        className="px-4 py-3 shrink-0 flex gap-2 border-t border-white/5"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+      >
+        <button
+          disabled={!actionsEnabled}
+          onClick={() => runBulk("archive")}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
+          style={{
+            background: actionsEnabled ? "rgba(239,68,68,0.12)" : "var(--t-el-low)",
+            border: `1px solid ${actionsEnabled ? "rgba(239,68,68,0.3)" : "var(--t-border)"}`,
+            color: actionsEnabled ? "#f87171" : "var(--t-text6)",
+          }}
+        >
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Archive size={15} />}
+          Archive{selectedCount > 0 ? ` (${selectedCount})` : ""}
+        </button>
+        <button
+          disabled={!actionsEnabled}
+          onClick={() => setPicking(true)}
+          className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
+          style={{
+            background: actionsEnabled ? "rgba(96,165,250,0.14)" : "var(--t-el-low)",
+            border: `1px solid ${actionsEnabled ? "rgba(96,165,250,0.4)" : "var(--t-border)"}`,
+            color: actionsEnabled ? "#60a5fa" : "var(--t-text6)",
+          }}
+        >
+          <Calendar size={15} />
+          Reschedule{selectedCount > 0 ? ` (${selectedCount})` : ""}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Page ────────────────────────────────────────────────────────────────────
+
 export default function Tasks() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
   const [loading,   setLoading]   = useState(true);
   const [bgLoading, setBgLoading] = useState(false);
   const [cacheHit,  setCacheHit]  = useState(false);
@@ -1157,6 +1440,31 @@ export default function Tasks() {
         </>}
       />
 
+      {/* View toggle — Cards (existing swipe mode) vs List (bulk cleanup) */}
+      <div className="px-4 py-2 border-b border-white/5 shrink-0 flex items-center justify-center gap-1.5">
+        {(["cards", "list"] as const).map((m) => {
+          const active = viewMode === m;
+          return (
+            <button
+              key={m}
+              onClick={() => setViewMode(m)}
+              className="px-4 py-1 rounded-full text-xs font-semibold transition-all active:scale-95"
+              style={{
+                background: active ? ACCENT + "22" : "var(--t-el-low)",
+                border: `1px solid ${active ? ACCENT + "55" : "var(--t-border)"}`,
+                color: active ? ACCENT : "var(--t-text5)",
+              }}
+            >
+              {m === "cards" ? "Cards" : "List"}
+            </button>
+          );
+        })}
+      </div>
+
+      {viewMode === "list" && <ListMode />}
+
+      {viewMode === "cards" && (
+        <>
       {/* Swipe legend + cache status */}
       <div className="px-4 py-2 border-b border-white/5 shrink-0">
         <div className="flex items-center justify-center gap-5">
@@ -1222,8 +1530,10 @@ export default function Tasks() {
           </div>
         )}
       </div>
+        </>
+      )}
 
-      {undoState && (
+      {viewMode === "cards" && undoState && (
         <UndoToast
           key={`${undoState.task.id}-${undoState.action}`}
           state={undoState}
