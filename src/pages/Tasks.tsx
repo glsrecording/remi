@@ -3,7 +3,7 @@ import { useGutterScroll } from "@/hooks/useGutterScroll";
 import {
   RefreshCw, Loader2, ChevronDown, ChevronRight,
   Plus, Mic, MicOff, Check, X, GripVertical, Crosshair,
-  Square, CheckSquare, Archive, Calendar,
+  Square, CheckSquare, Calendar,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
@@ -1043,11 +1043,15 @@ async function listFetch(filter: ListFilter): Promise<ListTask[]> {
   return [...map.values()];
 }
 
-async function listArchive(id: string): Promise<void> {
-  const r = await fetch(`${JARVIS_URL}/scheduler/update`, {
-    method: "PATCH",
+// Mark done = POST /tasks/move {bucket:"done"} → sets Status="Done" (same as the
+// card/swipe left-swipe). NOT /scheduler/update {action:"done"}, which trashes the
+// page so it never shows in the evening briefing or scorecard. Backend reads
+// `page_id` (not `id`).
+async function listMarkDone(id: string): Promise<void> {
+  const r = await fetch(`${JARVIS_URL}/tasks/move`, {
+    method: "POST",
     headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ id, action: "done" }),
+    body: JSON.stringify({ page_id: id, bucket: "done" }),
   });
   if (!r.ok) throw new Error(`${r.status}`);
 }
@@ -1100,22 +1104,22 @@ function ListMode() {
     setChecked(allSelected ? new Set() : new Set(tasks.map((t) => t.id)));
   }
 
-  async function runBulk(kind: "archive" | "reschedule", isoDate?: string) {
+  async function runBulk(kind: "markDone" | "reschedule", isoDate?: string) {
     const sel = tasks.filter((t) => checked.has(t.id));
     if (sel.length === 0) return;
     setBusy(true); setStatus(null); setPicking(false);
     const results = await Promise.allSettled(
-      sel.map((t) => (kind === "archive" ? listArchive(t.id) : listReschedule(t.id, isoDate!)))
+      sel.map((t) => (kind === "markDone" ? listMarkDone(t.id) : listReschedule(t.id, isoDate!)))
     );
     const okIds = new Set<string>();
     const failed: ListTask[] = [];
     results.forEach((r, i) => { if (r.status === "fulfilled") okIds.add(sel[i].id); else failed.push(sel[i]); });
-    // Succeeded tasks leave the current view (archived, or rescheduled off the filter).
+    // Succeeded tasks leave the current view (marked done, or rescheduled off the filter).
     setTasks((prev) => prev.filter((t) => !okIds.has(t.id)));
     setChecked(new Set());
     setBusy(false);
     const noun = okIds.size === 1 ? "task" : "tasks";
-    const done = kind === "archive" ? "archived" : `moved to ${fmtDate(isoDate!)}`;
+    const done = kind === "markDone" ? "marked done" : `moved to ${fmtDate(isoDate!)}`;
     setStatus(
       failed.length
         ? { ok: false, text: `${okIds.size} ${done} · ${failed.length} failed: ${failed.map((t) => t.title).join(", ")}` }
@@ -1237,16 +1241,16 @@ function ListMode() {
       >
         <button
           disabled={!actionsEnabled}
-          onClick={() => runBulk("archive")}
+          onClick={() => runBulk("markDone")}
           className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
           style={{
-            background: actionsEnabled ? "rgba(239,68,68,0.12)" : "var(--t-el-low)",
-            border: `1px solid ${actionsEnabled ? "rgba(239,68,68,0.3)" : "var(--t-border)"}`,
-            color: actionsEnabled ? "#f87171" : "var(--t-text6)",
+            background: actionsEnabled ? "rgba(34,197,94,0.14)" : "var(--t-el-low)",
+            border: `1px solid ${actionsEnabled ? "rgba(34,197,94,0.4)" : "var(--t-border)"}`,
+            color: actionsEnabled ? "#22c55e" : "var(--t-text6)",
           }}
         >
-          {busy ? <Loader2 size={15} className="animate-spin" /> : <Archive size={15} />}
-          Archive{selectedCount > 0 ? ` (${selectedCount})` : ""}
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
+          Mark Done{selectedCount > 0 ? ` (${selectedCount})` : ""}
         </button>
         <button
           disabled={!actionsEnabled}
