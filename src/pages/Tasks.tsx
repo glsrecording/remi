@@ -977,7 +977,7 @@ function BucketSection({
 
 // ── List Mode — bulk archive + reschedule (separate from card/swipe mode) ────
 
-type ListFilter = "todayTonight" | "overdue" | "both";
+type ListFilter = "todayTonight" | "unscheduled" | "overdue" | "both";
 
 interface ListTask {
   id: string;
@@ -987,6 +987,7 @@ interface ListTask {
 
 const LIST_FILTERS: Array<{ key: ListFilter; label: string }> = [
   { key: "todayTonight", label: "Today / Tonight" },
+  { key: "unscheduled",  label: "Unscheduled" },
   { key: "overdue",      label: "Overdue" },
   { key: "both",         label: "Both" },
 ];
@@ -1020,10 +1021,21 @@ async function listFetchOverdue(): Promise<ListTask[]> {
   return data.map((t) => ({ id: t.id, title: t.title, dateLabel: fmtDate(t.scheduled_date) }));
 }
 
+// Unscheduled = existing /scheduler endpoint (Active + Priority=Today +
+// Scheduled Date empty — the holding cell). Title only; these have no date.
+async function listFetchUnscheduled(): Promise<ListTask[]> {
+  const res = await fetch(`${JARVIS_URL}/scheduler`, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const data = (await res.json()) as Array<{ id: string; title: string }>;
+  return data.map((t) => ({ id: t.id, title: t.title, dateLabel: "" }));
+}
+
 async function listFetch(filter: ListFilter): Promise<ListTask[]> {
   if (filter === "todayTonight") return listFetchTodayTonight();
+  if (filter === "unscheduled")  return listFetchUnscheduled();
   if (filter === "overdue")      return listFetchOverdue();
-  // both — union by id (overdue's real date wins for tasks in both)
+  // both — union by id (overdue's real date wins for tasks in both). Unscheduled
+  // is intentionally NOT part of "both".
   const [tt, od] = await Promise.all([listFetchTodayTonight(), listFetchOverdue()]);
   const map = new Map<string, ListTask>();
   for (const t of tt) map.set(t.id, t);
@@ -1118,7 +1130,7 @@ function ListMode() {
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Filter chips */}
-      <div className="px-4 py-2 border-b border-white/5 shrink-0 flex items-center justify-center gap-2">
+      <div className="px-4 py-2 border-b border-white/5 shrink-0 flex flex-wrap items-center justify-center gap-2">
         {LIST_FILTERS.map((f) => {
           const active = filter === f.key;
           return (
