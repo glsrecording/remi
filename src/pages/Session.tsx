@@ -10,6 +10,7 @@ const AUTH_HEADERS = { Authorization: `Bearer ${REMI_API_KEY}` };
 const HOURLY_RATE_KEY = "remi_session_hourly_rate";
 const DAY_RATE_KEY    = "remi_session_day_rate";
 const RATE_TYPE_KEY   = "remi_session_rate_type";
+const SESSION_START_KEY = "remi_session_start";  // ms epoch backup for timer rehydration
 
 type RateType = "hourly" | "day_rate" | "project_rate" | "no_charge";
 const RATE_TYPE_LABELS: Record<RateType, string> = {
@@ -24,6 +25,7 @@ interface SessionState {
   artist?: string;
   song?: string;
   song_page_id?: string;
+  start_time?: string;  // ISO string, already returned by GET /session
 }
 
 interface NoteEntry {
@@ -90,6 +92,7 @@ export default function Session() {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
+  const rehydratedRef = useRef(false);  // guards one-time timer rehydration per mount
   const breakAccumRef = useRef<number>(0);
   const breakStartRef = useRef<number>(0);
   const notesEndRef = useRef<HTMLDivElement>(null);
@@ -226,9 +229,40 @@ export default function Session() {
     };
   }, [running, onBreak]);
 
+  // Rehydrate the timer after a remount (PIN unlock / full reload). The server's
+  // start_time (returned by /session) is authoritative; fall back to the
+  // localStorage backup if it's missing/invalid. Runs once per mount, and only
+  // when the server says the session is active and the local timer isn't already
+  // running — so we never auto-start a timer for a session that isn't active
+  // server-side, and never override a freshly-started or live timer.
+  useEffect(() => {
+    if (rehydratedRef.current) return;
+    if (!session.active || running) return;
+    let startMs = 0;
+    if (session.start_time) {
+      const parsed = new Date(session.start_time).getTime();
+      if (!isNaN(parsed)) startMs = parsed;
+    }
+    if (!startMs) {
+      const backup = localStorage.getItem(SESSION_START_KEY);
+      if (backup) { const n = parseInt(backup, 10); if (!isNaN(n)) startMs = n; }
+    }
+    if (!startMs) return;  // nothing authoritative to restore from — leave timer idle
+    rehydratedRef.current = true;
+    const restoredElapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+    startTimeRef.current = startMs / 1000;  // startTimeRef is kept in SECONDS (see handleStart)
+    breakAccumRef.current = 0;
+    localStorage.setItem(SESSION_START_KEY, String(startMs));  // keep backup in sync
+    setElapsed(restoredElapsed);
+    setOnBreak(false);
+    setRunning(true);
+  }, [session.active, session.start_time, running]);
+
   const handleStart = useCallback(() => {
     startTimeRef.current = Date.now() / 1000;
     breakAccumRef.current = 0;
+    rehydratedRef.current = true;  // manual start owns the timer; don't let rehydration override
+    localStorage.setItem(SESSION_START_KEY, Date.now().toString());  // backup for reload
     setElapsed(0);
     setRunning(true);
     setOnBreak(false);
@@ -467,6 +501,7 @@ export default function Session() {
     } catch {
       // non-fatal
     }
+    localStorage.removeItem(SESSION_START_KEY);
     navigate("/", { replace: true });
   }, [navigate]);
 
@@ -516,6 +551,7 @@ export default function Session() {
     } catch {
       // non-fatal
     }
+    localStorage.removeItem(SESSION_START_KEY);
     setStopping(false);
     navigate("/", { replace: true });
   }, [running, elapsed, hourlyRate, rateType, dayRateAmount, session, navigate]);
