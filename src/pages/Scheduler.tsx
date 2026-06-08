@@ -22,10 +22,16 @@ const AREA_COLORS: Record<LifeArea, string> = {
 
 const GROUP_ORDER = ["Unsorted", ...LIFE_AREAS] as const;
 
+// Work-mode categories (Master Tasks "Category" select). Amber accent per the
+// Remi design system. Must match the backend _ALLOWED_CATEGORIES set exactly.
+const CATEGORIES = ["Communication", "Filming", "Admin", "Writing", "Studio", "General"] as const;
+const CATEGORY_ACCENT = "#f59e0b";
+
 interface SchedulerTask {
   id: string;
   title: string;
   life_area: string | null;
+  category: string | null;
 }
 
 async function apiFetchTasks(): Promise<SchedulerTask[]> {
@@ -36,7 +42,7 @@ async function apiFetchTasks(): Promise<SchedulerTask[]> {
   return (await r.json()) as SchedulerTask[];
 }
 
-async function apiPatch(id: string, patch: { life_area?: string; scheduled_date?: string }): Promise<void> {
+async function apiPatch(id: string, patch: { life_area?: string; scheduled_date?: string; category?: string }): Promise<void> {
   const r = await fetch(`${JARVIS_URL}/scheduler/update`, {
     method: "PATCH",
     headers: {
@@ -78,6 +84,8 @@ export default function Scheduler() {
   const [showDateSet, setShowDateSet] = useState<Set<string>>(new Set());
   // ID of card that has the native date picker open
   const [pickDateId,  setPickDateId]  = useState<string | null>(null);
+  // ID of card whose Category picker is open
+  const [catPickId,   setCatPickId]   = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,6 +104,7 @@ export default function Scheduler() {
   function handleCardTap(id: string) {
     setSelectedId((prev) => (prev === id ? null : id));
     setPickDateId(null);
+    setCatPickId(null);
   }
 
   async function handleAreaTap(area: LifeArea) {
@@ -121,6 +130,17 @@ export default function Scheduler() {
       await apiPatch(id, { scheduled_date: isoDate });
     } catch {
       load();
+    }
+  }
+
+  async function handleCategoryAssign(id: string, category: string) {
+    // Optimistic — show the chip immediately, close the picker, then write back.
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, category } : t));
+    setCatPickId(null);
+    try {
+      await apiPatch(id, { category });
+    } catch {
+      load();  // revert to server truth on failure
     }
   }
 
@@ -178,7 +198,7 @@ export default function Scheduler() {
         <div
           className="flex-1 overflow-y-auto py-4"
           style={{ paddingLeft: "12px", paddingRight: "8px", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}
-          onClick={() => { setSelectedId(null); setPickDateId(null); }}
+          onClick={() => { setSelectedId(null); setPickDateId(null); setCatPickId(null); }}
         >
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-16">
@@ -222,6 +242,7 @@ export default function Scheduler() {
                         const isSelected  = selectedId === task.id;
                         const hasDateRow  = showDateSet.has(task.id);
                         const isPickDate  = pickDateId === task.id;
+                        const isCatPick   = catPickId === task.id;
                         const areaColor   = task.life_area
                           ? (AREA_COLORS[task.life_area as LifeArea] ?? remiColor)
                           : null;
@@ -268,6 +289,25 @@ export default function Scheduler() {
                                   {task.life_area}
                                 </span>
                               )}
+                              {/* Category chip (amber) when set, muted "+ Cat" affordance when empty.
+                                  Tap toggles the inline picker; stops propagation so it doesn't
+                                  toggle card selection / the life-area panel. */}
+                              <button
+                                className="shrink-0 rounded px-1.5 py-0.5 transition-all active:scale-95"
+                                style={{
+                                  background: task.category ? CATEGORY_ACCENT + "1f" : "var(--t-el-low)",
+                                  color: task.category ? CATEGORY_ACCENT : "var(--t-text6)",
+                                  border: `1px solid ${task.category ? CATEGORY_ACCENT + "55" : "var(--t-border)"}`,
+                                  fontFamily: "'Space Mono', monospace",
+                                  fontSize: "9px",
+                                  letterSpacing: "0.05em",
+                                  textTransform: "uppercase",
+                                }}
+                                onClick={(e) => { e.stopPropagation(); setPickDateId(null); setCatPickId((prev) => (prev === task.id ? null : task.id)); }}
+                                data-testid={`category-chip-${task.id}`}
+                              >
+                                {task.category ?? "+ Cat"}
+                              </button>
                               <button
                                 className="shrink-0 px-2 py-1 rounded-lg text-xs font-semibold transition-all active:scale-95"
                                 style={{ background: "rgba(34,197,94,0.12)", color: "rgba(34,197,94,0.75)" }}
@@ -276,6 +316,35 @@ export default function Scheduler() {
                                 Done ✓
                               </button>
                             </div>
+
+                            {/* Category picker — opens on tap of the category chip.
+                                Selecting writes back to Notion via /scheduler/update. */}
+                            {isCatPick && (
+                              <div
+                                className="flex flex-wrap gap-1.5 px-3 pt-2 pb-3"
+                                style={{ borderTop: "1px solid var(--t-border)" }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {CATEGORIES.map((cat) => {
+                                  const active = task.category === cat;
+                                  return (
+                                    <button
+                                      key={cat}
+                                      className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all active:scale-95"
+                                      style={{
+                                        background: active ? CATEGORY_ACCENT + "26" : "var(--t-el-low)",
+                                        border: `1px solid ${active ? CATEGORY_ACCENT + "66" : "var(--t-border)"}`,
+                                        color: active ? CATEGORY_ACCENT : "var(--t-text4)",
+                                      }}
+                                      onClick={() => handleCategoryAssign(task.id, cat)}
+                                      data-testid={`category-opt-${cat.toLowerCase()}-${task.id}`}
+                                    >
+                                      {cat}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
 
                             {/* Date assignment row — visible when life area assigned */}
                             {isSelected && hasDateRow && (
