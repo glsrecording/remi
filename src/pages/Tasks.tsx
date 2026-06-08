@@ -29,6 +29,12 @@ const CATEGORY_FILTERS = [
 ] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
 
+// Assignable work-mode categories (no "All"). Must match the backend
+// _ALLOWED_TASK_CATEGORIES set exactly.
+const CATEGORY_OPTIONS = [
+  "Communication", "Filming", "Admin", "Writing", "Studio", "General",
+] as const;
+
 interface TaskBuckets {
   today: Task[];
   tonight: Task[];
@@ -129,6 +135,15 @@ async function patchTaskTitle(pageId: string, title: string): Promise<void> {
     method: "PATCH",
     headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+}
+
+async function patchTaskCategory(pageId: string, category: string): Promise<void> {
+  const res = await fetch(`${JARVIS_URL}/task/${encodeURIComponent(pageId)}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ category }),
   });
   if (!res.ok) throw new Error(`${res.status}`);
 }
@@ -487,11 +502,12 @@ interface SwipeableCardProps {
   sourceBucket: Bucket;
   onMoved: (task: Task, action: SwipeAction) => void;
   onTitleChanged: (task: Task, newTitle: string) => void;
+  onCategoryChanged: (task: Task, category: string) => void;
   focusedTaskId?: string | null;
   onToggleFocus?: () => void;
 }
 
-function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, focusedTaskId, onToggleFocus }: SwipeableCardProps) {
+function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategoryChanged, focusedTaskId, onToggleFocus }: SwipeableCardProps) {
   const isFocused = focusedTaskId === task.id;
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [committing, setCommitting] = useState(false);
@@ -504,6 +520,25 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, focusedTas
   const [savingTitle,  setSavingTitle]    = useState(false);
   const [titleError,   setTitleError]     = useState(false);
   const commitInFlightRef                 = useRef(false);
+
+  // Category assignment — chip + bottom-sheet picker, optimistic + Notion write-back
+  const [pickerOpen,    setPickerOpen]    = useState(false);
+  const [localCategory, setLocalCategory] = useState<string | undefined>(task.category);
+  // Keep local copy in sync when the parent task prop changes (e.g. refetch)
+  useEffect(() => { setLocalCategory(task.category); }, [task.category]);
+
+  async function assignCategory(category: string) {
+    setPickerOpen(false);
+    const prev = localCategory;
+    setLocalCategory(category);                 // optimistic
+    onCategoryChanged(task, category);          // update parent buckets + cache
+    try {
+      await patchTaskCategory(task.id, category);
+    } catch {
+      setLocalCategory(prev);                   // revert on failure
+      onCategoryChanged(task, prev ?? "");
+    }
+  }
 
   const startPos       = useRef<{ x: number; y: number } | null>(null);
   const dragging       = useRef(false);
@@ -750,6 +785,27 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, focusedTas
             >
               {task.title}
             </p>
+            {/* Category chip — amber when set, muted "+ Cat" when empty. Corner
+                tap target; stops propagation so it never triggers swipe/edit. */}
+            <button
+              type="button"
+              className="shrink-0 rounded px-1.5 py-0.5 mt-1 transition-all active:scale-95"
+              style={{
+                background: localCategory ? ACCENT + "1f" : "var(--t-el-low)",
+                color: localCategory ? ACCENT : "var(--t-text6)",
+                border: `1px solid ${localCategory ? ACCENT + "55" : "var(--t-border)"}`,
+                fontFamily: "'Space Mono', monospace",
+                fontSize: "9px",
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+                touchAction: "none",
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); if (!task.id.startsWith("temp-")) setPickerOpen(true); }}
+              data-testid={`task-category-${task.id}`}
+            >
+              {localCategory ?? "+ Cat"}
+            </button>
             {onToggleFocus && (
               <button
                 type="button"
@@ -768,6 +824,56 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, focusedTas
           </>
         )}
       </div>
+
+      {/* Category picker — fixed bottom sheet (fixed escapes the card's
+          overflow:hidden). stopPropagation keeps taps off the swipe surface. */}
+      {pickerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onPointerDown={(e) => { e.stopPropagation(); setPickerOpen(false); }}
+          onClick={(e) => { e.stopPropagation(); setPickerOpen(false); }}
+        >
+          <div
+            className="w-full rounded-t-2xl p-4"
+            style={{
+              background: "var(--t-card)",
+              borderTop: "1px solid var(--t-border)",
+              paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p
+              className="text-xs uppercase tracking-widest mb-3 px-1"
+              style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
+            >
+              Category
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORY_OPTIONS.map((cat) => {
+                const active = localCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    className="px-3 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95"
+                    style={{
+                      background: active ? ACCENT + "26" : "var(--t-el-low)",
+                      border: `1px solid ${active ? ACCENT + "66" : "var(--t-border)"}`,
+                      color: active ? ACCENT : "var(--t-text3)",
+                    }}
+                    onClick={() => assignCategory(cat)}
+                    data-testid={`task-category-opt-${cat.toLowerCase()}-${task.id}`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -782,6 +888,7 @@ function BucketSection({
   onTaskAdded,
   onReordered,
   onTitleChanged,
+  onCategoryChanged,
   focusedTaskId,
   onToggleFocus,
 }: {
@@ -792,6 +899,7 @@ function BucketSection({
   onTaskAdded: (title: string) => void;
   onReordered: (bucket: Bucket, newOrder: Task[]) => void;
   onTitleChanged: (task: Task, newTitle: string) => void;
+  onCategoryChanged: (task: Task, category: string) => void;
   focusedTaskId?: string | null;
   onToggleFocus?: (taskId: string) => void;
 }) {
@@ -960,6 +1068,10 @@ function BucketSection({
                     onTitleChanged={(t, newTitle) => {
                       setLocalTasks(prev => prev.map(lt => lt.id === t.id ? { ...lt, title: newTitle } : lt));
                       onTitleChanged(t, newTitle);
+                    }}
+                    onCategoryChanged={(t, category) => {
+                      setLocalTasks(prev => prev.map(lt => lt.id === t.id ? { ...lt, category } : lt));
+                      onCategoryChanged(t, category);
                     }}
                     focusedTaskId={focusedTaskId}
                     onToggleFocus={onToggleFocus ? () => onToggleFocus(task.id) : undefined}
@@ -1431,6 +1543,17 @@ export default function Tasks() {
     });
   }, []);
 
+  const handleCategoryChanged = useCallback((task: Task, category: string) => {
+    setBuckets(prev => {
+      const updated = { ...prev } as TaskBuckets;
+      for (const b of Object.keys(updated) as Bucket[]) {
+        updated[b] = updated[b].map(t => t.id === task.id ? { ...t, category } : t);
+      }
+      saveCache(updated);
+      return updated;
+    });
+  }, []);
+
   const handleDismissUndo = useCallback(() => setUndoState(null), []);
 
   const handleUndo = useCallback(() => {
@@ -1596,6 +1719,7 @@ export default function Tasks() {
                 onTaskAdded={(title) => handleTaskAdded(title, b)}
                 onReordered={handleReordered}
                 onTitleChanged={handleTitleChanged}
+                onCategoryChanged={handleCategoryChanged}
                 focusedTaskId={FOCUS_BUCKETS.has(b) ? focus[b as FocusBucket] : undefined}
                 onToggleFocus={FOCUS_BUCKETS.has(b) ? (taskId) => handleToggleFocus(b as FocusBucket, taskId) : undefined}
               />
