@@ -529,6 +529,17 @@ export default function Session() {
       if (resp.ok && data.status === "switched") {
         // Part 3 — reflect the new song immediately (timer untouched).
         setSession((prev) => ({ ...prev, song: data.song, artist: data.artist || prev.artist }));
+        // Clear the previous song's display so the panels show fresh for the new
+        // song — notes are wiped (the poll repopulates from the new toggle) and the
+        // old task list is dropped, then re-fetched immediately for the new song.
+        setNotes([]);
+        setSessionTasks([]);
+        if (data.song) {
+          fetch(`${JARVIS_URL}/session-tasks?song=${encodeURIComponent(data.song)}`, { headers: AUTH_HEADERS })
+            .then((r) => r.json())
+            .then((d: { tasks?: SessionTask[] }) => { if (Array.isArray(d.tasks)) setSessionTasks(d.tasks); })
+            .catch(() => {});
+        }
         setSwitchConfirm(`Now on: ${data.song}`);
         setTimeout(() => setSwitchConfirm(null), 4000);
         setSwitching(false);
