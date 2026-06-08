@@ -802,7 +802,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
                 never triggers swipe/edit. */}
             <button
               type="button"
-              className="shrink-0 rounded px-1.5 py-0.5 mt-1 transition-all active:scale-95"
+              className="shrink-0 rounded px-3 py-1.5 mt-1 transition-all active:scale-95"
               style={{
                 background: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) + "33" : CATEGORY_EMPTY + "1f",
                 color: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) : CATEGORY_EMPTY,
