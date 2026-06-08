@@ -35,6 +35,18 @@ const CATEGORY_OPTIONS = [
   "Communication", "Filming", "Admin", "Writing", "Studio", "General",
 ] as const;
 
+// Per-category colors matching the Notion select swatches. Used for both the
+// card chip and the bottom-sheet picker so they stay visually consistent.
+const CATEGORY_COLORS: Record<string, string> = {
+  Communication: "#ef4444",  // red
+  General:       "#f97316",  // orange-red
+  Filming:       "#f59e0b",  // amber
+  Admin:         "#3b82f6",  // blue
+  Writing:       "#ec4899",  // pink
+  Studio:        "#22c55e",  // green
+};
+const CATEGORY_EMPTY = "#9ca3af";  // light gray — visible "add a category" affordance
+
 interface TaskBuckets {
   today: Task[];
   tonight: Task[];
@@ -785,15 +797,18 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
             >
               {task.title}
             </p>
-            {/* Category chip — amber when set, muted "+ Cat" when empty. Corner
-                tap target; stops propagation so it never triggers swipe/edit. */}
+            {/* Category chip — per-category color when set, visible "+ Cat"
+                affordance when empty. Corner tap target; stops propagation so it
+                never triggers swipe/edit. */}
             <button
               type="button"
               className="shrink-0 rounded px-1.5 py-0.5 mt-1 transition-all active:scale-95"
               style={{
-                background: localCategory ? ACCENT + "1f" : "var(--t-el-low)",
-                color: localCategory ? ACCENT : "var(--t-text6)",
-                border: `1px solid ${localCategory ? ACCENT + "55" : "var(--t-border)"}`,
+                background: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) + "33" : CATEGORY_EMPTY + "1f",
+                color: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) : CATEGORY_EMPTY,
+                border: localCategory
+                  ? `1px solid ${CATEGORY_COLORS[localCategory] ?? ACCENT}`
+                  : `1px dashed ${CATEGORY_EMPTY}80`,
                 fontFamily: "'Space Mono', monospace",
                 fontSize: "9px",
                 letterSpacing: "0.05em",
@@ -853,15 +868,16 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
             <div className="flex flex-wrap gap-2">
               {CATEGORY_OPTIONS.map((cat) => {
                 const active = localCategory === cat;
+                const optColor = CATEGORY_COLORS[cat] ?? ACCENT;
                 return (
                   <button
                     key={cat}
                     type="button"
                     className="px-3 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95"
                     style={{
-                      background: active ? ACCENT + "26" : "var(--t-el-low)",
-                      border: `1px solid ${active ? ACCENT + "66" : "var(--t-border)"}`,
-                      color: active ? ACCENT : "var(--t-text3)",
+                      background: active ? optColor + "33" : optColor + "1a",
+                      border: `1px solid ${active ? optColor : optColor + "66"}`,
+                      color: optColor,
                     }}
                     onClick={() => assignCategory(cat)}
                     data-testid={`task-category-opt-${cat.toLowerCase()}-${task.id}`}
