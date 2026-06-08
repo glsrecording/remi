@@ -19,7 +19,15 @@ interface Task {
   title: string;
   url: string;
   sort_order?: number | null;
+  category?: string;
 }
+
+// Category filter chips (cards view only). "All" is the default/no-filter state.
+// Values must match the Master Tasks "Category" select options exactly.
+const CATEGORY_FILTERS = [
+  "All", "Communication", "Filming", "Admin", "Writing", "Studio", "General",
+] as const;
+type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
 
 interface TaskBuckets {
   today: Task[];
@@ -1275,6 +1283,9 @@ function ListMode() {
 export default function Tasks() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+  // Category filter (cards view). Stateful within the session; resets to "All"
+  // on reload because it is intentionally not persisted to localStorage.
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("All");
   const [loading,   setLoading]   = useState(true);
   const [bgLoading, setBgLoading] = useState(false);
   const [cacheHit,  setCacheHit]  = useState(false);
@@ -1435,6 +1446,23 @@ export default function Tasks() {
 
   const totalCount = buckets.today.length + buckets.tonight.length + buckets.tomorrow.length;
 
+  // Apply the category filter to every bucket (display-only — underlying buckets,
+  // moves, and reorders are untouched). "All" passes through unfiltered.
+  const filteredBuckets: TaskBuckets = categoryFilter === "All"
+    ? buckets
+    : {
+        today:    buckets.today.filter((t) => t.category === categoryFilter),
+        tonight:  buckets.tonight.filter((t) => t.category === categoryFilter),
+        tomorrow: buckets.tomorrow.filter((t) => t.category === categoryFilter),
+        someday:  buckets.someday.filter((t) => t.category === categoryFilter),
+      };
+  const filteredIsEmpty =
+    categoryFilter !== "All" &&
+    filteredBuckets.today.length === 0 &&
+    filteredBuckets.tonight.length === 0 &&
+    filteredBuckets.tomorrow.length === 0 &&
+    filteredBuckets.someday.length === 0;
+
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg-deep)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
@@ -1501,6 +1529,29 @@ export default function Tasks() {
         )}
       </div>
 
+      {/* Category filter chips — horizontal scroll; cards view only */}
+      <div className="px-4 py-2 border-b border-white/5 shrink-0 overflow-x-auto">
+        <div className="flex items-center gap-2 w-max">
+          {CATEGORY_FILTERS.map((c) => {
+            const active = categoryFilter === c;
+            return (
+              <button
+                key={c}
+                onClick={() => setCategoryFilter(c)}
+                className="shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 whitespace-nowrap"
+                style={{
+                  background: active ? ACCENT + "22" : "var(--t-el-low)",
+                  border: `1px solid ${active ? ACCENT + "55" : "var(--t-border)"}`,
+                  color: active ? ACCENT : "var(--t-text5)",
+                }}
+              >
+                {c}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Task list */}
       <div
         ref={scrollRef}
@@ -1527,13 +1578,19 @@ export default function Tasks() {
           </div>
         )}
 
-        {(!loading || initialLoaded.current) && !error && (
+        {(!loading || initialLoaded.current) && !error && filteredIsEmpty && (
+          <p className="text-center text-sm text-white/30 py-12">
+            No {categoryFilter} tasks right now.
+          </p>
+        )}
+
+        {(!loading || initialLoaded.current) && !error && !filteredIsEmpty && (
           <div className="space-y-6">
             {(["today", "tonight", "tomorrow", "someday"] as Bucket[]).map((b) => (
               <BucketSection
                 key={b}
                 bucket={b}
-                tasks={buckets[b]}
+                tasks={filteredBuckets[b]}
                 defaultOpen={b === "today" || b === "tonight"}
                 onMoved={handleMoved}
                 onTaskAdded={(title) => handleTaskAdded(title, b)}
