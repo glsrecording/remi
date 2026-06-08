@@ -110,10 +110,13 @@ export default function Session() {
   const [isLocked, setIsLocked] = useState(false);
   const pointerStartYRef = useRef<number>(0);
   const noteInputRef = useRef<HTMLInputElement>(null);
-  // Set true on a song switch so the next /session_notes poll tick is skipped —
-  // gives Notion time to propagate the new song's toggle before we re-read it,
-  // otherwise the poll refills the freshly-cleared panel with the old song's notes.
+  // Set true on a song switch to suppress the /session_notes poll until the new
+  // song's own notes propagate from Notion — otherwise the poll refills the
+  // freshly-cleared panel with the OLD song's notes. Suppression lifts on the
+  // first non-empty response for the new song, or after a 30s hard timeout (so a
+  // song that genuinely has no notes yet doesn't stay suppressed forever).
   const justSwitchedRef = useRef(false);
+  const switchTimeRef = useRef<number>(0);  // Date.now() at the moment of the last switch
 
   const refetchSession = useCallback(() => {
     fetch(`${JARVIS_URL}/session`, { headers: AUTH_HEADERS })
@@ -147,16 +150,20 @@ export default function Session() {
   // Poll notes every 10 seconds
   useEffect(() => {
     const poll = () => {
-      // Skip exactly one tick right after a switch — Notion may still serve the
-      // old song's toggle data, which would refill the freshly-cleared panel.
-      if (justSwitchedRef.current) {
-        justSwitchedRef.current = false;
-        return;
-      }
       fetch(`${JARVIS_URL}/session_notes`, { headers: AUTH_HEADERS })
         .then((r) => r.json())
         .then((data: { notes: NoteEntry[] }) => {
-          if (Array.isArray(data.notes)) setNotes(data.notes);
+          if (!Array.isArray(data.notes)) return;
+          // Post-switch suppression: hold the panel clear until Notion serves the
+          // NEW song's notes. Decide against the actual response so a slow toggle
+          // can't flash the old song's data back in.
+          if (justSwitchedRef.current) {
+            const hasNotes = data.notes.length > 0;
+            const timedOut = Date.now() - switchTimeRef.current > 30000;
+            if (!hasNotes && !timedOut) return;  // still empty & within 30s — keep suppressing
+            justSwitchedRef.current = false;      // first real data (or 30s hard timeout) — lift suppression
+          }
+          setNotes(data.notes);
         })
         .catch(() => {});
     };
@@ -543,7 +550,8 @@ export default function Session() {
         // song — notes are wiped (the poll repopulates from the new toggle) and the
         // old task list is dropped, then re-fetched immediately for the new song.
         setNotes([]);
-        justSwitchedRef.current = true;  // suppress the next notes poll tick (Notion propagation delay)
+        justSwitchedRef.current = true;     // suppress notes poll until new song's notes arrive
+        switchTimeRef.current = Date.now();  // start the 30s hard-timeout clock
         setSessionTasks([]);
         if (data.song) {
           fetch(`${JARVIS_URL}/session-tasks?song=${encodeURIComponent(data.song)}`, { headers: AUTH_HEADERS })
