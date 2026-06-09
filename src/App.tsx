@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import PinLock, { isPinUnlocked } from "@/components/PinLock";
 import MainChat from "@/pages/MainChat";
 import Tasks from "@/pages/Tasks";
+import ProjectDetail from "@/pages/ProjectDetail";
 import Commands from "@/pages/Commands";
 import MixNotes from "@/pages/MixNotes";
 import TimeTrack from "@/pages/TimeTrack";
@@ -34,6 +35,7 @@ function Router() {
     <Switch>
       <Route path="/" component={MainChat} />
       <Route path="/tasks" component={Tasks} />
+      <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/commands" component={Commands} />
       <Route path="/mix-notes" component={MixNotes} />
       <Route path="/time-track" component={TimeTrack} />

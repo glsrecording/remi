@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
 import {
   RefreshCw, Loader2, ChevronDown, ChevronRight,
@@ -166,6 +167,105 @@ async function fetchTasks(priorityOnly = false): Promise<TaskBuckets> {
   if (!res.ok) throw new Error(`${res.status}`);
   const data = await res.json();
   return data.tasks as TaskBuckets;
+}
+
+// ── Projects (GTD) — green cards below the task buckets ──────────────────────
+// Emerald, distinct from amber reminders (#f59e0b) and the green-500 done chip
+// (#22c55e). Kept in sync with PROJECT_COLOR in ProjectDetail.tsx.
+const PROJECT_COLOR = "#10b981";
+
+interface Project {
+  id: string;
+  name: string;
+  area: string | null;
+  status: string | null;
+  next_action: string | null;
+  focus_date: string | null;
+  notes: string | null;
+  task_ids: string[];
+}
+
+async function fetchProjects(): Promise<Project[]> {
+  const res = await fetch(`${JARVIS_URL}/projects`, {
+    headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+  });
+  if (!res.ok) throw new Error(`${res.status}`);
+  const data = await res.json();
+  return (data.projects ?? []) as Project[];
+}
+
+// Local calendar date (YYYY-MM-DD) — NOT toISOString (UTC), which can be a day
+// off near midnight in PDT. Must match the backend's date.today() comparison.
+function localTodayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Single full-width green project card. Tap anywhere → ProjectDetail.
+function ProjectCard({ project, onOpen }: { project: Project; onOpen: () => void }) {
+  const focusToday = !!project.focus_date && project.focus_date === localTodayISO();
+  return (
+    <div
+      className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none cursor-pointer transition-all active:scale-[0.99]"
+      style={{
+        background: PROJECT_COLOR + "14",
+        borderLeft: `3px solid ${PROJECT_COLOR}`,
+        borderTop: `1px solid ${PROJECT_COLOR}33`,
+        borderRight: `1px solid ${PROJECT_COLOR}33`,
+        borderBottom: `1px solid ${PROJECT_COLOR}33`,
+      }}
+      onClick={onOpen}
+      data-testid={`project-card-${project.id}`}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-base font-bold leading-snug" style={{ color: "var(--t-text)" }}>
+            {project.name}
+          </span>
+          {project.area && (
+            <span
+              className="shrink-0 rounded px-2 py-0.5"
+              style={{
+                background: "var(--t-el-low)",
+                color: "var(--t-text5)",
+                fontFamily: "'Space Mono', monospace",
+                fontSize: "9px",
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+              }}
+            >
+              {project.area}
+            </span>
+          )}
+          {focusToday && (
+            <span
+              className="shrink-0 rounded px-2 py-0.5"
+              style={{
+                background: PROJECT_COLOR + "22",
+                color: PROJECT_COLOR,
+                border: `1px solid ${PROJECT_COLOR}55`,
+                fontFamily: "'Space Mono', monospace",
+                fontSize: "9px",
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+              }}
+            >
+              Focus: Today
+            </span>
+          )}
+        </div>
+        {project.next_action && (
+          <p
+            className="text-sm mt-1 truncate"
+            style={{ color: "var(--t-text5)" }}
+          >
+            {project.next_action}
+          </p>
+        )}
+      </div>
+      <ChevronRight size={18} className="shrink-0 mt-0.5" style={{ color: PROJECT_COLOR }} />
+    </div>
+  );
 }
 
 // ── Daily cache ─────────────────────────────────────────────────────────────
@@ -1427,6 +1527,17 @@ export default function Tasks() {
   const scrollRef = useRef<HTMLDivElement>(null);
   useGutterScroll(scrollRef);
 
+  // ── Projects (GTD) — independent of the task fetch/cache path above ─────────
+  const [, navigate] = useLocation();
+  const [projects, setProjects] = useState<Project[]>([]);
+  useEffect(() => {
+    fetchProjects().then(setProjects).catch(() => setProjects([]));
+  }, []);
+  // Surface only projects with Focus Date = today OR Status = Continual.
+  const visibleProjects = projects.filter(
+    (p) => p.status === "Continual" || (!!p.focus_date && p.focus_date === localTodayISO()),
+  );
+
   const load = useCallback(async (forceRefresh = false) => {
     // ── Cache check ────────────────────────────────────────────────────────
     if (!forceRefresh) {
@@ -1738,6 +1849,27 @@ export default function Tasks() {
                 onCategoryChanged={handleCategoryChanged}
                 focusedTaskId={FOCUS_BUCKETS.has(b) ? focus[b as FocusBucket] : undefined}
                 onToggleFocus={FOCUS_BUCKETS.has(b) ? (taskId) => handleToggleFocus(b as FocusBucket, taskId) : undefined}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Projects (GTD) — green cards below the task buckets. Independent of
+            the task fetch state and the category filter; surfaces Continual
+            projects and any with Focus Date = today. */}
+        {visibleProjects.length > 0 && (
+          <div className="space-y-2 pt-2">
+            <p
+              className="text-xs uppercase tracking-widest px-1"
+              style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
+            >
+              Projects
+            </p>
+            {visibleProjects.map((p) => (
+              <ProjectCard
+                key={p.id}
+                project={p}
+                onOpen={() => navigate(`/projects/${encodeURIComponent(p.id)}`)}
               />
             ))}
           </div>
