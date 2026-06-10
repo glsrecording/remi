@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X, Moon, Sun, Check, ArrowLeftRight } from "lucide-react";
+import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X, Moon, Sun, Check, ArrowLeftRight, SlidersHorizontal } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import HamburgerMenu from "@/components/HamburgerMenu";
+import MixRevisionPanel, { MIX_REV_COLOR } from "@/components/MixRevisionPanel";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
@@ -95,6 +96,8 @@ export default function Session() {
   const [switchBusy, setSwitchBusy]       = useState(false);
   const [switchError, setSwitchError]     = useState<string | null>(null);
   const [switchConfirm, setSwitchConfirm] = useState<string | null>(null);
+  // Mix Revision — overlay panel for working client mix-feedback notes
+  const [mixRevOpen, setMixRevOpen] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -855,7 +858,7 @@ export default function Session() {
               )}
 
               {/* Controls */}
-              <div className="flex gap-3 justify-center mt-5">
+              <div className="flex flex-wrap gap-3 justify-center mt-5">
                 {!running ? (
                   <>
                     <button
@@ -904,6 +907,14 @@ export default function Session() {
                     >
                       <ArrowLeftRight size={16} />
                       Switch
+                    </button>
+                    <button
+                      onClick={() => setMixRevOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
+                      style={{ background: "transparent", borderColor: MIX_REV_COLOR, color: MIX_REV_COLOR }}
+                    >
+                      <SlidersHorizontal size={16} />
+                      Mix Revision
                     </button>
                   </>
                 )}
@@ -1266,6 +1277,17 @@ export default function Session() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Mix Revision overlay — works client mix-feedback notes for the active song */}
+      {mixRevOpen && session.active && session.song_page_id && (
+        <MixRevisionPanel
+          pageId={session.song_page_id}
+          songLabel={session.artist && session.song
+            ? `${session.artist} — ${session.song}`
+            : session.song || session.artist || undefined}
+          onClose={() => setMixRevOpen(false)}
+        />
       )}
     </div>
   );
