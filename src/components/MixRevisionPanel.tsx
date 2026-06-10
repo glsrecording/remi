@@ -86,28 +86,46 @@ export default function MixRevisionPanel({ pageId, songLabel, onClose }: Props) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current]);
 
-  // ── Persist to Notion (source-of-truth rewrite) ───────────────────────────
+  // ── Persist to Notion (serialized, coalesced) ─────────────────────────────
+  // Saves are SERIALIZED: only one POST is ever in flight, and rapid saves
+  // collapse to the latest full state. Two overlapping rewrites used to corrupt
+  // the toggle mid-write and made reopens read partial data (Bug MR-READ).
+  const savingRef = useRef(false);
+  const pendingRef = useRef<{ notes: MixNote[]; status: "open" | "finished" } | null>(null);
+
+  const flushSave = useCallback(async () => {
+    if (savingRef.current) return;          // a save is already running
+    const job = pendingRef.current;
+    if (!job) return;
+    pendingRef.current = null;              // claim the latest queued state
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await fetch(`${JARVIS_URL}/mix_revision`, {
+        method: "POST",
+        headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          page_id: pageId,
+          notes: job.notes,
+          status: job.status,
+          date,
+        }),
+      });
+    } catch {
+      // non-fatal — local state is retained, user can retry
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+      if (pendingRef.current) flushSave();  // newer state queued while we saved
+    }
+  }, [pageId, date]);
+
   const save = useCallback(
-    async (nextNotes: MixNote[], nextStatus: "open" | "finished") => {
-      setSaving(true);
-      try {
-        await fetch(`${JARVIS_URL}/mix_revision`, {
-          method: "POST",
-          headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            page_id: pageId,
-            notes: nextNotes,
-            status: nextStatus,
-            date,
-          }),
-        });
-      } catch {
-        // non-fatal — local state is retained, user can retry
-      } finally {
-        setSaving(false);
-      }
+    (nextNotes: MixNote[], nextStatus: "open" | "finished") => {
+      pendingRef.current = { notes: nextNotes, status: nextStatus };  // coalesce
+      flushSave();
     },
-    [pageId, date],
+    [flushSave],
   );
 
   // ── Paste + parse: one client note per non-blank line ─────────────────────
