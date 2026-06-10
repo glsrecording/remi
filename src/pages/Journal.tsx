@@ -539,7 +539,11 @@ export default function Journal() {
             <span className="text-xs text-white/25 ml-2">↑ slide to lock</span>
           </div>
         )}
-        <div className="flex gap-2 items-center">
+        {/* Grid (not flex): minmax(0,1fr) sizes the input track deterministically so it
+            shrinks below content width in one layout pass — flexbox left the input at
+            intrinsic width at initial paint on mobile Safari, pushing the mic off the
+            right edge until a reflow. Same fix as Session/MainChat. */}
+        <div className="grid items-center gap-2" style={{ gridTemplateColumns: "minmax(0, 1fr) auto auto" }}>
           {/* Text input */}
           <input
             ref={inputRef}
@@ -547,7 +551,7 @@ export default function Journal() {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !submitting && handleSubmit(text)}
             placeholder="Write something…"
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+            className="min-w-0 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
           />
 
           {/* Send */}

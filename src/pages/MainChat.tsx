@@ -1617,7 +1617,12 @@ export default function MainChat() {
             e.preventDefault();
             sendMessage(inputText);
           }}
-          className="w-full flex gap-2 items-center"
+          // Grid (not flex): minmax(0,1fr) sizes the input track deterministically so
+          // it shrinks below content width in one layout pass. Flexbox left the input
+          // at intrinsic width at initial paint on mobile Safari, pushing the mic past
+          // the content box off the right edge until a reflow. Same fix as Session.
+          className="w-full grid items-center gap-2"
+          style={{ gridTemplateColumns: "minmax(0, 1fr) auto auto" }}
         >
           {isRecording ? (
             <div
@@ -1650,7 +1655,7 @@ export default function MainChat() {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder='Try "Mix note for [song] — [note]"'
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 md:py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+              className="min-w-0 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 md:py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
               data-testid="input-text-command"
             />
           )}
