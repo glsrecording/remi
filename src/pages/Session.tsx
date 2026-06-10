@@ -1177,14 +1177,19 @@ export default function Session() {
                   : <span className="text-xs" style={{ color: "#ef4444" }}>Recording…</span>}
               </div>
             )}
-            <div className="flex gap-2 items-center">
+            {/* Grid (not flex): minmax(0,1fr) sizes the input track deterministically
+                in one layout pass so it shrinks below its content width. Flexbox left
+                the input at intrinsic width at initial paint on mobile Safari (min-w-0
+                wasn't honored until a reflow), pushing Send + mic — and the mic past
+                the content box — off the right edge until recording forced a reflow. */}
+            <div className="grid items-center gap-2" style={{ gridTemplateColumns: "minmax(0, 1fr) auto auto" }}>
               <input
                 ref={noteInputRef}
                 value={noteText}
                 onChange={(e) => setNoteText(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleNoteSubmit()}
                 placeholder="Drop a session note…"
-                className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+                className="min-w-0 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
               />
 
               <button
