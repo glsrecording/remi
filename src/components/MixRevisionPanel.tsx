@@ -44,12 +44,17 @@ export default function MixRevisionPanel({ pageId, songLabel, onClose }: Props) 
   const [current, setCurrent] = useState(0);
   const [joshInput, setJoshInput] = useState("");
   const [saving, setSaving] = useState(false);
+  // True once the user answers the last note in card view — shows a clear
+  // "all answered" end state with a prominent Finished button instead of
+  // silently parking on the last card.
+  const [atEnd, setAtEnd] = useState(false);
 
   // ── Load existing revision on open ────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
+    setAtEnd(false);
     fetch(
       `${JARVIS_URL}/mix_revision?page_id=${encodeURIComponent(pageId)}&date=${encodeURIComponent(date)}`,
       { headers: AUTH_HEADERS },
@@ -141,6 +146,7 @@ export default function MixRevisionPanel({ pageId, songLabel, onClose }: Props) 
     setStatus("open");
     setCurrent(0);
     setView("card");
+    setAtEnd(false);
     setPasteText("");
     save(parsed, "open");
   }, [pasteText, save]);
@@ -169,7 +175,14 @@ export default function MixRevisionPanel({ pageId, songLabel, onClose }: Props) 
     setNotes(next);
     setJoshInput("");
     save(next, "open");
-    advance(next, current);
+    // If that was the last unanswered note, surface a clear end state instead of
+    // silently advancing/parking — otherwise the only "done" signal is the
+    // Mark Finished button at the bottom, which Josh kept missing.
+    if (next.length > 0 && next.every((n) => (n.josh || "").trim())) {
+      setAtEnd(true);
+    } else {
+      advance(next, current);
+    }
   }, [joshInput, notes, current, save, advance]);
 
   // ── List view edits ───────────────────────────────────────────────────────
@@ -190,6 +203,7 @@ export default function MixRevisionPanel({ pageId, songLabel, onClose }: Props) 
   const handleReopen = useCallback(() => {
     setStatus("open");
     setView("card");
+    setAtEnd(false);
     const fu = notes.findIndex((n) => !(n.josh || "").trim());
     setCurrent(fu >= 0 ? fu : 0);
     save(notes, "open");
@@ -435,6 +449,31 @@ export default function MixRevisionPanel({ pageId, songLabel, onClose }: Props) 
               style={{ background: MIX_REV_COLOR, color: "#fff" }}
             >
               {allAnswered ? "Finished" : "Mark Finished"}
+            </button>
+          </div>
+        ) : atEnd && allAnswered ? (
+          /* ── End state — all notes answered, prompt to finish ── */
+          <div className="pt-16 flex flex-col items-center gap-6 px-2">
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className="w-16 h-16 rounded-full flex items-center justify-center"
+                style={{ background: "rgba(139,92,246,0.12)" }}
+              >
+                <Check className="h-8 w-8" style={{ color: MIX_REV_COLOR }} />
+              </div>
+              <p className="text-lg font-semibold text-center" style={{ color: "var(--t-text)" }}>
+                All notes answered — Mark Finished?
+              </p>
+              <p className="text-xs" style={{ color: "var(--t-text6)" }}>
+                {notes.length} / {notes.length} answered
+              </p>
+            </div>
+            <button
+              onClick={handleFinish}
+              className="w-full py-4 rounded-xl font-semibold text-base transition-all active:scale-95"
+              style={{ background: MIX_REV_COLOR, color: "#fff" }}
+            >
+              Finished
             </button>
           </div>
         ) : (
