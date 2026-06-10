@@ -1199,10 +1199,15 @@ export default function Session() {
               {/* Amber hold-to-send mic: hold 150ms → record, release → transcribe + send */}
               <button
                 type="button"
-                className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-150"
+                className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
                 style={{
                   background: isRecording ? "#ef444422" : "#f59e0b14",
                   border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+                  // Mobile fix: transition COLOR only — never "all". transition-all
+                  // animated the button's layout/position through mobile viewport
+                  // reflows (URL bar, keyboard), parking it clipped at the right edge
+                  // at rest until a tap forced a re-layout. Matches MainChat's mic.
+                  transition: "background 0.1s ease, border-color 0.1s ease",
                   marginRight: "20px",
                   touchAction: "none",
                 }}
