@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { RefreshCw, Loader2, Bell } from "lucide-react";
+import { RefreshCw, Loader2, Bell, Plus, X, Send } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
@@ -55,6 +55,7 @@ function SwipeableReminderCard({
   const [committing, setCommitting] = useState(false);
   const [committed, setCommitted]   = useState(false);
   const [deleting, setDeleting]     = useState(false);
+  const [error, setError]           = useState(false);
 
   const startPos     = useRef<{ x: number; y: number } | null>(null);
   const dragging     = useRef(false);
@@ -106,17 +107,26 @@ function SwipeableReminderCard({
     ) {
       setCommitting(true);
       setDeleting(true);
+      setError(false);
       try {
         const r = await fetch(`${JARVIS_URL}/reminder/${reminder.id}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${REMI_API_KEY}` },
         });
         if (!r.ok) throw new Error(`${r.status}`);
+        // Success only — remove the card. On failure we keep it (below).
+        setCommitted(true);
+        onDelete();
       } catch (err) {
         console.error("[Reminders] delete failed:", err);
+        // Keep the card, surface an inline error, snap it back into place.
+        setError(true);
+        setCommitting(false);
+        setDeleting(false);
+        directionRef.current = "undecided";
+        offsetRef.current = 0;
+        setOffsetX(0);
       }
-      setCommitted(true);
-      onDelete();
       return;
     }
 
@@ -195,6 +205,11 @@ function SwipeableReminderCard({
                 Fired
               </p>
             )}
+            {error && (
+              <p className="text-xs mt-1" style={{ color: DELETE_COLOR }}>
+                Couldn't delete — swipe again to retry.
+              </p>
+            )}
           </div>
           {reminder.recurrence && (
             <span
@@ -232,6 +247,13 @@ export default function Reminders() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("All");
   const [refreshing, setRefreshing] = useState(false);
 
+  // ── Add-reminder sheet state ──
+  const [addOpen, setAddOpen]   = useState(false);
+  const [whatText, setWhatText] = useState("");
+  const [whenText, setWhenText] = useState("");
+  const [sending, setSending]   = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   useGutterScroll(scrollRef);
 
@@ -266,9 +288,45 @@ export default function Reminders() {
     setReminders((prev) => prev.filter((r) => r.id !== id));
   }
 
+  function closeAddSheet() {
+    setAddOpen(false);
+    setWhatText("");
+    setWhenText("");
+    setAddError(null);
+  }
+
+  // Routes through the existing /remi chat endpoint — Jarvis classifies and
+  // creates the reminder via _capture_reminder (natural-language time parsing).
+  async function addReminder() {
+    const what = whatText.trim();
+    const when = whenText.trim();
+    if (!what || sending) return;
+    const message = `Remind me to ${what}${when ? ` ${when}` : ""}`;
+    setSending(true);
+    setAddError(null);
+    try {
+      const r = await fetch(`${JARVIS_URL}/remi`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${REMI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message, user_id: "reminders-page" }),
+      });
+      if (!r.ok) throw new Error(`${r.status}`);
+      closeAddSheet();
+      await fetchReminders(true);
+    } catch (e) {
+      console.error("[Reminders] add failed:", e);
+      setAddError("Couldn't add that reminder — try again.");
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <div
-      className="flex flex-col h-[100dvh]"
+      className="relative flex flex-col h-[100dvh]"
       style={{ background: "var(--t-bg)", color: "var(--t-text)" }}
     >
       <PageHeader
@@ -345,6 +403,116 @@ export default function Reminders() {
           ))
         )}
       </div>
+
+      {/* Add-reminder FAB */}
+      <button
+        onClick={() => setAddOpen(true)}
+        aria-label="Add reminder"
+        data-testid="button-add-reminder"
+        className="absolute z-20 flex items-center justify-center rounded-full shadow-lg transition-transform active:scale-95"
+        style={{
+          right: 20,
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)",
+          width: 56,
+          height: 56,
+          background: ACCENT,
+          color: "#1a1625",
+          boxShadow: `0 6px 20px ${ACCENT}55`,
+        }}
+      >
+        <Plus size={26} strokeWidth={2.5} />
+      </button>
+
+      {/* Add-reminder bottom sheet */}
+      {addOpen && (
+        <div
+          className="absolute inset-0 z-30 flex flex-col justify-end"
+          style={{ background: "rgba(0,0,0,0.55)" }}
+          onClick={closeAddSheet}
+        >
+          <div
+            className="rounded-t-2xl px-5 pt-4"
+            style={{
+              background: "var(--t-bg)",
+              borderTop: `1px solid ${ACCENT}33`,
+              paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold" style={{ color: "var(--t-text)" }}>
+                New Reminder
+              </h2>
+              <button
+                onClick={closeAddSheet}
+                className="p-1 rounded-lg hover:bg-white/5 transition-colors"
+                style={{ color: "var(--t-text5)" }}
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <label className="block text-xs mb-1.5" style={{ color: "var(--t-text6)" }}>
+              What do you want to be reminded about?
+            </label>
+            <input
+              autoFocus
+              value={whatText}
+              onChange={(e) => setWhatText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addReminder(); }}
+              placeholder="call the vet"
+              className="w-full rounded-xl px-3.5 py-3 text-base outline-none mb-3.5"
+              style={{
+                background: "var(--t-card)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "var(--t-text)",
+              }}
+            />
+
+            <label className="block text-xs mb-1.5" style={{ color: "var(--t-text6)" }}>
+              When? <span style={{ opacity: 0.6 }}>(plain English)</span>
+            </label>
+            <input
+              value={whenText}
+              onChange={(e) => setWhenText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addReminder(); }}
+              placeholder="tomorrow at 3pm"
+              className="w-full rounded-xl px-3.5 py-3 text-base outline-none mb-4"
+              style={{
+                background: "var(--t-card)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "var(--t-text)",
+              }}
+            />
+
+            {addError && (
+              <p className="text-xs mb-3" style={{ color: DELETE_COLOR }}>
+                {addError}
+              </p>
+            )}
+
+            <button
+              onClick={addReminder}
+              disabled={!whatText.trim() || sending}
+              className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-base font-semibold transition-opacity"
+              style={{
+                background: ACCENT,
+                color: "#1a1625",
+                opacity: !whatText.trim() || sending ? 0.5 : 1,
+              }}
+            >
+              {sending ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <>
+                  <Send size={16} /> Send
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
