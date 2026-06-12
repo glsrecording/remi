@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, Terminal, Shuffle, Radio, BookOpen, RefreshCw, CalendarClock, ClipboardCheck, ShoppingCart, Layers, Phone, Film, Link2, Dumbbell, Bell, Archive } from "lucide-react";
+import { X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, Terminal, Shuffle, Radio, BookOpen, RefreshCw, CalendarClock, ClipboardCheck, ShoppingCart, Layers, Phone, Film, Link2, Dumbbell, Bell, Archive, Users } from "lucide-react";
 import { useEffect } from "react";
 import { useTheme } from "@/hooks/use-theme";
 
@@ -31,6 +31,11 @@ const menuItems = [
   { label: "Message to Dad", icon: MessageCircle, path: "/message-to-dad" },
   { label: "Shopping List", icon: ShoppingCart, path: "/shopping-list" },
   { label: "Commands", icon: Terminal, path: "/commands" },
+];
+
+// System tools — grouped under a "System" header at the bottom of the menu.
+const systemItems = [
+  { label: "Sanity Check", icon: Users, path: "/sanity-check" },
 ];
 
 export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeeklyReview }: HamburgerMenuProps) {
@@ -108,6 +113,37 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.path && item.path !== "/";
+            return (
+              <button
+                key={item.label}
+                className="w-full flex items-center gap-4 px-4 py-3.5 md:py-4 rounded-xl mb-1 transition-all duration-150 text-left"
+                style={{
+                  background: isActive ? "rgba(245,158,11,0.08)" : "transparent",
+                  color: isActive ? "#f59e0b" : "var(--t-text3)",
+                }}
+                onClick={() => handleItemClick(item.path)}
+                data-testid={`menu-item-${item.label.toLowerCase().replace(/ /g, "-")}`}
+              >
+                <Icon
+                  size={18}
+                  className="shrink-0"
+                  style={{ color: isActive ? "#f59e0b" : "var(--t-text6)" }}
+                />
+                <span className="text-sm font-medium tracking-wide">{item.label}</span>
+              </button>
+            );
+          })}
+
+          {/* System section */}
+          <div
+            className="px-4 pt-4 pb-1.5 mt-2 text-[10px] font-bold tracking-widest uppercase"
+            style={{ color: "var(--t-text6)" }}
+          >
+            System
+          </div>
+          {systemItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location === item.path;
             return (
               <button
                 key={item.label}
