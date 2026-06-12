@@ -1,0 +1,86 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   Remi Design System — Phase 0
+   Single source of truth for the UI redesign. Color-by-context identity.
+   Everything in the redesign references these variables — no hardcoded values.
+   Additive only: this file does NOT modify any existing tokens in index.css.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── COLOR TOKENS — color by context (core identity) ─────────────────────── */
+
+  /* Studio — teal — studio work, mix notes, session */
+  --color-studio:        #3dd6b0;
+  --color-studio-bg:     #0d1f20;
+  --color-studio-border: #1a3535;
+  --color-studio-dim:    #1d4040;
+
+  /* Tasks — amber/gold — today tasks, priority */
+  --color-tasks:         #f5a623;
+  --color-tasks-bg:      #2a1f00;
+  --color-tasks-border:  #4a3500;
+  --color-tasks-dim:     #1a1200;
+
+  /* Tonight — purple — tonight, AI chat, briefing, reminders */
+  --color-tonight:        #9b8de8;
+  --color-tonight-bg:     #1a1430;
+  --color-tonight-border: #2e2550;
+  --color-tonight-dim:    #120f22;
+
+  /* Calls — blue — calls, admin, links, time track */
+  --color-calls:        #378add;
+  --color-calls-bg:     #0d1828;
+  --color-calls-border: #1a2e48;
+  --color-calls-dim:    #0a1220;
+
+  /* Personal — pink — personal, writing, Dad, shopping */
+  --color-personal:        #d4537e;
+  --color-personal-bg:     #200d16;
+  --color-personal-border: #3a1528;
+  --color-personal-dim:    #150810;
+
+  /* Done — green — done states, completed */
+  --color-done:        #5bc468;
+  --color-done-bg:     #0f1f10;
+  --color-done-border: #1a3020;
+
+  /* ── SURFACE TOKENS ──────────────────────────────────────────────────────── */
+  --surface-base:       #0a0a0c;
+  --surface-card:       #111116;
+  --surface-card-hover: #15151c;
+  --surface-elevated:   #1a1a22;
+  --surface-overlay:    #0e0e14;
+
+  /* ── BORDER TOKENS ───────────────────────────────────────────────────────── */
+  --border-subtle:  #1a1a20;
+  --border-default: #252528;
+  --border-strong:  #333340;
+
+  /* ── TEXT TOKENS ─────────────────────────────────────────────────────────── */
+  --text-primary:   #e0e0e8;
+  --text-secondary: #888890;
+  --text-muted:     #444450;
+  --text-dim:       #2a2a35;
+
+  /* ── SPACING TOKENS ──────────────────────────────────────────────────────── */
+  --space-xs:  4px;
+  --space-sm:  8px;
+  --space-md:  12px;
+  --space-lg:  16px;
+  --space-xl:  24px;
+  --space-2xl: 32px;
+
+  /* ── RADIUS TOKENS ───────────────────────────────────────────────────────── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-pill: 100px;
+
+  /* ── TYPOGRAPHY TOKENS ───────────────────────────────────────────────────── */
+  --font-size-xs:   10px;
+  --font-size-sm:   12px;
+  --font-size-base: 14px;
+  --font-size-md:   15px;
+  --font-size-lg:   17px;
+  --font-size-xl:   22px;
+}

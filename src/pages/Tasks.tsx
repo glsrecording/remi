@@ -3,15 +3,17 @@ import { useLocation } from "wouter";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
 import {
   RefreshCw, Loader2, ChevronDown, ChevronRight,
-  Plus, Mic, MicOff, Check, X, GripVertical, Crosshair,
-  Square, CheckSquare, Calendar,
+  Plus, Mic, MicOff, Check, X, GripVertical, Star,
+  Square, CheckSquare, Calendar, Circle,
+  Music, MessageSquare, Briefcase, PenLine, Film, Hash, Layers,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
-const ACCENT = "#f59e0b";
+const ACCENT = "#f5a623";   // --color-tasks (amber/gold)
 const COMMIT_THRESHOLD = 65;
 const LONG_PRESS_MS = 500;
 
@@ -36,17 +38,37 @@ const CATEGORY_OPTIONS = [
   "Communication", "Filming", "Admin", "Writing", "Studio", "General",
 ] as const;
 
-// Per-category colors matching the Notion select swatches. Used for both the
-// card chip and the bottom-sheet picker so they stay visually consistent.
+// Per-category colors — color-by-context identity from the redesign. Hex values
+// mirror the design-system.css context tokens (--color-studio etc.); kept as hex
+// so the existing `color + "33"` alpha-concat pattern works. Drives the card's
+// left accent bar, icon square, and category chip + the bottom-sheet picker.
 const CATEGORY_COLORS: Record<string, string> = {
-  Communication: "#ef4444",  // red
-  General:       "#f97316",  // orange-red
-  Filming:       "#f59e0b",  // amber
-  Admin:         "#3b82f6",  // blue
-  Writing:       "#ec4899",  // pink
-  Studio:        "#22c55e",  // green
+  Studio:        "#3dd6b0",  // --color-studio   (teal)
+  Communication: "#9b8de8",  // --color-tonight  (purple)
+  Admin:         "#378add",  // --color-calls    (blue)
+  Writing:       "#d4537e",  // --color-personal (pink)
+  Filming:       "#e8831a",  // orange (no token)
+  General:       "#888890",  // --text-secondary (gray, readable)
 };
-const CATEGORY_EMPTY = "#9ca3af";  // light gray — visible "add a category" affordance
+// Dark per-category fill behind the 32px icon square (mirrors the *-bg tokens).
+const CATEGORY_BG: Record<string, string> = {
+  Studio:        "#0d1f20",  // --color-studio-bg
+  Communication: "#1a1430",  // --color-tonight-bg
+  Admin:         "#0d1828",  // --color-calls-bg
+  Writing:       "#200d16",  // --color-personal-bg
+  Filming:       "#241402",  // orange-dim
+  General:       "#1a1a22",  // --surface-elevated
+};
+// Per-category icon for the 32px square.
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  Studio:        Music,
+  Communication: MessageSquare,
+  Admin:         Briefcase,
+  Writing:       PenLine,
+  Filming:       Film,
+  General:       Hash,
+};
+const CATEGORY_EMPTY = "#888890";  // --text-secondary — visible "add a category" affordance
 
 interface TaskBuckets {
   today: Task[];
@@ -60,11 +82,13 @@ type SwipeAction = Bucket | "done";
 
 const DRAGGABLE_BUCKETS = new Set<Bucket>(["today", "tonight", "tomorrow"]);
 
+// Bucket colors map to the design-system context palette (mirrors design-system.css):
+// Today = --color-tasks, Tonight = --color-tonight, Tomorrow = --color-studio, Someday = gray.
 const BUCKET_META: Record<Bucket, { label: string; emoji: string; color: string }> = {
-  today:    { label: "Today",    emoji: "⚡", color: "#f59e0b" },
-  tonight:  { label: "Tonight",  emoji: "🌙", color: "#c084fc" },
-  tomorrow: { label: "Tomorrow", emoji: "🌅", color: "#60a5fa" },
-  someday:  { label: "Someday",  emoji: "💭", color: "#94a3b8" },
+  today:    { label: "Today",    emoji: "⚡", color: "#f5a623" },  // --color-tasks
+  tonight:  { label: "Tonight",  emoji: "🌙", color: "#9b8de8" },  // --color-tonight
+  tomorrow: { label: "Tomorrow", emoji: "🌅", color: "#3dd6b0" },  // --color-studio
+  someday:  { label: "Someday",  emoji: "💭", color: "#888890" },  // --text-secondary
 };
 
 // ── Per-bucket focus state (localStorage) ───────────────────────────────────
@@ -96,10 +120,10 @@ function saveFocusBucket(bucket: FocusBucket, id: string | null): void {
 
 // Index matches swipe direction: 0=up→Today, 1=right→Tonight, 2=down→Tomorrow, 3=left→Done
 const SWIPE_TARGETS: Array<{ action: SwipeAction; label: string; color: string; arrow: string }> = [
-  { action: "today",    label: "Today",    color: "#f59e0b", arrow: "↑" },
-  { action: "tonight",  label: "Tonight",  color: "#c084fc", arrow: "→" },
-  { action: "tomorrow", label: "Tomorrow", color: "#60a5fa", arrow: "↓" },
-  { action: "done",     label: "Done ✓",   color: "#22c55e", arrow: "←" },
+  { action: "today",    label: "Today",    color: "#f5a623", arrow: "↑" },  // --color-tasks
+  { action: "tonight",  label: "Tonight",  color: "#9b8de8", arrow: "→" },  // --color-tonight
+  { action: "tomorrow", label: "Tomorrow", color: "#3dd6b0", arrow: "↓" },  // --color-studio
+  { action: "done",     label: "Done ✓",   color: "#5bc468", arrow: "←" },  // --color-done
 ];
 
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
@@ -169,10 +193,10 @@ async function fetchTasks(priorityOnly = false): Promise<TaskBuckets> {
   return data.tasks as TaskBuckets;
 }
 
-// ── Projects (GTD) — green cards below the task buckets ──────────────────────
-// Emerald, distinct from amber reminders (#f59e0b) and the green-500 done chip
-// (#22c55e). Kept in sync with PROJECT_COLOR in ProjectDetail.tsx.
-const PROJECT_COLOR = "#10b981";
+// ── Projects (GTD) — studio-teal cards below the task buckets ────────────────
+// Studio context color (--color-studio) per the redesign — distinct from amber
+// tasks and the green done state. (ProjectDetail.tsx keeps its own color.)
+const PROJECT_COLOR = "#3dd6b0";  // --color-studio
 
 interface Project {
   id: string;
@@ -208,18 +232,31 @@ function ProjectCard({ project, onOpen }: { project: Project; onOpen: () => void
     <div
       className="relative flex items-start gap-3 px-4 py-3.5 rounded-xl select-none cursor-pointer transition-all active:scale-[0.99]"
       style={{
-        background: PROJECT_COLOR + "14",
+        background: "var(--surface-card)",
         borderLeft: `3px solid ${PROJECT_COLOR}`,
-        borderTop: `1px solid ${PROJECT_COLOR}33`,
-        borderRight: `1px solid ${PROJECT_COLOR}33`,
-        borderBottom: `1px solid ${PROJECT_COLOR}33`,
+        borderTop: `1px solid ${PROJECT_COLOR}2e`,
+        borderRight: `1px solid ${PROJECT_COLOR}2e`,
+        borderBottom: `1px solid ${PROJECT_COLOR}2e`,
       }}
       onClick={onOpen}
       data-testid={`project-card-${project.id}`}
     >
+      {/* Teal icon square */}
+      <div
+        className="shrink-0 flex items-center justify-center mt-0.5"
+        style={{
+          width: "32px",
+          height: "32px",
+          borderRadius: "var(--radius-md)",
+          background: "var(--color-studio-bg)",
+          border: `1px solid ${PROJECT_COLOR}33`,
+        }}
+      >
+        <Layers size={16} style={{ color: PROJECT_COLOR }} />
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-base font-bold leading-snug" style={{ color: "var(--t-text)" }}>
+          <span className="font-bold leading-snug" style={{ color: "var(--text-primary)", fontSize: "var(--font-size-md)" }}>
             {project.name}
           </span>
           {project.area && (
@@ -334,7 +371,7 @@ function undoLabel(action: SwipeAction): string {
 }
 
 function actionColor(action: SwipeAction): string {
-  if (action === "done") return "#22c55e";
+  if (action === "done") return "#5bc468";
   return BUCKET_META[action].color;
 }
 
@@ -808,6 +845,12 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
 
   const commitColor = commitColorRef.current;
 
+  // Color-by-context: the card's left accent bar, icon square, and chip all key
+  // off the task's category. Uncategorized → muted gray (--text-muted).
+  const catColor = localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) : "#444450";
+  const catBg    = localCategory ? (CATEGORY_BG[localCategory] ?? "var(--surface-elevated)") : "var(--surface-elevated)";
+  const CatIcon  = (localCategory && CATEGORY_ICONS[localCategory]) || Circle;
+
   return (
     <div className="relative rounded-xl" style={{ overflow: "hidden" }}>
       {/* Direction hint backdrop */}
@@ -854,11 +897,13 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
       <div
         className="relative flex items-start gap-3 px-4 py-3.5 md:px-5 md:py-4 rounded-xl select-none"
         style={{
-          background: committing ? `${commitColor}22` : "var(--t-card)",
-          borderLeft: `3px solid ${BUCKET_META[sourceBucket].color}${isFocused ? "" : "70"}`,
-          borderTop: isFocused ? `1.5px solid ${BUCKET_META[sourceBucket].color}` : "1px solid rgba(255,255,255,0.05)",
-          borderRight: isFocused ? `1.5px solid ${BUCKET_META[sourceBucket].color}` : "1px solid rgba(255,255,255,0.05)",
-          borderBottom: isFocused ? `1.5px solid ${BUCKET_META[sourceBucket].color}` : "1px solid rgba(255,255,255,0.05)",
+          background: committing ? `${commitColor}22` : "var(--surface-card)",
+          borderLeft: `3px solid ${catColor}`,
+          borderTop: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
+          borderRight: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
+          borderBottom: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
+          // Starred (focused) tasks get a subtle amber glow on the left accent bar.
+          boxShadow: isFocused ? "inset 3px 0 8px rgba(245,166,35,0.15)" : "none",
           transform: `translate(${offset.x}px, ${offset.y}px)`,
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
@@ -890,9 +935,26 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
           />
         ) : (
           <>
+            {/* Category icon square — 32px, category bg + category-colored icon */}
+            <div
+              className="shrink-0 flex items-center justify-center mt-0.5"
+              style={{
+                width: "32px",
+                height: "32px",
+                borderRadius: "var(--radius-md)",
+                background: catBg,
+                border: `1px solid ${catColor}33`,
+              }}
+            >
+              <CatIcon size={16} style={{ color: catColor }} />
+            </div>
             <p
-              className="text-lg md:text-xl leading-snug flex-1 min-w-0 whitespace-normal break-words"
-              style={{ color: titleError ? "#ef4444" : "var(--t-text2)" }}
+              className="leading-snug flex-1 min-w-0 whitespace-normal break-words mt-1"
+              style={{
+                color: titleError ? "#ef4444" : "var(--text-primary)",
+                fontSize: "var(--font-size-base)",
+                fontWeight: 500,
+              }}
               onClick={enterEditMode}
             >
               {task.title}
@@ -902,15 +964,15 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
                 never triggers swipe/edit. */}
             <button
               type="button"
-              className="shrink-0 rounded px-3 py-1.5 mt-1 transition-all active:scale-95"
+              className="shrink-0 rounded px-2 py-1 mt-1 transition-all active:scale-95"
               style={{
-                background: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) + "33" : CATEGORY_EMPTY + "1f",
+                background: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) + "26" : CATEGORY_EMPTY + "1f",
                 color: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) : CATEGORY_EMPTY,
                 border: localCategory
-                  ? `1px solid ${CATEGORY_COLORS[localCategory] ?? ACCENT}`
+                  ? `1px solid ${(CATEGORY_COLORS[localCategory] ?? ACCENT)}66`
                   : `1px dashed ${CATEGORY_EMPTY}80`,
                 fontFamily: "'Space Mono', monospace",
-                fontSize: "9px",
+                fontSize: "var(--font-size-xs)",
                 letterSpacing: "0.05em",
                 textTransform: "uppercase",
                 touchAction: "none",
@@ -924,18 +986,30 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
             {onToggleFocus && (
               <button
                 type="button"
-                className="shrink-0 flex items-center justify-center w-7 h-7 rounded-md transition-colors -mr-1 mt-0.5"
+                className="shrink-0 flex items-center justify-center w-7 h-7 rounded-md transition-colors mt-0.5"
                 style={{
                   background: "transparent",
-                  color: isFocused ? BUCKET_META[sourceBucket].color : "rgba(255,255,255,0.18)",
+                  color: isFocused ? "var(--color-tasks)" : "var(--text-dim)",
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); onToggleFocus(); }}
                 aria-label={isFocused ? "Remove focus" : "Set as focus task"}
               >
-                <Crosshair size={15} />
+                <Star size={15} fill={isFocused ? "var(--color-tasks)" : "none"} />
               </button>
             )}
+            {/* Circle checkbox — tap to mark done (reuses the swipe-left done action) */}
+            <button
+              type="button"
+              className="shrink-0 flex items-center justify-center w-7 h-7 rounded-md transition-colors -mr-1 mt-0.5"
+              style={{ background: "transparent", color: "var(--text-muted)" }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); if (!task.id.startsWith("temp-")) onMoved(task, "done"); }}
+              aria-label="Mark done"
+              data-testid={`task-done-${task.id}`}
+            >
+              <Circle size={18} />
+            </button>
           </>
         )}
       </div>
@@ -1007,6 +1081,7 @@ function BucketSection({
   onCategoryChanged,
   focusedTaskId,
   onToggleFocus,
+  openAddSignal,
 }: {
   bucket: Bucket;
   tasks: Task[];
@@ -1018,9 +1093,16 @@ function BucketSection({
   onCategoryChanged: (task: Task, category: string) => void;
   focusedTaskId?: string | null;
   onToggleFocus?: (taskId: string) => void;
+  openAddSignal?: number;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [adding, setAdding] = useState(false);
+
+  // FAB hook: when the parent bumps openAddSignal, expand + open the add card.
+  // Guarded on > 0 so the initial mount (signal 0) doesn't auto-open.
+  useEffect(() => {
+    if (openAddSignal && openAddSignal > 0) { setOpen(true); setAdding(true); }
+  }, [openAddSignal]);
   const meta = BUCKET_META[bucket];
   const isDraggable = DRAGGABLE_BUCKETS.has(bucket);
 
@@ -1066,23 +1148,38 @@ function BucketSection({
       {/* Header row */}
       <div className="w-full flex items-center gap-2 py-1">
         <div
-          className="flex items-center gap-2 flex-1 cursor-pointer"
+          className="flex items-center gap-2.5 flex-1 cursor-pointer"
           onClick={() => setOpen((o) => !o)}
           role="button"
           aria-expanded={open}
         >
-          <span className="text-base">{meta.emoji}</span>
+          {/* Colored bucket dot */}
           <span
-            className="text-sm font-bold tracking-tight"
-            style={{ color: meta.color, fontFamily: "'Space Mono', monospace" }}
+            className="shrink-0 rounded-full"
+            style={{ width: "8px", height: "8px", background: meta.color, boxShadow: `0 0 8px ${meta.color}66` }}
+          />
+          <span
+            className="font-bold uppercase"
+            style={{
+              color: meta.color,
+              fontFamily: "'Space Mono', monospace",
+              fontSize: "var(--font-size-sm)",
+              letterSpacing: "0.08em",
+            }}
           >
             {meta.label}
           </span>
         </div>
 
+        {/* Count badge — bucket bg + text tokens */}
         <span
-          className="text-xs font-mono px-2 py-0.5 rounded-full"
-          style={{ background: meta.color + "20", color: meta.color }}
+          className="font-mono rounded-full"
+          style={{
+            background: meta.color + "1f",
+            color: meta.color,
+            fontSize: "var(--font-size-xs)",
+            padding: "2px 8px",
+          }}
         >
           {localTasks.length}
         </span>
@@ -1511,6 +1608,9 @@ function ListMode() {
 export default function Tasks() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+  // FAB → Today add-task: incremented on each FAB tap; the Today BucketSection
+  // watches this and opens its inline add card. Additive — no existing flow changes.
+  const [fabAddSignal, setFabAddSignal] = useState(0);
   // Category filter (cards view). Stateful within the session; resets to "All"
   // on reload because it is intentionally not persisted to localStorage.
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("All");
@@ -1714,11 +1814,11 @@ export default function Tasks() {
     filteredBuckets.someday.length === 0;
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg-deep)" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--surface-base)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <PageHeader
         title="Tasks"
-        color={ACCENT}
+        color="var(--color-tasks)"
         onMenu={() => setMenuOpen(true)}
         right={<>
           {!loading && (
@@ -1735,18 +1835,21 @@ export default function Tasks() {
       />
 
       {/* View toggle — Cards (existing swipe mode) vs List (bulk cleanup) */}
-      <div className="px-4 py-2 border-b border-white/5 shrink-0 flex items-center justify-center gap-1.5">
+      <div className="px-4 py-2.5 shrink-0 flex items-center justify-center gap-1.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         {(["cards", "list"] as const).map((m) => {
           const active = viewMode === m;
           return (
             <button
               key={m}
               onClick={() => setViewMode(m)}
-              className="px-4 py-1 rounded-full text-xs font-semibold transition-all active:scale-95"
+              className="font-semibold transition-all active:scale-95"
               style={{
-                background: active ? ACCENT + "22" : "var(--t-el-low)",
-                border: `1px solid ${active ? ACCENT + "55" : "var(--t-border)"}`,
-                color: active ? ACCENT : "var(--t-text5)",
+                padding: "5px 18px",
+                borderRadius: "var(--radius-pill)",
+                fontSize: "var(--font-size-sm)",
+                background: active ? ACCENT + "1f" : "transparent",
+                border: `1px solid ${active ? ACCENT + "66" : "var(--border-subtle)"}`,
+                color: active ? "var(--color-tasks)" : "var(--text-secondary)",
               }}
             >
               {m === "cards" ? "Cards" : "List"}
@@ -1780,7 +1883,7 @@ export default function Tasks() {
       </div>
 
       {/* Category filter chips — horizontal scroll; cards view only */}
-      <div className="px-4 py-2 border-b border-white/5 shrink-0 overflow-x-auto">
+      <div className="px-4 py-2 shrink-0 overflow-x-auto" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         <div className="flex items-center gap-2 w-max">
           {CATEGORY_FILTERS.map((c) => {
             const active = categoryFilter === c;
@@ -1788,11 +1891,14 @@ export default function Tasks() {
               <button
                 key={c}
                 onClick={() => setCategoryFilter(c)}
-                className="shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 whitespace-nowrap"
+                className="shrink-0 font-medium transition-all active:scale-95 whitespace-nowrap"
                 style={{
-                  background: active ? ACCENT + "22" : "var(--t-el-low)",
-                  border: `1px solid ${active ? ACCENT + "55" : "var(--t-border)"}`,
-                  color: active ? ACCENT : "var(--t-text5)",
+                  padding: "4px 12px",
+                  borderRadius: "var(--radius-pill)",
+                  fontSize: "var(--font-size-sm)",
+                  background: active ? "var(--surface-elevated)" : "transparent",
+                  border: `1px solid ${active ? "var(--border-strong)" : "var(--border-subtle)"}`,
+                  color: active ? "var(--text-primary)" : "var(--text-muted)",
                 }}
               >
                 {c}
@@ -1849,6 +1955,7 @@ export default function Tasks() {
                 onCategoryChanged={handleCategoryChanged}
                 focusedTaskId={FOCUS_BUCKETS.has(b) ? focus[b as FocusBucket] : undefined}
                 onToggleFocus={FOCUS_BUCKETS.has(b) ? (taskId) => handleToggleFocus(b as FocusBucket, taskId) : undefined}
+                openAddSignal={b === "today" ? fabAddSignal : undefined}
               />
             ))}
           </div>
@@ -1860,8 +1967,8 @@ export default function Tasks() {
         {visibleProjects.length > 0 && (
           <div className="space-y-2 pt-2">
             <p
-              className="text-xs uppercase tracking-widest px-1"
-              style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
+              className="uppercase tracking-widest px-1"
+              style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace", fontSize: "var(--font-size-xs)" }}
             >
               Projects
             </p>
@@ -1875,6 +1982,28 @@ export default function Tasks() {
           </div>
         )}
       </div>
+
+      {/* FAB — amber gradient, opens the Today add-task card */}
+      <button
+        type="button"
+        onClick={() => setFabAddSignal((n) => n + 1)}
+        className="fixed flex items-center justify-center transition-all active:scale-95"
+        style={{
+          right: "20px",
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 20px)",
+          width: "52px",
+          height: "52px",
+          borderRadius: "var(--radius-pill)",
+          background: "linear-gradient(135deg, #f5a623, #e8831a)",
+          color: "#ffffff",
+          boxShadow: "0 6px 20px rgba(245,166,35,0.35)",
+          zIndex: 40,
+        }}
+        aria-label="Add task"
+        data-testid="tasks-fab"
+      >
+        <Plus size={24} strokeWidth={2.5} />
+      </button>
         </>
       )}
 
