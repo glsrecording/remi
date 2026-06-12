@@ -17,6 +17,22 @@ const ACCENT = "#f5a623";   // --color-tasks (amber/gold)
 const COMMIT_THRESHOLD = 65;
 const LONG_PRESS_MS = 500;
 
+// Phone vs tablet — matches the Tailwind `md:` breakpoint (768px). Used only to
+// size lucide icons (a JS `size` prop CSS can't reach) so phone cards stay
+// compact while tablet (>=768px) is untouched.
+function useIsMobile(): boolean {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 767px)").matches : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isMobile;
+}
+
 interface Task {
   id: string;
   title: string;
@@ -658,6 +674,7 @@ interface SwipeableCardProps {
 
 function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategoryChanged, focusedTaskId, onToggleFocus }: SwipeableCardProps) {
   const isFocused = focusedTaskId === task.id;
+  const isMobile = useIsMobile();
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [committing, setCommitting] = useState(false);
   const [committed, setCommitted] = useState(false);
@@ -895,7 +912,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
 
       {/* Sliding card */}
       <div
-        className="relative flex items-start gap-3 px-4 py-3.5 md:px-5 md:py-4 rounded-xl select-none"
+        className="relative flex items-start gap-2 md:gap-3 px-3 py-2.5 md:px-5 md:py-4 rounded-xl select-none"
         style={{
           background: committing ? `${commitColor}22` : "var(--surface-card)",
           borderLeft: `${isFocused ? "4px" : "3px"} solid ${catColor}`,
@@ -935,24 +952,22 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
           />
         ) : (
           <>
-            {/* Category icon square — 32px, category bg + category-colored icon */}
+            {/* Category icon square — 26px on phone, 32px on tablet (md+) */}
             <div
-              className="shrink-0 flex items-center justify-center mt-0.5"
+              className="shrink-0 flex items-center justify-center mt-0.5 w-[26px] h-[26px] md:w-[32px] md:h-[32px]"
               style={{
-                width: "32px",
-                height: "32px",
                 borderRadius: "var(--radius-md)",
                 background: catBg,
                 border: `1px solid ${catColor}33`,
               }}
             >
-              <CatIcon size={16} style={{ color: catColor }} />
+              <CatIcon size={isMobile ? 14 : 16} style={{ color: catColor }} />
             </div>
+            {/* Title — 13px + clamped to 2 lines on phone, 14px + full wrap on tablet */}
             <p
-              className="leading-snug flex-1 min-w-0 whitespace-normal break-words mt-1"
+              className="leading-snug flex-1 min-w-0 break-words mt-1 line-clamp-2 md:line-clamp-none text-[13px] md:text-[14px]"
               style={{
                 color: titleError ? "#ef4444" : "var(--text-primary)",
-                fontSize: "var(--font-size-base)",
                 fontWeight: 500,
               }}
               onClick={enterEditMode}
@@ -995,7 +1010,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
                 onClick={(e) => { e.stopPropagation(); onToggleFocus(); }}
                 aria-label={isFocused ? "Remove focus" : "Set as focus task"}
               >
-                <Star size={15} fill={isFocused ? "var(--color-tasks)" : "none"} />
+                <Star size={isMobile ? 16 : 15} fill={isFocused ? "var(--color-tasks)" : "none"} />
               </button>
             )}
             {/* Circle checkbox — tap to mark done (reuses the swipe-left done action) */}
@@ -1008,7 +1023,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
               aria-label="Mark done"
               data-testid={`task-done-${task.id}`}
             >
-              <Circle size={18} />
+              <Circle size={isMobile ? 16 : 18} />
             </button>
           </>
         )}
