@@ -912,7 +912,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
 
       {/* Sliding card */}
       <div
-        className="relative flex items-start gap-2 md:gap-3 px-3 py-2.5 md:px-5 md:py-4 rounded-xl select-none"
+        className="relative flex items-start gap-2 md:gap-3 px-3 py-3 md:px-5 md:py-4 rounded-xl select-none"
         style={{
           background: committing ? `${commitColor}22` : "var(--surface-card)",
           borderLeft: `${isFocused ? "4px" : "3px"} solid ${catColor}`,
@@ -952,52 +952,57 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
           />
         ) : (
           <>
-            {/* Category icon square — 26px on phone, 32px on tablet (md+) */}
+            {/* Category icon square — 28px on phone, 32px on tablet (md+) */}
             <div
-              className="shrink-0 flex items-center justify-center mt-0.5 w-[26px] h-[26px] md:w-[32px] md:h-[32px]"
+              className="shrink-0 flex items-center justify-center mt-0.5 w-[28px] h-[28px] md:w-[32px] md:h-[32px]"
               style={{
                 borderRadius: "var(--radius-md)",
                 background: catBg,
                 border: `1px solid ${catColor}33`,
               }}
             >
-              <CatIcon size={isMobile ? 14 : 16} style={{ color: catColor }} />
+              <CatIcon size={isMobile ? 15 : 16} style={{ color: catColor }} />
             </div>
-            {/* Title — 13px + clamped to 2 lines on phone, 14px + full wrap on tablet */}
-            <p
-              className="leading-snug flex-1 min-w-0 break-words mt-1 line-clamp-2 md:line-clamp-none text-[13px] md:text-[14px]"
-              style={{
-                color: titleError ? "#ef4444" : "var(--text-primary)",
-                fontWeight: 500,
-              }}
-              onClick={enterEditMode}
-            >
-              {task.title}
-            </p>
-            {/* Category chip — per-category color when set, visible "+ Cat"
-                affordance when empty. Corner tap target; stops propagation so it
-                never triggers swipe/edit. */}
-            <button
-              type="button"
-              className="shrink-0 rounded px-2 py-1 mt-1 transition-all active:scale-95"
-              style={{
-                background: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) + "26" : CATEGORY_EMPTY + "1f",
-                color: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) : CATEGORY_EMPTY,
-                border: localCategory
-                  ? `1px solid ${(CATEGORY_COLORS[localCategory] ?? ACCENT)}66`
-                  : `1px dashed ${CATEGORY_EMPTY}80`,
-                fontFamily: "'Space Mono', monospace",
-                fontSize: "var(--font-size-xs)",
-                letterSpacing: "0.05em",
-                textTransform: "uppercase",
-                touchAction: "none",
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); if (!task.id.startsWith("temp-")) setPickerOpen(true); }}
-              data-testid={`task-category-${task.id}`}
-            >
-              {localCategory ?? "+ Cat"}
-            </button>
+            {/* Title + chip — stacked on phone (title full width, chip on its own
+                line below); inline on tablet (md:flex-row) so the 768px+ layout is
+                byte-for-byte unchanged. */}
+            <div className="flex-1 min-w-0 flex flex-col md:flex-row md:items-start gap-1 md:gap-3">
+              {/* Title — 13px phone / 14px tablet; wraps naturally (no clamp). */}
+              <p
+                className="leading-snug min-w-0 w-full md:w-auto md:flex-1 break-words mt-1 text-[13px] md:text-[14px]"
+                style={{
+                  color: titleError ? "#ef4444" : "var(--text-primary)",
+                  fontWeight: 500,
+                }}
+                onClick={enterEditMode}
+              >
+                {task.title}
+              </p>
+              {/* Category chip — per-category color when set, visible "+ Cat"
+                  affordance when empty. self-start so it hugs content on phone;
+                  mt aligns it on tablet. stopPropagation keeps it off swipe/edit. */}
+              <button
+                type="button"
+                className="shrink-0 self-start rounded px-2 py-1 mt-0 md:mt-1 transition-all active:scale-95"
+                style={{
+                  background: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) + "26" : CATEGORY_EMPTY + "1f",
+                  color: localCategory ? (CATEGORY_COLORS[localCategory] ?? ACCENT) : CATEGORY_EMPTY,
+                  border: localCategory
+                    ? `1px solid ${(CATEGORY_COLORS[localCategory] ?? ACCENT)}66`
+                    : `1px dashed ${CATEGORY_EMPTY}80`,
+                  fontFamily: "'Space Mono', monospace",
+                  fontSize: "var(--font-size-xs)",
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  touchAction: "none",
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); if (!task.id.startsWith("temp-")) setPickerOpen(true); }}
+                data-testid={`task-category-${task.id}`}
+              >
+                {localCategory ?? "+ Cat"}
+              </button>
+            </div>
             {onToggleFocus && (
               <button
                 type="button"
@@ -1010,7 +1015,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
                 onClick={(e) => { e.stopPropagation(); onToggleFocus(); }}
                 aria-label={isFocused ? "Remove focus" : "Set as focus task"}
               >
-                <Star size={isMobile ? 16 : 15} fill={isFocused ? "var(--color-tasks)" : "none"} />
+                <Star size={isMobile ? 17 : 15} fill={isFocused ? "var(--color-tasks)" : "none"} />
               </button>
             )}
             {/* Circle checkbox — tap to mark done (reuses the swipe-left done action) */}
@@ -1023,7 +1028,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
               aria-label="Mark done"
               data-testid={`task-done-${task.id}`}
             >
-              <Circle size={isMobile ? 16 : 18} />
+              <Circle size={isMobile ? 17 : 18} />
             </button>
           </>
         )}
