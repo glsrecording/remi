@@ -206,7 +206,22 @@ async function fetchTasks(priorityOnly = false): Promise<TaskBuckets> {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } });
   if (!res.ok) throw new Error(`${res.status}`);
   const data = await res.json();
-  return data.tasks as TaskBuckets;
+  // Guard: a body without a valid `tasks` object (e.g. an auth/session error
+  // returned as 200 {error: ...}, or a malformed payload) must NEVER reach
+  // setBuckets — returning undefined would crash the next render
+  // (buckets.today.length) and, with no error boundary, tear down the whole app
+  // until the PWA is restarted. Throw instead so load()'s catch shows the in-page
+  // error/retry state. Partial payloads get their missing buckets filled with [].
+  const t = data?.tasks;
+  if (!t || typeof t !== "object") {
+    throw new Error(data?.error ? String(data.error) : "Malformed tasks response");
+  }
+  return {
+    today:    Array.isArray(t.today)    ? t.today    : [],
+    tonight:  Array.isArray(t.tonight)  ? t.tonight  : [],
+    tomorrow: Array.isArray(t.tomorrow) ? t.tomorrow : [],
+    someday:  Array.isArray(t.someday)  ? t.someday  : [],
+  };
 }
 
 // ── Projects (GTD) — studio-teal cards below the task buckets ────────────────
@@ -1226,7 +1241,7 @@ function BucketSection({
       </div>
 
       {open && (
-        <div className="space-y-1.5 mx-4">
+        <div className="space-y-1.5 ml-4 mr-0 md:mx-4">
           {adding && (
             <AddTaskCard
               bucket={bucket}
