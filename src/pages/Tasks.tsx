@@ -898,12 +898,12 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
         className="relative flex items-start gap-3 px-4 py-3.5 md:px-5 md:py-4 rounded-xl select-none"
         style={{
           background: committing ? `${commitColor}22` : "var(--surface-card)",
-          borderLeft: `3px solid ${catColor}`,
+          borderLeft: `${isFocused ? "4px" : "3px"} solid ${catColor}`,
           borderTop: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
           borderRight: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
           borderBottom: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
-          // Starred (focused) tasks get a subtle amber glow on the left accent bar.
-          boxShadow: isFocused ? "inset 3px 0 8px rgba(245,166,35,0.15)" : "none",
+          // Starred (focused) tasks get a brighter amber glow on the left accent bar.
+          boxShadow: isFocused ? "inset 3px 0 12px rgba(245,166,35,0.45)" : "none",
           transform: `translate(${offset.x}px, ${offset.y}px)`,
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
