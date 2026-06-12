@@ -1096,6 +1096,34 @@ export default function MainChat() {
     hour: "2-digit",
     minute: "2-digit",
   });
+
+  // In-app refresh — re-pull conversation history (and the deadline banner) from
+  // Jarvis WITHOUT a full document reload. window.location.reload() used to tear
+  // down the PWA WebView and break the header layout; this keeps the header,
+  // layout, and all component state intact, reloading only the data. Mirrors the
+  // two mount-time fetches above; minSpin keeps the icon's single rotation visible
+  // even when the fetch returns instantly.
+  const refreshData = useCallback(async () => {
+    setSyncing(true);
+    const minSpin = new Promise<void>((resolve) => setTimeout(resolve, 450));
+    const loadHistory = fetch(`${JARVIS_URL}/remi/history`, {
+      headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (data?.messages?.length) setMessages(data.messages as ChatMessage[]); })
+      .catch(() => {});
+    const loadDeadlines = sessionStorage.getItem("deadline_banner_dismissed") === "1"
+      ? Promise.resolve()
+      : fetch(`${JARVIS_URL}/deadlines/check`, {
+          headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => { if (d?.has_upcoming && d.count > 0) setDeadlineCount(d.count); })
+          .catch(() => {});
+    await Promise.all([loadHistory, loadDeadlines, minSpin]);
+    setSyncing(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div style={{ width: "100%", height: "100dvh", overflow: "hidden", position: "relative", background: "var(--t-bg-deep)" }}>
       <div style={{ width: "100%", height: "100%", position: "relative" }}>
@@ -1161,11 +1189,7 @@ export default function MainChat() {
           </button>
           <button
             className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
-            onClick={() => {
-              setSyncing(true);
-              // Let the single spin play, then hard-reload to re-render from current Jarvis state.
-              setTimeout(() => window.location.reload(), 400);
-            }}
+            onClick={() => { if (!syncing) refreshData(); }}
             data-testid="button-sync-refresh"
             title="Sync / refresh"
             aria-label="Sync and refresh"
