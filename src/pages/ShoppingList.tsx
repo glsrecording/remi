@@ -150,8 +150,6 @@ function SwipeableErrandCard({
 
 // ── Item editor — bottom sheet (tap an item to edit name + store) ───────────
 
-const STORE_OPTIONS = ["Costco", "Walmart", "Fred Meyer", "Amazon", "WinCo", "Other"];
-
 function ErrandEditorSheet({
   item,
   onSave,
@@ -162,13 +160,47 @@ function ErrandEditorSheet({
   onCancel: () => void;
 }) {
   const [name, setName]   = useState(item.name);
-  // Pre-select the saved store if it matches an option; otherwise leave unset.
-  const [store, setStore] = useState(STORE_OPTIONS.includes(item.store) ? item.store : "");
+  // "General" is the GET default for an unset store — treat it as no store.
+  const [store, setStore] = useState(item.store && item.store !== "General" ? item.store : "");
+  const [typed, setTyped] = useState("");
+  const [stores, setStores] = useState<string[]>([]);
+  const [storesLoading, setStoresLoading] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
+  // Fetch the live Store options from Notion on open.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${JARVIS_URL}/errands/stores`, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && Array.isArray(d?.stores)) setStores(d.stores); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setStoresLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   const canSave = name.trim().length > 0;
+  const isNewStore = !!store && !stores.some((s) => s.toLowerCase() === store.toLowerCase());
+
+  function selectPill(s: string) {
+    setStore((prev) => (prev.toLowerCase() === s.toLowerCase() ? "" : s)); // tap again to deselect
+    setTyped("");
+  }
+
+  // Type a store: fuzzy-match (case-insensitive, partial) against the fetched
+  // list. A match selects that store; otherwise the typed value is used as a new
+  // store (the backend normalizes / auto-creates it on save).
+  function handleTyped(v: string) {
+    setTyped(v);
+    const q = v.trim().toLowerCase();
+    if (!q) { setStore(""); return; }
+    const match =
+      stores.find((s) => s.toLowerCase() === q) ||
+      stores.find((s) => s.toLowerCase().includes(q)) ||
+      stores.find((s) => q.includes(s.toLowerCase()));
+    setStore(match || v.trim());
+  }
 
   return (
     <div
@@ -210,28 +242,57 @@ function ErrandEditorSheet({
           data-testid="errand-editor-name"
         />
 
-        {/* Store pills */}
+        {/* Store pills — live from Notion */}
         <p className="text-xs mb-2" style={{ color: "var(--t-text5)" }}>Store</p>
-        <div className="flex flex-wrap gap-2 mb-6">
-          {STORE_OPTIONS.map((s) => {
-            const active = store === s;
-            return (
-              <button
-                key={s}
-                onClick={() => setStore(active ? "" : s)}
-                className="px-3.5 py-2 rounded-full text-sm font-medium transition-all duration-150"
-                style={
-                  active
-                    ? { background: TEAL, color: "#000", border: `1.5px solid ${TEAL}` }
-                    : { background: "transparent", color: "var(--t-text4)", border: "1.5px solid rgba(255,255,255,0.15)" }
-                }
-                data-testid={`errand-editor-store-${s.toLowerCase().replace(/ /g, "-")}`}
-              >
-                {s}
-              </button>
-            );
-          })}
-        </div>
+        {storesLoading ? (
+          <div className="flex items-center gap-2 mb-3 py-1" style={{ color: "var(--t-text6)" }}>
+            <Loader2 size={14} className="animate-spin" />
+            <span className="text-xs">Loading stores…</span>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {stores.map((s) => {
+              const active = store.toLowerCase() === s.toLowerCase();
+              return (
+                <button
+                  key={s}
+                  onClick={() => selectPill(s)}
+                  className="px-3.5 py-2 rounded-full text-sm font-medium transition-all duration-150"
+                  style={
+                    active
+                      ? { background: TEAL, color: "#000", border: `1.5px solid ${TEAL}` }
+                      : { background: "transparent", color: "var(--t-text4)", border: "1.5px solid rgba(255,255,255,0.15)" }
+                  }
+                  data-testid={`errand-editor-store-${s.toLowerCase().replace(/ /g, "-")}`}
+                >
+                  {s}
+                </button>
+              );
+            })}
+            {stores.length === 0 && (
+              <span className="text-xs py-1" style={{ color: "var(--t-text6)" }}>
+                No stores yet — type one below.
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Or type a store name (fuzzy-matches the list; otherwise a new store) */}
+        <input
+          value={typed}
+          onChange={(e) => handleTyped(e.target.value)}
+          placeholder="Or type a store name"
+          className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none"
+          style={{
+            background: "var(--t-input-bg)",
+            border: "1px solid var(--t-border-md)",
+            color: "var(--t-text2)",
+          }}
+          data-testid="errand-editor-store-typed"
+        />
+        <p className="text-xs mb-6 mt-1.5" style={{ color: isNewStore ? TEAL : "var(--t-text7)", minHeight: "16px" }}>
+          {isNewStore ? `New store: ${store}` : store ? `Selected: ${store}` : " "}
+        </p>
 
         {/* Actions */}
         <div className="flex gap-2.5">
