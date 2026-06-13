@@ -336,21 +336,26 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
 /* MainChat input — elevated pill with a faint inner glow on focus (design-system tokens) */
 .remi-chat-input {
   background: var(--surface-elevated);
-  /* Intentional tonight-purple border (0.4) — clearly "type here", not the
-     too-subtle --border-default. color-mix keeps it token-driven + mode-safe. */
-  border: 1.5px solid color-mix(in srgb, var(--color-tonight) 40%, transparent);
+  /* Strong tonight-purple border (0.6) — unmistakably "type here". color-mix
+     keeps it token-driven + mode-safe. */
+  border: 2px solid color-mix(in srgb, var(--color-tonight) 60%, transparent);
   border-radius: var(--radius-pill);
+  /* Defensive: ensure typed text is the high-contrast primary token even if a
+     parent/utility tries to set color. (Inline style also sets this.) */
+  color: var(--text-primary);
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .remi-chat-input::placeholder {
-  color: var(--text-muted);
+  /* --text-secondary, not --text-muted — actually readable on the elevated bg. */
+  color: var(--text-secondary);
+  opacity: 1;  /* Firefox dims placeholders by default; force full token color. */
 }
 .remi-chat-input:focus {
   outline: none;
-  /* Brighten to 0.8 + soft inner glow and outer halo. */
-  border-color: color-mix(in srgb, var(--color-tonight) 80%, transparent);
-  box-shadow: inset 0 0 8px color-mix(in srgb, var(--color-tonight) 15%, transparent),
-              0 0 12px color-mix(in srgb, var(--color-tonight) 25%, transparent);
+  /* Border to full tonight (1.0) + inner glow + outer halo at bubble intensity. */
+  border-color: var(--color-tonight);
+  box-shadow: inset 0 0 12px color-mix(in srgb, var(--color-tonight) 25%, transparent),
+              0 0 20px color-mix(in srgb, var(--color-tonight) 35%, transparent);
 }
 
 .voice-button-idle {

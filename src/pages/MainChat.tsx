@@ -1748,11 +1748,11 @@ export default function MainChat() {
                 ? {
                     background: "var(--color-tonight)",
                     color: "#ffffff",
-                    boxShadow: "0 0 12px color-mix(in srgb, var(--color-tonight) 40%, transparent)",
+                    boxShadow: "0 0 16px color-mix(in srgb, var(--color-tonight) 50%, transparent)",
                   }
                 : {
                     background: "var(--surface-elevated)",
-                    color: "var(--text-muted)",
+                    color: "var(--text-secondary)",
                     border: "1px solid var(--border-default)",
                     boxShadow: "none",
                   }
