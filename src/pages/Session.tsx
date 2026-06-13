@@ -115,6 +115,9 @@ export default function Session() {
   const [history, setHistory]                 = useState<{ label: string; notes: NoteEntry[] }[]>([]);
   const [historyLoaded, setHistoryLoaded]     = useState(false);
   const [historyLoading, setHistoryLoading]   = useState(false);
+  // Completed session tasks collapse below the active (unchecked) ones so active
+  // work is never buried. Collapsed by default.
+  const [showCompleted, setShowCompleted]     = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -703,6 +706,51 @@ export default function Session() {
     rateType === "hourly" ? (elapsed / 3600) * hourlyRate :
     rateType === "day_rate" ? dayRateAmount : 0;
 
+  // Session-task partition: active (unchecked) tasks render first + always; the
+  // completed ones collapse below. Same toggleTask behaviour either way.
+  const activeTasks    = sessionTasks.filter((t) => !t.checked);
+  const completedTasks = sessionTasks.filter((t) => t.checked);
+
+  const renderTaskRow = (t: SessionTask) => (
+    <button
+      key={t.block_id}
+      type="button"
+      onClick={() => toggleTask(t.block_id, !t.checked)}
+      className="w-full flex items-center gap-3 py-2.5 px-3 text-left transition-all active:scale-[0.99]"
+      style={{
+        background: "var(--surface-card)",
+        borderRadius: "var(--radius-md)",
+        // Purple (tonight) accent — visually distinct from teal notes.
+        borderLeft: `3px solid ${TONIGHT}`,
+        borderTop: "1px solid var(--border-subtle)",
+        borderRight: "1px solid var(--border-subtle)",
+        borderBottom: "1px solid var(--border-subtle)",
+      }}
+    >
+      <span
+        className="shrink-0 grid place-content-center"
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: "var(--radius-sm)",
+          border: `1.5px solid ${t.checked ? TONIGHT : "var(--border-strong)"}`,
+          background: t.checked ? TONIGHT : "var(--color-tonight-bg)",
+        }}
+      >
+        {t.checked && <Check className="h-3.5 w-3.5" style={{ color: "#1a1430" }} />}
+      </span>
+      <span
+        className="text-sm leading-snug"
+        style={{
+          color: t.checked ? "var(--text-muted)" : "var(--text-primary)",
+          textDecoration: t.checked ? "line-through" : "none",
+        }}
+      >
+        {t.text}
+      </span>
+    </button>
+  );
+
   return (
     <div
       className="flex flex-col h-[100dvh] overflow-hidden"
@@ -1115,6 +1163,76 @@ export default function Session() {
             </div>
           </div>
 
+          {/* Session sub-tasks — active (unchecked) tasks sit ABOVE notes and are
+              always rendered, so active work is never buried under the growing
+              notes log; completed tasks collapse below. */}
+          {session.song && (
+            <div className="px-5 mb-3">
+              <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}>
+                Session Tasks
+              </p>
+
+              {/* Active (unchecked) — always visible, never capped */}
+              {activeTasks.length > 0 && (
+                <div className="mb-2 space-y-1.5">
+                  {activeTasks.map(renderTaskRow)}
+                </div>
+              )}
+
+              {/* Completed — collapsed below the active ones */}
+              {completedTasks.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowCompleted((v) => !v)}
+                    className="mb-2 w-full flex items-center gap-1.5 py-1.5 text-xs font-medium transition-all active:scale-[0.99]"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    {showCompleted ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {showCompleted ? "Hide completed" : `Show completed (${completedTasks.length})`}
+                  </button>
+                  {showCompleted && (
+                    <div className="mb-2 space-y-1.5">
+                      {completedTasks.map(renderTaskRow)}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Add-task input — always visible */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={taskInput}
+                  onChange={(e) => setTaskInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTask();
+                    }
+                  }}
+                  placeholder="Add session task..."
+                  className="flex-1 px-3 py-2 text-sm outline-none"
+                  style={{
+                    background: "var(--surface-elevated)",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={addTask}
+                  disabled={!taskInput.trim()}
+                  className="px-4 text-sm font-semibold disabled:opacity-40"
+                  style={{ background: AMBER, color: "#1a1200", borderRadius: "var(--radius-md)" }}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Session notes */}
           <div className="px-5 mb-3">
             <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}>
@@ -1205,90 +1323,6 @@ export default function Session() {
               </div>
             )}
           </div>
-
-          {/* Session sub-tasks — input always visible; checklist shows when tasks exist */}
-          {session.song && (
-            <div className="px-5 mb-3 shrink-0">
-              <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}>
-                Session Tasks
-              </p>
-              {sessionTasks.length > 0 && (
-                <div className="mb-2 space-y-1.5">
-                  {sessionTasks.map((t) => (
-                    <button
-                      key={t.block_id}
-                      type="button"
-                      onClick={() => toggleTask(t.block_id, !t.checked)}
-                      className="w-full flex items-center gap-3 py-2.5 px-3 text-left transition-all active:scale-[0.99]"
-                      style={{
-                        background: "var(--surface-card)",
-                        borderRadius: "var(--radius-md)",
-                        // Purple (tonight) accent — visually distinct from teal notes.
-                        borderLeft: `3px solid ${TONIGHT}`,
-                        borderTop: "1px solid var(--border-subtle)",
-                        borderRight: "1px solid var(--border-subtle)",
-                        borderBottom: "1px solid var(--border-subtle)",
-                      }}
-                    >
-                      <span
-                        className="shrink-0 grid place-content-center"
-                        style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: "var(--radius-sm)",
-                          border: `1.5px solid ${t.checked ? TONIGHT : "var(--border-strong)"}`,
-                          background: t.checked ? TONIGHT : "var(--color-tonight-bg)",
-                        }}
-                      >
-                        {t.checked && <Check className="h-3.5 w-3.5" style={{ color: "#1a1430" }} />}
-                      </span>
-                      <span
-                        className="text-sm leading-snug"
-                        style={{
-                          color: t.checked ? "var(--text-muted)" : "var(--text-primary)",
-                          textDecoration: t.checked ? "line-through" : "none",
-                        }}
-                      >
-                        {t.text}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Add-task input — always visible */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={taskInput}
-                  onChange={(e) => setTaskInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addTask();
-                    }
-                  }}
-                  placeholder="Add session task..."
-                  className="flex-1 px-3 py-2 text-sm outline-none"
-                  style={{
-                    background: "var(--surface-elevated)",
-                    border: "1px solid var(--border-default)",
-                    borderRadius: "var(--radius-md)",
-                    color: "var(--text-primary)",
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={addTask}
-                  disabled={!taskInput.trim()}
-                  className="px-4 text-sm font-semibold disabled:opacity-40"
-                  style={{ background: AMBER, color: "#1a1200", borderRadius: "var(--radius-md)" }}
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-          )}
 
           </div>
           {/* end scrollable content region */}
