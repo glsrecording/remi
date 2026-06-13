@@ -1734,7 +1734,7 @@ export default function MainChat() {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder='Try "Mix note for [song] — [note]"'
-              className="remi-chat-input min-w-0 w-full px-4 py-2.5 md:py-3 text-sm placeholder:text-white/20"
+              className="remi-chat-input min-w-0 w-full px-4 py-2.5 md:py-3 text-sm"
               style={{ color: "var(--text-primary)" }}
               data-testid="input-text-command"
             />
@@ -1745,8 +1745,17 @@ export default function MainChat() {
             className="shrink-0 px-4 py-2.5 md:py-3 rounded-xl text-sm font-medium transition-all active:scale-95"
             style={
               inputText.trim()
-                ? { background: "var(--color-tonight)", color: "#ffffff", boxShadow: "0 0 16px #9b8de855" }
-                : { background: "var(--surface-elevated)", color: "var(--text-muted)", border: "1px solid var(--border-default)" }
+                ? {
+                    background: "var(--color-tonight)",
+                    color: "#ffffff",
+                    boxShadow: "0 0 12px color-mix(in srgb, var(--color-tonight) 40%, transparent)",
+                  }
+                : {
+                    background: "var(--surface-elevated)",
+                    color: "var(--text-muted)",
+                    border: "1px solid var(--border-default)",
+                    boxShadow: "none",
+                  }
             }
             data-testid="button-send"
           >
