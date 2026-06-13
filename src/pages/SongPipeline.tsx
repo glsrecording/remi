@@ -650,7 +650,7 @@ export default function SongPipeline() {
           )}
           <button
             className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-            style={{ color: "var(--t-text5)" }}
+            style={{ color: "var(--color-studio)" }}
             onClick={() => setAddingNew(true)}
             title="Add song"
           >
@@ -658,7 +658,7 @@ export default function SongPipeline() {
           </button>
           <button
             className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-            style={{ color: "var(--t-text5)" }}
+            style={{ color: "var(--color-studio)" }}
             onClick={() => load()}
             disabled={spinning}
           >
