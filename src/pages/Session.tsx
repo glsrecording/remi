@@ -12,6 +12,15 @@ const HOURLY_RATE_KEY = "remi_session_hourly_rate";
 const DAY_RATE_KEY    = "remi_session_day_rate";
 const RATE_TYPE_KEY   = "remi_session_rate_type";
 const SESSION_START_KEY = "remi_session_start";  // ms epoch backup for timer rehydration
+// Last active session's song — persisted so its tasks remain reachable (read-only)
+// after the session is closed and the page reopened (GET /session then has no song).
+const LAST_SESSION_KEY  = "remi_last_session_song";
+
+interface LastSession {
+  artist: string;
+  song: string;
+  song_page_id: string;
+}
 
 // Design-system context colors (mirror design-system.css; kept as hex so the
 // `color + "33"` alpha-concat glow pattern works — same approach as Tasks.tsx).
@@ -66,6 +75,9 @@ export default function Session() {
   const [session, setSession] = useState<SessionState>({ active: false });
   const [notes, setNotes] = useState<NoteEntry[]>([]);
   const [sessionTasks, setSessionTasks] = useState<SessionTask[]>([]);
+  // Populated from localStorage when there's no active session — lets the page
+  // show the last session's tasks (read-only) on reopen.
+  const [lastSession, setLastSession] = useState<LastSession | null>(null);
   const [taskInput, setTaskInput] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
@@ -148,9 +160,24 @@ export default function Session() {
         if (!data || !data.active || (!data.artist && !data.song)) {
           setSession({ active: false });
           setStarting(false);
+          // Inactive: surface the last session's song (if any) so its tasks load.
+          try {
+            const raw = localStorage.getItem(LAST_SESSION_KEY);
+            setLastSession(raw ? (JSON.parse(raw) as LastSession) : null);
+          } catch { setLastSession(null); }
         } else {
           setSession(data);
           setStarting(false);
+          setLastSession(null);  // active session — no fallback needed
+          // Persist the current song so its tasks survive close → reopen. This
+          // also handles "new session on a different song" — it overwrites.
+          if (data.artist && data.song && data.song_page_id) {
+            try {
+              localStorage.setItem(LAST_SESSION_KEY, JSON.stringify({
+                artist: data.artist, song: data.song, song_page_id: data.song_page_id,
+              }));
+            } catch { /* storage full — non-fatal */ }
+          }
         }
       })
       .catch(() => {});
@@ -200,9 +227,10 @@ export default function Session() {
     notesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [notes]);
 
-  // Fetch session sub-tasks (page-body to_do blocks) for the active song
+  // Fetch session sub-tasks (page-body to_do blocks). Uses the active song when a
+  // session is running, else the last session's song (read-only on reopen).
   const refetchSessionTasks = useCallback(() => {
-    const song = session.song;
+    const song = session.song || (!session.active ? lastSession?.song : undefined);
     if (!song) {
       setSessionTasks([]);
       return;
@@ -213,7 +241,7 @@ export default function Session() {
         if (Array.isArray(data.tasks)) setSessionTasks(data.tasks);
       })
       .catch(() => {});
-  }, [session.song]);
+  }, [session.song, session.active, lastSession]);
 
   // Poll session sub-tasks every 10 seconds
   useEffect(() => {
@@ -711,15 +739,16 @@ export default function Session() {
   const activeTasks    = sessionTasks.filter((t) => !t.checked);
   const completedTasks = sessionTasks.filter((t) => t.checked);
 
-  const renderTaskRow = (t: SessionTask) => (
+  const renderTaskRow = (t: SessionTask, readOnly = false) => (
     <button
       key={t.block_id}
       type="button"
-      onClick={() => toggleTask(t.block_id, !t.checked)}
-      className="w-full flex items-center gap-3 py-2.5 px-3 text-left transition-all active:scale-[0.99]"
+      onClick={readOnly ? undefined : () => toggleTask(t.block_id, !t.checked)}
+      className={`w-full flex items-center gap-3 py-2.5 px-3 text-left transition-all ${readOnly ? "" : "active:scale-[0.99]"}`}
       style={{
         background: "var(--surface-card)",
         borderRadius: "var(--radius-md)",
+        cursor: readOnly ? "default" : "pointer",
         // Purple (tonight) accent — visually distinct from teal notes.
         borderLeft: `3px solid ${TONIGHT}`,
         borderTop: "1px solid var(--border-subtle)",
@@ -750,6 +779,18 @@ export default function Session() {
       </span>
     </button>
   );
+
+  // CHANGE 3 (dismiss): forget the last session + its tasks for this device.
+  const clearLastSession = () => {
+    try { localStorage.removeItem(LAST_SESSION_KEY); } catch { /* ignore */ }
+    setLastSession(null);
+    setSessionTasks([]);
+  };
+
+  // Show the read-only last-session tasks only in the plain idle state (not mid
+  // start / song-match flow) and only when that song actually has tasks.
+  const showLastSessionTasks =
+    !session.active && !!lastSession && !starting && matchState === "idle" && sessionTasks.length > 0;
 
   return (
     <div
@@ -800,7 +841,8 @@ export default function Session() {
 
       {/* ── IDLE: start form ─────────────────────────────────────────── */}
       {!session.active && (
-        <div className="flex-1 flex flex-col items-center justify-center px-6"
+        <div
+          className={`flex-1 flex flex-col items-center px-6 ${showLastSessionTasks ? "overflow-y-auto justify-start pt-10" : "justify-center"}`}
           style={{ paddingBottom: "max(env(safe-area-inset-bottom, 80px), 80px)" }}
         >
           {starting ? (
@@ -920,6 +962,33 @@ export default function Session() {
                   {startError}
                 </p>
               )}
+            </div>
+          )}
+
+          {/* CHANGE 2 — last session's tasks (read-only) when nothing is active.
+              Lets the captured to-dos stay reachable after close → reopen. */}
+          {showLastSessionTasks && lastSession && (
+            <div className="w-full max-w-xs mt-8">
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <p
+                  className="text-xs uppercase tracking-widest flex-1 truncate"
+                  style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}
+                >
+                  Last session — {lastSession.song || lastSession.artist}
+                </p>
+                <button
+                  type="button"
+                  onClick={clearLastSession}
+                  aria-label="Clear last session tasks"
+                  className="shrink-0 p-1 rounded-md hover:bg-white/5 transition-colors"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="space-y-1.5">
+                {sessionTasks.map((t) => renderTaskRow(t, true))}
+              </div>
             </div>
           )}
         </div>
@@ -1175,7 +1244,7 @@ export default function Session() {
               {/* Active (unchecked) — always visible, never capped */}
               {activeTasks.length > 0 && (
                 <div className="mb-2 space-y-1.5">
-                  {activeTasks.map(renderTaskRow)}
+                  {activeTasks.map((t) => renderTaskRow(t))}
                 </div>
               )}
 
@@ -1193,7 +1262,7 @@ export default function Session() {
                   </button>
                   {showCompleted && (
                     <div className="mb-2 space-y-1.5">
-                      {completedTasks.map(renderTaskRow)}
+                      {completedTasks.map((t) => renderTaskRow(t))}
                     </div>
                   )}
                 </>
