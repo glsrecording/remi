@@ -43,6 +43,9 @@
   --color-done-bg:     #0f1f10;
   --color-done-border: #1a3020;
 
+  /* Filming — orange — icon-square fill only (no full accent ramp) */
+  --color-filming-bg:  #241402;
+
   /* ── SURFACE TOKENS ──────────────────────────────────────────────────────── */
   --surface-base:       #0a0a0c;
   --surface-card:       #111116;
@@ -116,4 +119,18 @@ html.light-mode,
   --text-secondary: #4a4a6a;
   --text-muted:     #8a8aaa;
   --text-dim:       #c0c0d8;
+
+  /* Category icon-square fills — light pastels (same hue) so the colored squares
+     read correctly on white surfaces. Icon glyph colors stay vibrant (unchanged). */
+  --color-studio-bg:     #e0f7f2;
+  --color-studio-border: #b0e8dc;
+  --color-tonight-bg:     #ede9fb;
+  --color-tonight-border: #c9c0f0;
+  --color-calls-bg:     #e3eef9;
+  --color-calls-border: #b0cfee;
+  --color-personal-bg:     #fce8ef;
+  --color-personal-border: #f0b8cc;
+  --color-tasks-bg:     #fef3dc;
+  --color-tasks-border: #f5d898;
+  --color-filming-bg:   #fdecd9;   /* light orange (no token in the spec list) */
 }

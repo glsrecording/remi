@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -32,7 +33,11 @@ import NotFound from "@/pages/not-found";
 const queryClient = new QueryClient();
 
 function Router() {
+  // Key the boundary to the current path so navigating to a new route
+  // clears a caught error without requiring a full reload.
+  const [location] = useLocation();
   return (
+    <ErrorBoundary key={location}>
     <Switch>
       <Route path="/" component={MainChat} />
       <Route path="/tasks" component={Tasks} />
@@ -59,6 +64,7 @@ function Router() {
       <Route path="/sanity-check" component={SanityCheck} />
       <Route component={NotFound} />
     </Switch>
+    </ErrorBoundary>
   );
 }
 

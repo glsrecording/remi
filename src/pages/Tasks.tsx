@@ -74,7 +74,7 @@ const CATEGORY_BG: Record<string, string> = {
   Communication: "var(--color-tonight-bg)",
   Admin:         "var(--color-calls-bg)",
   Writing:       "var(--color-personal-bg)",
-  Filming:       "#241402",                  // orange-dim (no token)
+  Filming:       "var(--color-filming-bg)",  // dark orange / light pastel via token
   General:       "var(--surface-elevated)",
 };
 // Per-category icon for the 32px square.
