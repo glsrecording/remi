@@ -84,3 +84,36 @@
   --font-size-lg:   17px;
   --font-size-xl:   22px;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Light mode overrides
+   Matches the app's actual toggle: use-theme.ts adds the `light-mode` class to
+   <html> (same mechanism index.css's --t-* tokens use). Only surfaces, borders,
+   and text flip — the context accent colors (--color-studio/-tasks/-tonight/etc.)
+   stay vibrant in BOTH modes, so they are intentionally NOT overridden here.
+
+   The [data-theme="light"] selector is included for spec parity but is inert in
+   this app (the toggle never sets data-theme). prefers-color-scheme is
+   intentionally omitted: it keys off the OS and would fight the manual class
+   toggle, producing a broken half-light/half-dark state against index.css.
+   ────────────────────────────────────────────────────────────────────────── */
+html.light-mode,
+[data-theme="light"] {
+  /* Surfaces */
+  --surface-base:       #f8f8fc;
+  --surface-card:       #ffffff;
+  --surface-card-hover: #f0f0f8;
+  --surface-elevated:   #ebebf5;
+  --surface-overlay:    #f4f4fa;
+
+  /* Borders */
+  --border-subtle:  #e8e8f0;
+  --border-default: #d8d8e8;
+  --border-strong:  #c0c0d8;
+
+  /* Text */
+  --text-primary:   #1a1a2e;
+  --text-secondary: #4a4a6a;
+  --text-muted:     #8a8aaa;
+  --text-dim:       #c0c0d8;
+}

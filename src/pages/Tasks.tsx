@@ -66,14 +66,16 @@ const CATEGORY_COLORS: Record<string, string> = {
   Filming:       "#e8831a",  // orange (no token)
   General:       "#888890",  // --text-secondary (gray, readable)
 };
-// Dark per-category fill behind the 32px icon square (mirrors the *-bg tokens).
+// Per-category fill behind the icon square. Uses the design-system tokens so
+// General (a surface token) flips in light mode; the context -bg tints stay dark
+// in both modes by design (accent context colors don't change between themes).
 const CATEGORY_BG: Record<string, string> = {
-  Studio:        "#0d1f20",  // --color-studio-bg
-  Communication: "#1a1430",  // --color-tonight-bg
-  Admin:         "#0d1828",  // --color-calls-bg
-  Writing:       "#200d16",  // --color-personal-bg
-  Filming:       "#241402",  // orange-dim
-  General:       "#1a1a22",  // --surface-elevated
+  Studio:        "var(--color-studio-bg)",
+  Communication: "var(--color-tonight-bg)",
+  Admin:         "var(--color-calls-bg)",
+  Writing:       "var(--color-personal-bg)",
+  Filming:       "#241402",                  // orange-dim (no token)
+  General:       "var(--surface-elevated)",
 };
 // Per-category icon for the 32px square.
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
@@ -589,11 +591,11 @@ function AddTaskCard({ bucket, color, onCancel, onSubmitted }: AddTaskCardProps)
     <div
       className="flex items-end gap-1.5 px-3 py-2 rounded-xl"
       style={{
-        background: "var(--t-card)",
+        background: "var(--surface-card)",
         borderLeft: `3px solid ${color}70`,
-        borderTop: "1px solid rgba(255,255,255,0.05)",
-        borderRight: "1px solid rgba(255,255,255,0.05)",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        borderTop: "1px solid var(--border-subtle)",
+        borderRight: "1px solid var(--border-subtle)",
+        borderBottom: "1px solid var(--border-subtle)",
       }}
     >
       <textarea
