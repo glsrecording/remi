@@ -1,13 +1,20 @@
-import { useState, useRef } from "react";
-import { Sun, RefreshCw, Calendar, CheckSquare, CreditCard, Sparkles, Mail } from "lucide-react";
+import { useState, useRef, type ReactNode } from "react";
+import { Sun, RefreshCw, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
-import { useLocalStorage } from "@/hooks/use-local-storage";
-import { STORAGE_KEYS } from "@/lib/storage";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
+
+// Design-system context colors (mirror design-system.css; hex so the `color + "26"`
+// alpha-concat glow pattern works). Mode-independent — safe in light + dark.
+// Screen identity is amber (planning/overview); each section keys off its content.
+const AMBER  = "#f5a623";  // --color-tasks   — identity / date hero / Due Today
+const PURPLE = "#9b8de8";  // --color-tonight  — calendar / schedule
+const BLUE   = "#378add";  // --color-calls    — inbox / emails
+const GREEN  = "#5bc468";  // --color-done     — bills
+const ALERT  = "#ef4444";  // error state
 
 const CACHE_KEY_DATA = "remi_briefing_data";
 const CACHE_KEY_DATE = "remi_briefing_date";
@@ -34,8 +41,71 @@ type BriefingData = {
   bills: BillItem[];
 };
 
+// ── Reusable section primitives (Tasks-style header + glowing accent card) ──────
+
+function SectionCard({ color, children }: { color: string; children: ReactNode }) {
+  return (
+    <div
+      className="px-4 py-3.5"
+      style={{
+        background: "var(--surface-card)",
+        borderRadius: "var(--radius-lg)",
+        borderLeft: `3px solid ${color}`,
+        borderTop: "1px solid var(--border-subtle)",
+        borderRight: "1px solid var(--border-subtle)",
+        borderBottom: "1px solid var(--border-subtle)",
+        boxShadow: `0 0 18px ${color}26`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SectionHeader({ color, label, count }: { color: string; label: string; count?: number }) {
+  return (
+    <div className="flex items-center gap-2.5 mb-3">
+      <span className="shrink-0 rounded-full" style={{ width: 8, height: 8, background: color, boxShadow: `0 0 8px ${color}66` }} />
+      <span
+        className="font-bold uppercase flex-1"
+        style={{ color, fontFamily: "'Space Mono', monospace", fontSize: "var(--font-size-sm)", letterSpacing: "0.08em" }}
+      >
+        {label}
+      </span>
+      {count !== undefined && (
+        <span
+          className="font-mono rounded-full shrink-0"
+          style={{ background: `${color}1f`, color, fontSize: "var(--font-size-xs)", padding: "2px 8px" }}
+        >
+          {count}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// One content row inside a section — elevated surface, 2px accent matching its section.
+function ContentRow({ color, href, testid, children }: { color: string; href?: string; testid?: string; children: ReactNode }) {
+  const style = {
+    background: "var(--surface-elevated)",
+    borderRadius: "var(--radius-md)",
+    borderLeft: `2px solid ${color}`,
+  } as const;
+  const cls = "flex items-start gap-3 px-3 py-2.5";
+  return href ? (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={`${cls} transition-opacity active:opacity-60`} style={{ ...style, textDecoration: "none" }} data-testid={testid}>
+      {children}
+    </a>
+  ) : (
+    <div className={cls} style={style} data-testid={testid}>{children}</div>
+  );
+}
+
+function EmptyRow({ text }: { text: string }) {
+  return <p className="text-xs px-1 py-1" style={{ color: "var(--text-muted)" }}>{text}</p>;
+}
+
 export default function MorningBriefing() {
-  const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
   const [menuOpen, setMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   useGutterScroll(scrollRef);
@@ -92,15 +162,16 @@ export default function MorningBriefing() {
   ];
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--surface-base)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <PageHeader
         title="Morning Briefing"
-        color={remiColor}
+        color={AMBER}
         onMenu={() => setMenuOpen(true)}
         right={data ? (
           <button
-            className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors"
+            className="flex items-center gap-1.5 text-xs transition-colors hover:opacity-80"
+            style={{ color: AMBER }}
             onClick={handleRefresh}
             data-testid="button-clear-briefing"
           >
@@ -120,23 +191,23 @@ export default function MorningBriefing() {
           <div className="flex flex-col items-center justify-center h-full gap-6 -mt-6">
             <div
               className="w-20 h-20 rounded-3xl flex items-center justify-center"
-              style={{ background: remiColor + "15", border: `1.5px solid ${remiColor}25` }}
+              style={{ background: `${AMBER}15`, border: `1.5px solid ${AMBER}25`, boxShadow: `0 0 24px ${AMBER}26` }}
             >
-              <Sun size={34} style={{ color: remiColor }} />
+              <Sun size={34} style={{ color: AMBER }} />
             </div>
 
             <div className="text-center">
-              <p className="text-base font-semibold text-white/80 mb-1">
+              <p className="text-base font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
                 {today.toLocaleDateString("en-US", { weekday: "long" })}
               </p>
-              <p className="text-sm text-white/35">
+              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
                 {today.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
               </p>
             </div>
 
             <button
               className="flex items-center gap-2.5 px-8 py-4 rounded-2xl text-base font-semibold transition-all active:scale-[0.97]"
-              style={{ background: remiColor, color: "#111111" }}
+              style={{ background: AMBER, color: "#1a1200", boxShadow: `0 0 20px ${AMBER}55` }}
               onClick={handleRequest}
               disabled={loading}
               data-testid="button-request-briefing"
@@ -159,14 +230,14 @@ export default function MorningBriefing() {
           <div className="flex flex-col items-center justify-center h-full gap-6 -mt-6">
             <div
               className="w-20 h-20 rounded-3xl flex items-center justify-center"
-              style={{ background: "rgba(239,68,68,0.1)", border: "1.5px solid rgba(239,68,68,0.2)" }}
+              style={{ background: `${ALERT}1a`, border: `1.5px solid ${ALERT}33` }}
             >
-              <Sun size={34} className="text-red-400/60" />
+              <Sun size={34} style={{ color: ALERT }} />
             </div>
-            <p className="text-sm text-white/50 text-center max-w-xs">{error}</p>
+            <p className="text-sm text-center max-w-xs" style={{ color: "var(--text-secondary)" }}>{error}</p>
             <button
               className="flex items-center gap-2.5 px-8 py-4 rounded-2xl text-base font-semibold transition-all active:scale-[0.97]"
-              style={{ background: remiColor, color: "#111111" }}
+              style={{ background: AMBER, color: "#1a1200", boxShadow: `0 0 20px ${AMBER}55` }}
               onClick={handleRequest}
               disabled={loading}
               data-testid="button-retry-briefing"
@@ -187,177 +258,149 @@ export default function MorningBriefing() {
         ) : (
           /* Live briefing content */
           <div className="space-y-6 overlay-fade-in">
-            {/* Date header */}
+            {/* Date header — amber hero */}
             <div
-              className="px-4 py-3 rounded-2xl flex items-center gap-3"
-              style={{ background: remiColor + "12", border: `1px solid ${remiColor}20` }}
+              className="px-4 py-3.5 flex items-center gap-3"
+              style={{
+                background: "var(--surface-card)",
+                borderRadius: "var(--radius-lg)",
+                borderLeft: `3px solid ${AMBER}`,
+                borderTop: "1px solid var(--border-subtle)",
+                borderRight: "1px solid var(--border-subtle)",
+                borderBottom: "1px solid var(--border-subtle)",
+                boxShadow: `0 0 18px ${AMBER}26`,
+              }}
             >
-              <Sun size={18} style={{ color: remiColor }} />
-              <div>
-                <p className="text-xs text-white/40 uppercase tracking-widest">Today</p>
-                <p className="text-sm font-semibold text-white/90">{dateLabel}</p>
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: `${AMBER}1a`, border: `1px solid ${AMBER}33` }}
+              >
+                <Sun size={18} style={{ color: AMBER }} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-widest" style={{ color: "var(--text-muted)" }}>Today</p>
+                <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{dateLabel}</p>
               </div>
             </div>
 
-            {/* Calendar */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Calendar size={13} style={{ color: remiColor }} />
-                <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: remiColor }}>
-                  Schedule
-                </p>
-              </div>
+            {/* Calendar / Schedule — purple */}
+            <SectionCard color={PURPLE}>
+              <SectionHeader color={PURPLE} label="Schedule" count={data!.calendar.length} />
 
               {/* Today subsection */}
-              <p className="text-xs font-semibold px-1 pt-1" style={{ color: "var(--t-text5)" }}>
+              <p className="text-xs font-semibold px-1 mb-1.5" style={{ color: "var(--text-secondary)" }}>
                 Today
               </p>
-              {data!.calendar.length === 0 ? (
-                <p className="text-xs text-white/25 px-1">No events today</p>
-              ) : (
-                data!.calendar.map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
-                    style={{ background: "var(--t-card)" }}
-                    data-testid={`calendar-item-${i}`}
-                  >
-                    <span
-                      className="text-xs font-mono mt-0.5 shrink-0"
-                      style={{ color: remiColor, opacity: 0.7 }}
-                    >
-                      {item.time}
-                    </span>
-                    <p className="text-sm text-white/85 font-medium leading-snug">{item.title}</p>
-                  </div>
-                ))
-              )}
+              <div className="space-y-1.5">
+                {data!.calendar.length === 0 ? (
+                  <EmptyRow text="No events today" />
+                ) : (
+                  data!.calendar.map((item, i) => (
+                    <ContentRow key={i} color={PURPLE} testid={`calendar-item-${i}`}>
+                      <span className="text-xs font-mono mt-0.5 shrink-0" style={{ color: PURPLE }}>{item.time}</span>
+                      <p className="text-sm font-medium leading-snug" style={{ color: "var(--text-primary)" }}>{item.title}</p>
+                    </ContentRow>
+                  ))
+                )}
+              </div>
 
               {/* Tomorrow subsection — only rendered if key exists (backwards compatible) */}
               {data!.calendar_tomorrow !== undefined && (
                 <>
-                  <p className="text-xs font-semibold px-1 pt-2" style={{ color: "var(--t-text5)" }}>
+                  <p className="text-xs font-semibold px-1 mt-3 mb-1.5" style={{ color: "var(--text-secondary)" }}>
                     Tomorrow
                   </p>
-                  {data!.calendar_tomorrow.length === 0 ? (
-                    <p className="text-xs text-white/25 px-1">No events tomorrow</p>
-                  ) : (
-                    data!.calendar_tomorrow.map((item, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
-                        style={{ background: "var(--t-card)" }}
-                        data-testid={`calendar-tomorrow-item-${i}`}
-                      >
-                        <span
-                          className="text-xs font-mono mt-0.5 shrink-0"
-                          style={{ color: remiColor, opacity: 0.7 }}
-                        >
-                          {item.time}
-                        </span>
-                        <p className="text-sm text-white/85 font-medium leading-snug">{item.title}</p>
-                      </div>
-                    ))
-                  )}
+                  <div className="space-y-1.5">
+                    {data!.calendar_tomorrow.length === 0 ? (
+                      <EmptyRow text="No events tomorrow" />
+                    ) : (
+                      data!.calendar_tomorrow.map((item, i) => (
+                        <ContentRow key={i} color={PURPLE} testid={`calendar-tomorrow-item-${i}`}>
+                          <span className="text-xs font-mono mt-0.5 shrink-0" style={{ color: PURPLE }}>{item.time}</span>
+                          <p className="text-sm font-medium leading-snug" style={{ color: "var(--text-primary)" }}>{item.title}</p>
+                        </ContentRow>
+                      ))
+                    )}
+                  </div>
                 </>
               )}
-            </div>
+            </SectionCard>
 
-            {/* Emails */}
+            {/* Inbox — blue */}
             {(data!.emails ?? []).length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Mail size={13} style={{ color: remiColor }} />
-                  <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: remiColor }}>
-                    Inbox
-                  </p>
-                </div>
-                {data!.emails.map((item, i) => (
-                  <a
-                    key={i}
-                    href={`https://mail.google.com/mail/u/0/#inbox/${item.thread_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5 transition-opacity active:opacity-60"
-                    style={{ background: "var(--t-card)", display: "flex", textDecoration: "none" }}
-                    data-testid={`email-item-${i}`}
-                  >
-                    <span
-                      className="text-xs font-mono mt-0.5 shrink-0 max-w-[72px] truncate"
-                      style={{ color: remiColor, opacity: 0.7 }}
+              <SectionCard color={BLUE}>
+                <SectionHeader color={BLUE} label="Inbox" count={data!.emails.length} />
+                <div className="space-y-1.5">
+                  {data!.emails.map((item, i) => (
+                    <ContentRow
+                      key={i}
+                      color={BLUE}
+                      href={`https://mail.google.com/mail/u/0/#inbox/${item.thread_id}`}
+                      testid={`email-item-${i}`}
                     >
-                      {item.sender}
-                    </span>
-                    <p className="text-sm font-medium leading-snug flex-1 min-w-0" style={{ color: "var(--t-text2)" }}>
-                      {item.subject}
-                    </p>
-                  </a>
-                ))}
-              </div>
+                      <span className="text-xs font-mono mt-0.5 shrink-0 max-w-[72px] truncate" style={{ color: BLUE }}>
+                        {item.sender}
+                      </span>
+                      <p className="text-sm font-medium leading-snug flex-1 min-w-0" style={{ color: "var(--text-primary)" }}>
+                        {item.subject}
+                      </p>
+                    </ContentRow>
+                  ))}
+                </div>
+              </SectionCard>
             )}
 
-            {/* Tasks */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <CheckSquare size={13} style={{ color: remiColor }} />
-                <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: remiColor }}>
-                  Due Today
-                </p>
+            {/* Due Today — amber */}
+            <SectionCard color={AMBER}>
+              <SectionHeader color={AMBER} label="Due Today" count={allTasks.length} />
+              <div className="space-y-1.5">
+                {allTasks.length === 0 ? (
+                  <EmptyRow text="No tasks due today" />
+                ) : (
+                  allTasks.map((task, i) => (
+                    <ContentRow key={task.id || i} color={AMBER} testid={`task-item-${i}`}>
+                      <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: AMBER }} />
+                      <p className="text-sm leading-snug" style={{ color: "var(--text-primary)" }}>{task.title}</p>
+                    </ContentRow>
+                  ))
+                )}
               </div>
-              {allTasks.length === 0 ? (
-                <p className="text-xs text-white/25 px-1">No tasks due today</p>
-              ) : (
-                allTasks.map((task, i) => (
-                  <div
-                    key={task.id || i}
-                    className="flex items-start gap-3 px-4 py-3 rounded-xl border border-white/5"
-                    style={{ background: "var(--t-card)" }}
-                    data-testid={`task-item-${i}`}
-                  >
-                    <div
-                      className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
-                      style={{ background: "rgba(255,255,255,0.2)" }}
-                    />
-                    <p className="text-sm text-white/80 leading-snug">{task.title}</p>
-                  </div>
-                ))
-              )}
-            </div>
+            </SectionCard>
 
-            {/* Bills */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <CreditCard size={13} style={{ color: remiColor }} />
-                <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: remiColor }}>
-                  Bills This Week
-                </p>
-              </div>
-              {data!.bills.length === 0 ? (
-                <p className="text-xs text-white/25 px-1">No bills due in the next 14 days</p>
-              ) : (
-                data!.bills.map((bill, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between px-4 py-3 rounded-xl border border-white/5"
-                    style={{ background: "var(--t-card)" }}
-                    data-testid={`bill-item-${i}`}
-                  >
-                    <div>
-                      <p className="text-sm text-white/80">{bill.name}</p>
-                      {bill.auto && (
-                        <p className="text-xs text-white/25 mt-0.5">Auto-pay</p>
-                      )}
+            {/* Bills — green */}
+            <SectionCard color={GREEN}>
+              <SectionHeader color={GREEN} label="Bills This Week" count={data!.bills.length} />
+              <div className="space-y-1.5">
+                {data!.bills.length === 0 ? (
+                  <EmptyRow text="No bills due in the next 14 days" />
+                ) : (
+                  data!.bills.map((bill, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between px-3 py-2.5"
+                      style={{ background: "var(--surface-elevated)", borderRadius: "var(--radius-md)", borderLeft: `2px solid ${GREEN}` }}
+                      data-testid={`bill-item-${i}`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm truncate" style={{ color: "var(--text-primary)" }}>{bill.name}</p>
+                        {bill.auto && (
+                          <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>Auto-pay</p>
+                        )}
+                      </div>
+                      <p className="text-xs shrink-0 ml-3" style={{ color: "var(--text-secondary)" }}>{bill.due}</p>
                     </div>
-                    <p className="text-xs text-white/40 shrink-0 ml-3">{bill.due}</p>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))
+                )}
+              </div>
+            </SectionCard>
 
             {/* Footer */}
-            <div className="flex items-center gap-2 px-4 py-3 rounded-xl" style={{ background: "var(--t-card)" }}>
-              <Sparkles size={13} className="text-white/20 shrink-0" />
-              <p className="text-xs text-white/25">Live data from Jarvis</p>
+            <div
+              className="flex items-center gap-2 px-4 py-3"
+              style={{ background: "var(--surface-card)", borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)" }}
+            >
+              <Sparkles size={13} className="shrink-0" style={{ color: "var(--text-muted)" }} />
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Live data from Jarvis</p>
             </div>
           </div>
         )}
