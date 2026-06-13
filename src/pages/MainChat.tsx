@@ -1785,15 +1785,18 @@ export default function MainChat() {
             type="button"
             className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center"
             style={{
-              // Solid remiColor mic with a white icon — reads in both light + dark.
-              // Recording feedback is a white ring (no size change → stays under finger).
-              background: remiColor,
-              border: `1.5px solid ${isRecording ? "#ffffff" : `color-mix(in srgb, ${remiColor} 65%, #000)`}`,
-              boxShadow: `0 0 12px color-mix(in srgb, ${remiColor} 40%, transparent)`,
+              // Outlined at rest, filled when actively recording — matches the
+              // bubble pattern. Idle: transparent bg, remiColor border + icon,
+              // subtle glow. Recording: solid remiColor fill, white icon, stronger glow.
+              background: isRecording ? remiColor : "transparent",
+              border: `1.5px solid ${remiColor}`,
+              boxShadow: isRecording
+                ? `0 0 16px color-mix(in srgb, ${remiColor} 50%, transparent)`
+                : `0 0 10px color-mix(in srgb, ${remiColor} 30%, transparent)`,
               // No scale on recording — a size change shifted the button under the
               // user's finger. Recording feedback is the bg/border/icon-color change.
               // Fixed dimensions (w-10 h-10 / md:w-12 h-12) keep position identical.
-              transition: "background 0.1s ease, border-color 0.1s ease",
+              transition: "background 0.1s ease, border-color 0.1s ease, box-shadow 0.1s ease",
               marginRight: "20px",
               touchAction: "none",
             }}
@@ -1814,9 +1817,9 @@ export default function MainChat() {
             data-testid="button-voice"
           >
             {isTranscribing ? (
-              <Loader2 size={16} className="animate-spin" style={{ color: "#ffffff" }} />
+              <Loader2 size={16} className="animate-spin" style={{ color: isRecording ? "#ffffff" : remiColor }} />
             ) : (
-              <Mic size={16} style={{ color: "#ffffff" }} />
+              <Mic size={16} style={{ color: isRecording ? "#ffffff" : remiColor }} />
             )}
           </button>
 
