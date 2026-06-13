@@ -1,30 +1,38 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLocalStorage } from "@/hooks/use-local-storage";
-import { STORAGE_KEYS } from "@/lib/storage";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
-import { Loader2, RefreshCw, ExternalLink, GripVertical } from "lucide-react";
+import { Loader2, RefreshCw, ExternalLink, GripVertical, Film, Youtube } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
+// Screen identity — Content is the creative / AI-adjacent screen → tonight purple.
+const ACCENT = "#9b8de8";       // --color-tonight
+const DONE_GREEN = "#5bc468";   // --color-done — top-3 priority accent bar
+
 const STAGE_FILTERS = ["All", "AI Draft", "My Rewrite", "Final", "Filmed", "Posted"];
 
+// Per-stage status color, mapped onto the design-system context palette. Kept as
+// hex so the `color + "22"` alpha-concat pattern works (same approach as Tasks).
+//   AI Draft   → gray   (--text-secondary)  raw AI output
+//   My Rewrite → amber  (--color-tasks)      draft in progress
+//   Final      → blue   (--color-calls)      ready
+//   Filmed     → teal   (--color-studio)
+//   Posted     → green  (--color-done)       published
 const STAGE_COLORS: Record<string, string> = {
-  "AI Draft":   "#9ca3af",
-  "My Rewrite": "#fbbf24",
-  "Final":      "#60a5fa",
-  "Filmed":     "#a78bfa",
-  "Posted":     "#4ade80",
+  "AI Draft":   "#888890",
+  "My Rewrite": "#f5a623",
+  "Final":      "#378add",
+  "Filmed":     "#3dd6b0",
+  "Posted":     "#5bc468",
 };
 
-const STAGE_BORDER_COLORS: Record<string, string> = {
-  "AI Draft":   "#6b7280",
-  "My Rewrite": "#eab308",
-  "Final":      "#3b82f6",
-  "Filmed":     "#a855f7",
-  "Posted":     "#22c55e",
+// Per-content-type icon for the card's icon square.
+const TYPE_ICONS: Record<string, LucideIcon> = {
+  "Short-Form": Film,
+  "Long-Form":  Youtube,
 };
 
 interface Script {
@@ -62,12 +70,16 @@ async function patchReorder(order: string[]) {
 function SkeletonCard() {
   return (
     <div
-      className="px-4 py-3.5 rounded-xl"
-      style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}
+      className="px-4 py-3.5"
+      style={{
+        background: "var(--surface-card)",
+        borderRadius: "var(--radius-lg)",
+        border: "1px solid var(--border-subtle)",
+      }}
     >
-      <div className="h-3.5 rounded mb-2" style={{ background: "var(--t-border-md)", width: "72%" }} />
-      <div className="h-3.5 rounded mb-3" style={{ background: "var(--t-border)", width: "52%" }} />
-      <div className="h-5 w-16 rounded-full" style={{ background: "var(--t-border)" }} />
+      <div className="h-3.5 rounded mb-2" style={{ background: "var(--border-default)", width: "72%" }} />
+      <div className="h-3.5 rounded mb-3" style={{ background: "var(--border-subtle)", width: "52%" }} />
+      <div className="h-5 w-16 rounded-full" style={{ background: "var(--border-subtle)" }} />
     </div>
   );
 }
@@ -95,9 +107,10 @@ function ScriptCard({
   onDrop:         (e: React.DragEvent) => void;
   onDragEnd:      () => void;
 }) {
-  const stageColor  = STAGE_COLORS[script.draft_stage] ?? "#9ca3af";
-  const borderColor = STAGE_BORDER_COLORS[script.draft_stage] ?? "#6b7280";
-  const isTop3      = rank < 3;
+  const stageColor = STAGE_COLORS[script.draft_stage] ?? "#888890";
+  const isTop3     = rank < 3;
+  const accentBar  = isTop3 ? DONE_GREEN : stageColor;
+  const TypeIcon   = TYPE_ICONS[script.content_type] ?? Film;
 
   function handleCardTap() {
     if (script.script_file) {
@@ -112,51 +125,79 @@ function ScriptCard({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      className="flex items-stretch rounded-xl transition-opacity"
-      style={{ opacity: isDragging ? 0.4 : 1 }}
+      className="flex items-stretch transition-opacity"
+      style={{ borderRadius: "var(--radius-lg)", opacity: isDragging ? 0.4 : 1 }}
     >
       {showDragHandle && (
         <div
           className="flex items-center px-2 shrink-0 cursor-grab active:cursor-grabbing touch-none"
-          style={{ color: "var(--t-text6)" }}
+          style={{ color: "var(--text-muted)" }}
         >
           <GripVertical size={15} />
         </div>
       )}
 
       <button
-        className="flex-1 text-left px-4 py-3.5 rounded-xl transition-all active:scale-[0.99]"
+        className="flex-1 text-left flex items-start gap-3 px-4 py-3.5 transition-all active:scale-[0.99]"
         onClick={handleCardTap}
         style={{
-          background:   "var(--t-card)",
-          borderLeft:   isTop3 ? "3px solid #39b54a" : `3px solid ${borderColor}`,
-          borderTop:    isDragOver ? "1.5px dashed var(--t-border-md)" : "1px solid var(--t-border)",
-          borderRight:  isDragOver ? "1.5px dashed var(--t-border-md)" : "1px solid var(--t-border)",
-          borderBottom: isDragOver ? "1.5px dashed var(--t-border-md)" : "1px solid var(--t-border)",
+          background:   "var(--surface-card)",
+          borderRadius: "var(--radius-lg)",
+          borderLeft:   `3px solid ${accentBar}`,
+          borderTop:    isDragOver ? "1.5px dashed var(--border-strong)" : "1px solid var(--border-subtle)",
+          borderRight:  isDragOver ? "1.5px dashed var(--border-strong)" : "1px solid var(--border-subtle)",
+          borderBottom: isDragOver ? "1.5px dashed var(--border-strong)" : "1px solid var(--border-subtle)",
         }}
       >
-        <p
-          className="text-sm font-medium leading-snug mb-2"
+        {/* Stage-colored icon square */}
+        <div
+          className="shrink-0 flex items-center justify-center mt-0.5"
           style={{
-            color:           "var(--t-text2)",
-            display:         "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical" as const,
-            overflow:        "hidden",
+            width: "32px",
+            height: "32px",
+            borderRadius: "var(--radius-md)",
+            background: stageColor + "1a",
+            border: `1px solid ${stageColor}33`,
           }}
         >
-          {script.name}
-        </p>
-        <div className="flex items-center gap-2">
-          <span
-            className="text-xs px-2 py-0.5 rounded-full font-medium"
-            style={{ background: stageColor + "22", color: stageColor }}
+          <TypeIcon size={16} style={{ color: stageColor }} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p
+            className="font-medium leading-snug mb-2"
+            style={{
+              color:           "var(--text-primary)",
+              fontSize:        "var(--font-size-base)",
+              display:         "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical" as const,
+              overflow:        "hidden",
+            }}
           >
-            {script.draft_stage || "—"}
-          </span>
-          {script.script_file && (
-            <ExternalLink size={12} style={{ color: "var(--t-text6)" }} />
-          )}
+            {script.name}
+          </p>
+          <div className="flex items-center gap-2">
+            {/* Status pill */}
+            <span
+              className="rounded-full"
+              style={{
+                background: stageColor + "26",
+                color: stageColor,
+                border: `1px solid ${stageColor}66`,
+                fontFamily: "'Space Mono', monospace",
+                fontSize: "var(--font-size-xs)",
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+                padding: "2px 8px",
+              }}
+            >
+              {script.draft_stage || "—"}
+            </span>
+            {script.script_file && (
+              <ExternalLink size={12} style={{ color: "var(--text-muted)" }} />
+            )}
+          </div>
         </div>
       </button>
     </div>
@@ -166,7 +207,6 @@ function ScriptCard({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ContentPipeline() {
-  const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
   const [menuOpen, setMenuOpen] = useState(false);
 
   const [scripts,    setScripts]    = useState<Script[]>([]);
@@ -200,6 +240,11 @@ export default function ContentPipeline() {
 
   const shortCount = scripts.filter(s => s.content_type === "Short-Form").length;
   const longCount  = scripts.filter(s => s.content_type === "Long-Form").length;
+
+  // Section-header (above the list): label + dot color track the active filter —
+  // a stage when one is selected, else the active content-type tab.
+  const sectionLabel = stage === "All" ? tab : stage;
+  const sectionColor = stage === "All" ? ACCENT : (STAGE_COLORS[stage] ?? ACCENT);
 
   // ── Drag ──────────────────────────────────────────────────────────────────
 
@@ -238,16 +283,16 @@ export default function ContentPipeline() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--surface-base)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <PageHeader
         title="Content"
-        color={remiColor}
+        color={ACCENT}
         onMenu={() => setMenuOpen(true)}
         right={
           <button
             className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-            style={{ color: "var(--t-text5)" }}
+            style={{ color: ACCENT }}
             onClick={load}
             disabled={loading}
           >
@@ -259,7 +304,7 @@ export default function ContentPipeline() {
       {/* Tabs */}
       <div
         className="flex px-4 pt-3 shrink-0"
-        style={{ borderBottom: "1px solid var(--t-border)" }}
+        style={{ borderBottom: "1px solid var(--border-subtle)" }}
       >
         {(["Short-Form", "Long-Form"] as Tab[]).map(t => {
           const count  = t === "Short-Form" ? shortCount : longCount;
@@ -270,8 +315,8 @@ export default function ContentPipeline() {
               onClick={() => { setTab(t); setStage("All"); }}
               className="px-4 pb-3 text-sm font-semibold transition-colors"
               style={{
-                color:        active ? remiColor : "var(--t-text5)",
-                borderBottom: active ? `2px solid ${remiColor}` : "2px solid transparent",
+                color:        active ? ACCENT : "var(--text-secondary)",
+                borderBottom: active ? `2px solid ${ACCENT}` : "2px solid transparent",
                 marginBottom: "-1px",
               }}
             >
@@ -280,8 +325,8 @@ export default function ContentPipeline() {
                 <span
                   className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full font-medium"
                   style={{
-                    background: active ? remiColor + "20" : "var(--t-el-low)",
-                    color:      active ? remiColor        : "var(--t-text6)",
+                    background: active ? ACCENT + "20" : "var(--surface-elevated)",
+                    color:      active ? ACCENT        : "var(--text-muted)",
                   }}
                 >
                   {count}
@@ -292,23 +337,25 @@ export default function ContentPipeline() {
         })}
       </div>
 
-      {/* Stage filter chips */}
+      {/* Stage filter pills — neutral treatment, matching Tasks */}
       <div
         className="flex gap-2 px-4 pt-3 pb-2 overflow-x-auto shrink-0"
         style={{ scrollbarWidth: "none" }}
       >
         {STAGE_FILTERS.map(f => {
-          const active    = stage === f;
-          const chipColor = f === "All" ? remiColor : (STAGE_COLORS[f] ?? remiColor);
+          const active = stage === f;
           return (
             <button
               key={f}
               onClick={() => setStage(f)}
-              className="px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 active:scale-95"
+              className="font-medium transition-all shrink-0 active:scale-95 whitespace-nowrap"
               style={{
-                background: active ? chipColor + "22" : "var(--t-card)",
-                color:      active ? chipColor        : "var(--t-text5)",
-                border:     active ? `1.5px solid ${chipColor}60` : "1.5px solid var(--t-border-md)",
+                padding: "4px 12px",
+                borderRadius: "var(--radius-pill)",
+                fontSize: "var(--font-size-sm)",
+                background: active ? "var(--surface-elevated)" : "transparent",
+                border: `1px solid ${active ? "var(--border-strong)" : "var(--border-subtle)"}`,
+                color: active ? "var(--text-primary)" : "var(--text-muted)",
               }}
             >
               {f}
@@ -324,19 +371,19 @@ export default function ContentPipeline() {
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}
       >
         {loading && (
-          <div className="space-y-2.5">
+          <div className="space-y-2.5 pt-1">
             {[1, 2, 3, 4, 5].map(i => <SkeletonCard key={i} />)}
           </div>
         )}
 
         {!loading && error && (
           <div className="flex flex-col items-center gap-3 py-16">
-            <p className="text-sm text-center" style={{ color: "var(--t-text4)" }}>
+            <p className="text-sm text-center" style={{ color: "var(--text-secondary)" }}>
               Could not load scripts ({error})
             </p>
             <button
               className="px-4 py-2 rounded-xl text-sm font-medium active:scale-95"
-              style={{ background: remiColor + "20", color: remiColor }}
+              style={{ background: ACCENT + "20", color: ACCENT }}
               onClick={load}
             >
               Retry
@@ -346,41 +393,78 @@ export default function ContentPipeline() {
 
         {!loading && !error && visible.length === 0 && (
           <div className="flex items-center justify-center py-16">
-            <p className="text-sm" style={{ color: "var(--t-text6)" }}>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
               No scripts in this view.
             </p>
           </div>
         )}
 
         {!loading && !error && visible.length > 0 && (
-          <div className="space-y-2">
-            {visible.map((s, i) => (
-              <ScriptCard
-                key={s.page_id}
-                script={s}
-                rank={i}
-                showDragHandle={showDragHandles}
-                isDragging={draggingId === s.page_id}
-                isDragOver={dragOverId === s.page_id}
-                onDragStart={() => handleDragStart(s.page_id)}
-                onDragOver={(e) => handleDragOver(e, s.page_id)}
-                onDrop={(e) => handleDrop(e, s.page_id)}
-                onDragEnd={handleDragEnd}
+          <>
+            {/* Section header — colored dot + uppercase label + count badge */}
+            <div className="flex items-center gap-2.5 py-1 mb-2">
+              <span
+                className="shrink-0 rounded-full"
+                style={{
+                  width: "8px",
+                  height: "8px",
+                  background: sectionColor,
+                  boxShadow: `0 0 8px ${sectionColor}66`,
+                }}
               />
-            ))}
-          </div>
-        )}
+              <span
+                className="font-bold uppercase flex-1"
+                style={{
+                  color: sectionColor,
+                  fontFamily: "'Space Mono', monospace",
+                  fontSize: "var(--font-size-sm)",
+                  letterSpacing: "0.08em",
+                }}
+              >
+                {sectionLabel}
+              </span>
+              <span
+                className="font-mono rounded-full"
+                style={{
+                  background: sectionColor + "1f",
+                  color: sectionColor,
+                  fontSize: "var(--font-size-xs)",
+                  padding: "2px 8px",
+                }}
+              >
+                {visible.length}
+              </span>
+            </div>
 
-        {!loading && !error && visible.length > 0 && showDragHandles && (
-          <p className="text-center text-xs mt-4" style={{ color: "var(--t-text6)" }}>
-            Drag ≡ to reorder
-          </p>
+            <div className="space-y-2">
+              {visible.map((s, i) => (
+                <ScriptCard
+                  key={s.page_id}
+                  script={s}
+                  rank={i}
+                  showDragHandle={showDragHandles}
+                  isDragging={draggingId === s.page_id}
+                  isDragOver={dragOverId === s.page_id}
+                  onDragStart={() => handleDragStart(s.page_id)}
+                  onDragOver={(e) => handleDragOver(e, s.page_id)}
+                  onDrop={(e) => handleDrop(e, s.page_id)}
+                  onDragEnd={handleDragEnd}
+                />
+              ))}
+            </div>
+
+            {showDragHandles && (
+              <p className="text-center text-xs mt-4" style={{ color: "var(--text-muted)" }}>
+                Drag ≡ to reorder
+              </p>
+            )}
+          </>
         )}
       </div>
 
       {loading && scripts.length > 0 && (
         <div className="absolute top-20 right-4">
-          <Loader2 size={16} className="animate-spin" style={{ color: "var(--t-text6)" }} />
+          <Loader2 size={16} className="animate-spin" style={{ color: "var(--text-muted)" }} />
         </div>
       )}
     </div>
