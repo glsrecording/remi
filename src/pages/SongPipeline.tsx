@@ -7,56 +7,47 @@ import { useGutterScroll } from "@/hooks/useGutterScroll";
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
-// ── Design-system tokens ─────────────────────────────────────────────────────
-// Context accent colors stay vibrant in BOTH light and dark (per design-system.css
-// they are intentionally NOT overridden), so referencing them by hex is safe and
-// keeps the alpha math simple. Grays use CSS vars so they adapt in light mode.
-const C = {
-  studio:  "#3dd6b0",            // --color-studio  (teal)
-  tasks:   "#f5a623",            // --color-tasks   (amber)
-  tonight: "#9b8de8",            // --color-tonight (purple)
-  calls:   "#378add",            // --color-calls   (blue)
-  done:    "#5bc468",            // --color-done    (green)
-  gray:    "var(--text-muted)",
-  graySec: "var(--text-secondary)",
-};
-
-// color-mix works with both hex and var() colors, so it replaces the old
-// `color + "22"` alpha-append (which would produce invalid CSS for var() colors).
-const withAlpha = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
-
 const STATUS_CHIPS = [
   "PrePro", "Tracking", "Editing", "Mixing", "Revisions",
   "Mastering", "Stems", "Proofing", "Active", "Waiting", "Outsource", "Archive",
 ];
 
 const PRIORITY_CHIPS: { label: string; color: string }[] = [
-  { label: "P1",   color: C.tasks },
-  { label: "P2",   color: C.tonight },
-  { label: "P3",   color: C.calls },
-  { label: "Warm", color: C.graySec },
+  { label: "P1",   color: "#4ade80" },
+  { label: "P2",   color: "#c084fc" },
+  { label: "P3",   color: "#60a5fa" },
+  { label: "Warm", color: "#94a3b8" },
 ];
 
-// Status → accent color, by production stage. The six stages called out in the
-// redesign brief map to their named tokens; remaining stages map to the nearest
-// context token so every status reads against the same palette.
 const STATUS_COLORS: Record<string, string> = {
-  Active:    C.studio,    // teal
-  Mixing:    C.tonight,   // purple
-  Revisions: C.tasks,     // amber
-  Tracking:  C.calls,     // blue
-  Done:      C.done,      // green
-  "On Hold": C.gray,      // gray
-  Waiting:   C.gray,
-  // remaining production stages → nearest context token
-  PrePro:    C.calls,
-  Editing:   C.calls,
-  Mastering: C.done,
-  Stems:     C.studio,
-  Proofing:  C.tonight,
-  Outsource: C.graySec,
-  Archive:   C.gray,
+  PrePro:    "#f59e0b",
+  Tracking:  "#3b82f6",
+  Editing:   "#f97316",
+  Outsource: "#92400e",
+  Mixing:    "#ec4899",
+  Revisions: "#ef4444",
+  Mastering: "#22c55e",
+  Stems:     "#84cc16",
+  Archive:   "#9ca3af",
+  Done:      "#4b5563",
+  Waiting:   "#f97316",
+  Proofing:  "#a78bfa",
+  Active:    "#14b8a6",
 };
+
+function priorityArtistColor(priority: string): string {
+  if (priority === "P1") return "#22c55e";
+  if (priority === "P2") return "#a855f7";
+  if (priority === "P3") return "#3b82f6";
+  return "#6b7280";
+}
+
+function priorityTitleColor(priority: string): string {
+  if (priority === "P1") return "#a855f7";
+  if (priority === "P2") return "#3b82f6";
+  if (priority === "P3") return "#6b7280";
+  return "#9ca3af";
+}
 
 // These groups only show songs that have a next_action value
 const FILTER_NEXT_ACTION = new Set(["Active", "PrePro"]);
@@ -76,13 +67,12 @@ interface Group {
   songs: Song[];
 }
 
-// Section accent by priority: P1 amber (warm/urgent), P2 purple, P3 blue.
 const PRIORITY_META: Record<string, { label: string; color: string }> = {
-  P1:      { label: "P1 — Priority", color: C.tasks },
-  P2:      { label: "P2",            color: C.tonight },
-  P3:      { label: "P3",            color: C.calls },
-  Active:  { label: "Active",        color: C.studio },
-  Waiting: { label: "Waiting",       color: C.graySec },
+  P1:      { label: "P1 — Priority", color: "#4ade80" },
+  P2:      { label: "P2",            color: "#c084fc" },
+  P3:      { label: "P3",            color: "#60a5fa" },
+  Active:  { label: "Active",        color: "#2dd4bf" },
+  Waiting: { label: "Waiting",       color: "#94a3b8" },
 };
 
 async function fetchPipeline(): Promise<Group[]> {
@@ -125,43 +115,10 @@ async function postNewSong(title: string, artist: string, priority: string, stat
   return res.json();
 }
 
-// ── Status / priority filter pill — Tasks-style treatment ──────────────────────
-// Outlined + muted at rest; filled with its own context color when selected.
-function FilterPill({
-  label,
-  selected,
-  color,
-  fill,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  color: string;
-  fill?: boolean;          // status chips fill solid when selected; priority chips tint
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="font-medium transition-all active:scale-95 whitespace-nowrap"
-      style={{
-        padding: "4px 12px",
-        borderRadius: "var(--radius-pill)",
-        fontSize: "var(--font-size-sm)",
-        background: selected ? (fill ? color : withAlpha(color, 14)) : "transparent",
-        color: selected ? (fill ? "#ffffff" : color) : "var(--text-muted)",
-        border: `1px solid ${selected ? (fill ? color : withAlpha(color, 45)) : "var(--border-subtle)"}`,
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 // ── Add New bottom sheet ───────────────────────────────────────────────────
 
 function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const ACCENT = C.studio;
+  const ACCENT = "#2dd4bf";
   const [title,    setTitle]    = useState("");
   const [artist,   setArtist]   = useState("");
   const [priority, setPriority] = useState("P3");
@@ -193,25 +150,25 @@ function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
       <div
         className="relative z-10 rounded-t-2xl px-5 pt-5 overflow-y-auto"
         style={{
-          background: "var(--surface-overlay)",
+          background: "var(--t-surface)",
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           maxHeight: "85vh",
         }}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>Add Song</p>
+          <p className="text-sm font-bold" style={{ color: "var(--t-text)" }}>Add Song</p>
           <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/5 transition-colors"
-            style={{ color: "var(--text-muted)" }}>
+            style={{ color: "var(--t-text5)" }}>
             <X size={16} />
           </button>
         </div>
 
         {/* Title */}
-        <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--text-secondary)" }}>Song Title</p>
+        <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--t-text6)" }}>Song Title</p>
         <input
           className="w-full px-3 py-2.5 rounded-xl text-sm mb-4"
-          style={{ background: "var(--surface-card)", color: "var(--text-primary)", border: "1.5px solid var(--border-default)", outline: "none" }}
+          style={{ background: "var(--t-card)", color: "var(--t-text)", border: "1.5px solid var(--t-border-md)", outline: "none" }}
           placeholder="Song title…"
           value={title}
           onChange={e => setTitle(e.target.value)}
@@ -219,22 +176,22 @@ function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
         />
 
         {/* Artist */}
-        <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--text-secondary)" }}>Artist</p>
+        <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--t-text6)" }}>Artist</p>
         <input
           className="w-full px-3 py-2.5 rounded-xl text-sm mb-4"
-          style={{ background: "var(--surface-card)", color: "var(--text-primary)", border: "1.5px solid var(--border-default)", outline: "none" }}
+          style={{ background: "var(--t-card)", color: "var(--t-text)", border: "1.5px solid var(--t-border-md)", outline: "none" }}
           placeholder="Artist name…"
           value={artist}
           onChange={e => setArtist(e.target.value)}
         />
 
         {/* BPM */}
-        <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--text-secondary)" }}>BPM <span style={{ color: "var(--text-muted)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>optional</span></p>
+        <p className="text-xs font-medium tracking-widest uppercase mb-2" style={{ color: "var(--t-text6)" }}>BPM <span style={{ color: "var(--t-text8)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>optional</span></p>
         <input
           type="number"
           inputMode="numeric"
           className="w-full px-3 py-2.5 rounded-xl text-sm mb-5"
-          style={{ background: "var(--surface-card)", color: "var(--text-primary)", border: "1.5px solid var(--border-default)", outline: "none" }}
+          style={{ background: "var(--t-card)", color: "var(--t-text)", border: "1.5px solid var(--t-border-md)", outline: "none" }}
           placeholder="e.g. 120"
           value={bpmInput}
           onChange={e => setBpmInput(e.target.value)}
@@ -243,32 +200,41 @@ function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
         />
 
         {/* Priority */}
-        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--text-secondary)" }}>Priority</p>
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>Priority</p>
         <div className="flex gap-2 mb-5">
-          {PRIORITY_CHIPS.map(chip => (
-            <FilterPill
-              key={chip.label}
-              label={chip.label}
-              color={chip.color}
-              selected={priority === chip.label}
-              onClick={() => setPriority(chip.label)}
-            />
-          ))}
+          {PRIORITY_CHIPS.map(chip => {
+            const sel = priority === chip.label;
+            return (
+              <button key={chip.label} onClick={() => setPriority(chip.label)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: sel ? chip.color + "22" : "var(--t-card)",
+                  color:      sel ? chip.color        : "var(--t-text4)",
+                  border:     sel ? `1.5px solid ${chip.color}60` : "1.5px solid var(--t-border-md)",
+                }}>
+                {chip.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Status */}
-        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--text-secondary)" }}>Status</p>
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>Status</p>
         <div className="flex flex-wrap gap-2 mb-5">
-          {STATUS_CHIPS.map(chip => (
-            <FilterPill
-              key={chip}
-              label={chip}
-              color={STATUS_COLORS[chip] ?? ACCENT}
-              selected={status === chip}
-              fill
-              onClick={() => setStatus(chip)}
-            />
-          ))}
+          {STATUS_CHIPS.map(chip => {
+            const sel = status === chip;
+            return (
+              <button key={chip} onClick={() => setStatus(chip)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: sel ? (STATUS_COLORS[chip] ?? ACCENT) : "var(--t-card)",
+                  color:      sel ? "#ffffff"                        : "var(--t-text4)",
+                  border:     sel ? `1.5px solid ${STATUS_COLORS[chip] ?? ACCENT}` : "1.5px solid var(--t-border-md)",
+                }}>
+                {chip}
+              </button>
+            );
+          })}
         </div>
 
         {error && <p className="text-xs text-red-400/80 mb-3">{error}</p>}
@@ -277,7 +243,7 @@ function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
           onClick={handleSave}
           disabled={saving}
           className="w-full py-3 rounded-xl text-sm font-semibold transition-all active:scale-[0.98]"
-          style={{ background: withAlpha(ACCENT, 14), color: ACCENT, border: `1px solid ${withAlpha(ACCENT, 35)}` }}
+          style={{ background: ACCENT + "22", color: ACCENT }}
         >
           {saving ? "Adding…" : "Add Song"}
         </button>
@@ -373,15 +339,13 @@ function EditSheet({
     }
   }
 
-  const recording = isRecording || isTranscribing;
-
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
         className="relative z-10 rounded-t-2xl px-5 pt-5 overflow-y-auto"
         style={{
-          background: "var(--surface-overlay)",
+          background: "var(--t-surface)",
           paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 28px)",
           maxHeight: "85vh",
         }}
@@ -389,62 +353,77 @@ function EditSheet({
         {/* Header */}
         <div className="flex items-start justify-between mb-5">
           <div>
-            <p className="text-xs font-medium mb-0.5" style={{ color: "var(--text-secondary)" }}>{song.artist}</p>
-            <p className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>{song.song}</p>
+            <p className="text-xs font-medium mb-0.5" style={{ color: "var(--t-text5)" }}>{song.artist}</p>
+            <p className="text-sm font-bold" style={{ color: "var(--t-text)" }}>{song.song}</p>
           </div>
           <button
             onClick={onClose}
             className="p-1.5 rounded-full hover:bg-white/5 transition-colors mt-0.5"
-            style={{ color: "var(--text-muted)" }}
+            style={{ color: "var(--t-text5)" }}
           >
             <X size={16} />
           </button>
         </div>
 
         {/* Priority chips */}
-        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--text-secondary)" }}>
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>
           Priority
         </p>
         <div className="flex gap-2 mb-5">
-          {PRIORITY_CHIPS.map(chip => (
-            <FilterPill
-              key={chip.label}
-              label={chip.label}
-              color={chip.color}
-              selected={selectedPriority === chip.label}
-              onClick={() => setSelectedPriority(chip.label)}
-            />
-          ))}
+          {PRIORITY_CHIPS.map(chip => {
+            const sel = selectedPriority === chip.label;
+            return (
+              <button
+                key={chip.label}
+                onClick={() => setSelectedPriority(chip.label)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: sel ? chip.color + "22" : "var(--t-card)",
+                  color:      sel ? chip.color        : "var(--t-text4)",
+                  border:     sel ? `1.5px solid ${chip.color}60` : "1.5px solid var(--t-border-md)",
+                }}
+              >
+                {chip.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Status chips */}
-        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--text-secondary)" }}>
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>
           Status
         </p>
         <div className="flex flex-wrap gap-2 mb-5">
-          {STATUS_CHIPS.map(chip => (
-            <FilterPill
-              key={chip}
-              label={chip}
-              color={STATUS_COLORS[chip] ?? color}
-              selected={selectedStatus === chip}
-              fill
-              onClick={() => setSelectedStatus(chip)}
-            />
-          ))}
+          {STATUS_CHIPS.map(chip => {
+            const sel = selectedStatus === chip;
+            return (
+              <button
+                key={chip}
+                onClick={() => setSelectedStatus(chip)}
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: sel ? (STATUS_COLORS[chip] ?? color) : "var(--t-card)",
+                  color:      sel ? "#ffffff"                       : "var(--t-text4)",
+                  border:     sel ? `1.5px solid ${STATUS_COLORS[chip] ?? color}` : "1.5px solid var(--t-border-md)",
+                }}
+              >
+                {chip}
+              </button>
+            );
+          })}
         </div>
 
         {/* Next action */}
-        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--text-secondary)" }}>
+        <p className="text-xs font-medium tracking-widest uppercase mb-2.5" style={{ color: "var(--t-text6)" }}>
           Next Action
         </p>
         <div className="flex items-center gap-2 mb-5">
           <input
             className="flex-1 px-3 py-2.5 rounded-xl text-sm"
             style={{
-              background: "var(--surface-card)",
-              color:      "var(--text-primary)",
-              border:     "1.5px solid var(--border-default)",
+              background: "var(--t-card)",
+              color:      "var(--t-text)",
+              border:     "1.5px solid var(--t-border-md)",
               outline:    "none",
             }}
             value={nextAction}
@@ -458,9 +437,9 @@ function EditSheet({
             onPointerLeave={handleMicUp}
             className="p-2.5 rounded-xl shrink-0 transition-all"
             style={{
-              background: recording ? C.tasks : "transparent",
-              color:      recording ? "#ffffff" : "var(--text-muted)",
-              border:     `1.5px solid ${recording ? C.tasks : "var(--border-default)"}`,
+              background: (isRecording || isTranscribing) ? "#f59e0b22" : "var(--t-card)",
+              color:      (isRecording || isTranscribing) ? "#f59e0b"   : "var(--t-text5)",
+              border:     "1.5px solid var(--t-border-md)",
               touchAction: "none",
             }}
           >
@@ -478,7 +457,7 @@ function EditSheet({
           onClick={handleSave}
           disabled={saving}
           className="w-full py-3 rounded-xl text-sm font-semibold transition-all active:scale-[0.98]"
-          style={{ background: withAlpha(color, 14), color, border: `1px solid ${withAlpha(color, 35)}` }}
+          style={{ background: color + "22", color }}
         >
           {saving ? "Saving…" : "Save"}
         </button>
@@ -498,47 +477,40 @@ function SongCard({
   color: string;
   onTap: (song: Song) => void;
 }) {
-  // Accent bar + pill + glow are driven by STATUS (falls back to the section
-  // priority color if the status is unmapped).
-  const statusColor = STATUS_COLORS[song.status] ?? color;
   return (
     <button
-      className="w-full text-left transition-all active:scale-[0.98]"
-      style={{ borderRadius: "var(--radius-lg)" }}
+      className="w-full text-left rounded-xl transition-all active:scale-[0.98]"
       onClick={() => onTap(song)}
     >
       <div
-        className="px-4 py-3"
+        className="px-4 py-3 rounded-xl"
         style={{
-          background:    "var(--surface-card)",
-          borderRadius:  "var(--radius-lg)",
-          borderLeft:    `3px solid ${statusColor}`,
-          borderTop:     "1px solid var(--border-subtle)",
-          borderRight:   "1px solid var(--border-subtle)",
-          borderBottom:  "1px solid var(--border-subtle)",
-          // Subtle status-color glow — same bubble treatment as the rest of the app.
-          boxShadow:     `0 0 12px ${withAlpha(statusColor, 20)}`,
+          background:    "var(--t-card)",
+          borderLeft:    `3px solid ${color}70`,
+          borderTop:     "1px solid var(--t-border)",
+          borderRight:   "1px solid var(--t-border)",
+          borderBottom:  "1px solid var(--t-border)",
         }}
       >
-        {/* Artist — small, above the title */}
-        <p className="text-xs font-medium tracking-wide truncate" style={{ color: "var(--text-secondary)" }}>
-          {song.artist}
-        </p>
-        {/* Song title */}
-        <p className="text-sm leading-snug truncate" style={{ color: "var(--text-primary)", fontWeight: 500 }}>
-          {song.song}
-        </p>
-        <div className="flex items-center gap-2 mt-1.5 min-w-0">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <span className="text-xs font-medium tracking-wide shrink-0" style={{ color: priorityArtistColor(song.priority) }}>
+            {song.artist}
+          </span>
+          <span className="text-sm font-semibold leading-snug min-w-0" style={{ color: priorityTitleColor(song.priority) }}>
+            {song.song}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           {song.status && (
             <span
               className="text-xs px-2 py-0.5 rounded-full font-medium shrink-0"
-              style={{ background: withAlpha(statusColor, 14), color: statusColor }}
+              style={{ background: (STATUS_COLORS[song.status] ?? color) + "22", color: STATUS_COLORS[song.status] ?? color }}
             >
               {song.status}
             </span>
           )}
           {song.next_action && (
-            <span className="text-xs leading-snug truncate min-w-0" style={{ color: "var(--text-muted)" }}>
+            <span className="text-xs leading-snug" style={{ color: "var(--t-text5)" }}>
               → {song.next_action}
             </span>
           )}
@@ -560,32 +532,26 @@ function GroupSection({
   onSongTap: (song: Song, color: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const meta = PRIORITY_META[group.priority] ?? { label: group.priority, color: C.graySec };
+  const meta = PRIORITY_META[group.priority] ?? { label: group.priority, color: "#94a3b8" };
 
   return (
     <div className="space-y-2">
       <div
-        className="flex items-center gap-2 py-1.5 px-2 -mx-2 cursor-pointer select-none"
-        style={{ borderRadius: "var(--radius-md)", background: withAlpha(meta.color, 8) }}
+        className="flex items-center gap-2 py-1.5 px-2 -mx-2 cursor-pointer select-none rounded-lg"
+        style={{ background: meta.color + "12" }}
         onClick={() => setOpen(o => !o)}
         role="button"
         aria-expanded={open}
       >
-        {/* Colored priority dot */}
         <span
-          className="shrink-0 rounded-full"
-          style={{ width: "8px", height: "8px", background: meta.color, boxShadow: `0 0 8px ${withAlpha(meta.color, 60)}` }}
-        />
-        <span
-          className="font-bold uppercase tracking-tight flex-1"
-          style={{ color: meta.color, fontFamily: "'Space Mono', monospace", fontSize: "var(--font-size-sm)", letterSpacing: "0.08em" }}
+          className="text-sm font-bold tracking-tight flex-1"
+          style={{ color: meta.color, fontFamily: "'Space Mono', monospace" }}
         >
           {meta.label}
         </span>
-        {/* Count badge */}
         <span
-          className="font-mono rounded-full"
-          style={{ background: withAlpha(meta.color, 12), color: meta.color, fontSize: "var(--font-size-xs)", padding: "2px 8px" }}
+          className="text-xs font-mono px-2 py-0.5 rounded-full"
+          style={{ background: meta.color + "20", color: meta.color }}
         >
           {group.songs.length}
         </span>
@@ -670,21 +636,21 @@ export default function SongPipeline() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "var(--surface-base)" }}>
+    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg-deep)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <PageHeader
         title="Song Pipeline"
-        color={C.studio}
+        color="var(--color-studio)"
         onMenu={() => setMenuOpen(true)}
         right={<>
           {!loading && (
-            <span className="text-xs mr-1 font-mono" style={{ color: withAlpha(C.studio, 75) }}>
+            <span className="text-xs mr-1" style={{ color: "var(--t-text6)" }}>
               {totalSongs} {totalSongs === 1 ? "song" : "songs"}
             </span>
           )}
           <button
             className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-            style={{ color: C.studio }}
+            style={{ color: "var(--t-text5)" }}
             onClick={() => setAddingNew(true)}
             title="Add song"
           >
@@ -692,7 +658,7 @@ export default function SongPipeline() {
           </button>
           <button
             className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-            style={{ color: C.studio }}
+            style={{ color: "var(--t-text5)" }}
             onClick={() => load()}
             disabled={spinning}
           >
@@ -701,26 +667,27 @@ export default function SongPipeline() {
         </>}
       />
 
-      {/* Search bar — MainChat pill treatment with teal border + focus glow */}
+      {/* Search bar — teal pill treatment (kept from redesign): --color-studio
+          border + focus glow, pill radius. Everything else reverted to original. */}
       <div className="px-4 pt-3 pb-1 shrink-0">
         <div
           className="flex items-center gap-2 px-3 py-2"
           style={{
-            background: "var(--surface-card)",
+            background: "var(--t-surface)",
             borderRadius: "var(--radius-pill)",
             border: searchFocused
-              ? `1.5px solid ${C.studio}`
-              : `1.5px solid ${withAlpha(C.studio, 40)}`,
+              ? "1.5px solid var(--color-studio)"
+              : "1.5px solid color-mix(in srgb, var(--color-studio) 40%, transparent)",
             boxShadow: searchFocused
-              ? `0 0 16px ${withAlpha(C.studio, 30)}, inset 0 0 10px ${withAlpha(C.studio, 14)}`
+              ? "0 0 16px color-mix(in srgb, var(--color-studio) 30%, transparent), inset 0 0 10px color-mix(in srgb, var(--color-studio) 14%, transparent)"
               : "none",
             transition: "border-color 0.15s, box-shadow 0.15s",
           }}
         >
-          <Search size={14} style={{ color: searchFocused ? C.studio : "var(--text-muted)", flexShrink: 0 }} />
+          <Search size={14} style={{ color: searchFocused ? "var(--color-studio)" : "var(--t-text6)", flexShrink: 0 }} />
           <input
             className="flex-1 text-sm bg-transparent outline-none"
-            style={{ color: "var(--text-primary)" }}
+            style={{ color: "var(--t-text)" }}
             placeholder="Search songs or artists…"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
@@ -728,7 +695,7 @@ export default function SongPipeline() {
             onBlur={() => setSearchFocused(false)}
           />
           {searchQuery && (
-            <button onClick={() => setSearchQuery("")} style={{ color: "var(--text-muted)" }}>
+            <button onClick={() => setSearchQuery("")} style={{ color: "var(--t-text6)" }}>
               <X size={14} />
             </button>
           )}
@@ -746,19 +713,19 @@ export default function SongPipeline() {
       >
         {spinning && groups.length === 0 && (
           <div className="flex items-center justify-center gap-2 py-16">
-            <Loader2 size={18} className="animate-spin" style={{ color: C.studio }} />
-            <span className="text-sm" style={{ color: "var(--text-muted)" }}>Loading pipeline…</span>
+            <Loader2 size={18} className="animate-spin" style={{ color: "#2dd4bf" }} />
+            <span className="text-sm" style={{ color: "var(--t-text5)" }}>Loading pipeline…</span>
           </div>
         )}
 
         {!loading && !pulling && error && (
           <div className="flex flex-col items-center gap-3 py-16">
-            <p className="text-sm text-center" style={{ color: "var(--text-secondary)" }}>
+            <p className="text-sm text-center" style={{ color: "var(--t-text4)" }}>
               Could not load pipeline ({error})
             </p>
             <button
               className="px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95"
-              style={{ background: withAlpha(C.studio, 13), color: C.studio, border: `1px solid ${withAlpha(C.studio, 35)}` }}
+              style={{ background: "#2dd4bf20", color: "#2dd4bf" }}
               onClick={() => load()}
             >
               Retry
@@ -768,7 +735,7 @@ export default function SongPipeline() {
 
         {!loading && !error && groups.length === 0 && (
           <div className="flex items-center justify-center py-16">
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>No active songs in pipeline.</p>
+            <p className="text-sm" style={{ color: "var(--t-text6)" }}>No active songs in pipeline.</p>
           </div>
         )}
 
@@ -778,10 +745,10 @@ export default function SongPipeline() {
           const matches = groups.flatMap(g =>
             g.songs
               .filter(s => s.song.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
-              .map(s => ({ song: s, color: (PRIORITY_META[g.priority] ?? { color: C.graySec }).color }))
+              .map(s => ({ song: s, color: (PRIORITY_META[g.priority] ?? { color: "#94a3b8" }).color }))
           );
           if (matches.length === 0) return (
-            <p className="text-sm text-center py-10" style={{ color: "var(--text-muted)" }}>
+            <p className="text-sm text-center py-10" style={{ color: "var(--t-text6)" }}>
               No songs match "{searchQuery}"
             </p>
           );
