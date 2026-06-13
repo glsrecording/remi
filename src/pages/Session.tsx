@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X, Moon, Sun, Check, ArrowLeftRight, SlidersHorizontal } from "lucide-react";
+import { Menu, Square, Coffee, Play, DollarSign, Mic, MicOff, Loader2, X, Moon, Sun, Check, ArrowLeftRight, SlidersHorizontal, ChevronDown, ChevronRight } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import MixRevisionPanel, { MIX_REV_COLOR } from "@/components/MixRevisionPanel";
@@ -109,6 +109,12 @@ export default function Session() {
   const [switchConfirm, setSwitchConfirm] = useState<string | null>(null);
   // Mix Revision — overlay panel for working client mix-feedback notes
   const [mixRevOpen, setMixRevOpen] = useState(false);
+  // Previous-sessions history (notes from prior session toggles for this song).
+  // Collapsed by default; loaded lazily on first expand, reset when the song changes.
+  const [showHistory, setShowHistory]         = useState(false);
+  const [history, setHistory]                 = useState<{ label: string; notes: NoteEntry[] }[]>([]);
+  const [historyLoaded, setHistoryLoaded]     = useState(false);
+  const [historyLoading, setHistoryLoading]   = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
@@ -213,6 +219,36 @@ export default function Session() {
     const id = setInterval(refetchSessionTasks, 10000);
     return () => clearInterval(id);
   }, [refetchSessionTasks, session.song]);
+
+  // Reset the previous-sessions view whenever the active song changes (switch
+  // song / new session) so history reloads for the correct song.
+  useEffect(() => {
+    setShowHistory(false);
+    setHistory([]);
+    setHistoryLoaded(false);
+  }, [session.song]);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const r = await fetch(`${JARVIS_URL}/session_history`, { headers: AUTH_HEADERS });
+      const data = await r.json();
+      if (Array.isArray(data.sessions)) setHistory(data.sessions);
+      setHistoryLoaded(true);
+    } catch {
+      // non-fatal — leave collapsed
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const toggleHistory = useCallback(() => {
+    setShowHistory((prev) => {
+      const next = !prev;
+      if (next && !historyLoaded && !historyLoading) loadHistory();
+      return next;
+    });
+  }, [historyLoaded, historyLoading, loadHistory]);
 
   // Add a session sub-task by typing — reuses the voice handler path (/remi
   // trigger phrase), then refreshes the list. UI-only; no backend changes.
@@ -669,7 +705,7 @@ export default function Session() {
 
   return (
     <div
-      className="flex flex-col min-h-screen"
+      className="flex flex-col h-[100dvh] overflow-hidden"
       style={{
         background: "var(--surface-base)",
         color: "var(--text-primary)",
@@ -683,7 +719,7 @@ export default function Session() {
 
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-4"
+        className="flex items-center justify-between px-4 py-4 shrink-0"
         style={{
           paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)",
           borderBottom: "1px solid var(--border-subtle)",
@@ -844,6 +880,13 @@ export default function Session() {
       {/* ── ACTIVE: timer, rate, notes, mic bar ──────────────────────── */}
       {session.active && (
         <>
+          {/* Scrollable content region — header stays fixed, this scrolls. The
+              app shell (#root) is overflow:hidden, so the page needs its own
+              scroll container or content below the fold is unreachable. */}
+          <div
+            className="flex-1 overflow-y-auto"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 140px)" }}
+          >
           {/* Current song / active session card — the hero element */}
           <div className="px-5 pt-5 pb-2">
             <div
@@ -1073,13 +1116,12 @@ export default function Session() {
           </div>
 
           {/* Session notes */}
-          <div className="px-5 mb-3 flex-1 flex flex-col min-h-0">
+          <div className="px-5 mb-3">
             <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}>
               Session Notes
             </p>
             <div
-              className="flex-1 overflow-y-auto"
-              style={{ background: "var(--surface-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", maxHeight: "200px" }}
+              style={{ background: "var(--surface-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)" }}
             >
               {notes.length === 0 ? (
                 <p className="text-sm p-4 text-center" style={{ color: "var(--text-muted)" }}>
@@ -1110,6 +1152,58 @@ export default function Session() {
                 </div>
               )}
             </div>
+
+            {/* Show previous sessions — collapsed by default, loaded on first tap */}
+            <button
+              type="button"
+              onClick={toggleHistory}
+              className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all active:scale-[0.99]"
+              style={{ color: STUDIO }}
+            >
+              {showHistory ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {showHistory ? "Hide previous sessions" : "Show previous sessions"}
+            </button>
+
+            {showHistory && (
+              <div className="mt-1 space-y-3">
+                {historyLoading ? (
+                  <div className="flex justify-center py-3">
+                    <Loader2 size={16} className="animate-spin" style={{ color: STUDIO }} />
+                  </div>
+                ) : history.length === 0 ? (
+                  <p className="text-xs text-center py-2" style={{ color: "var(--text-muted)" }}>
+                    No previous sessions for this song.
+                  </p>
+                ) : (
+                  history.map((sess, si) => (
+                    <div key={si}>
+                      <p className="text-xs font-mono mb-1.5 px-1" style={{ color: "var(--text-muted)" }}>
+                        {sess.label}
+                      </p>
+                      <div style={{ background: "var(--surface-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)" }}>
+                        <div className="p-3 space-y-2">
+                          {sess.notes.map((n, ni) => (
+                            <div
+                              key={ni}
+                              className="flex gap-3 py-2 px-3"
+                              style={{
+                                background: "var(--surface-elevated)",
+                                borderRadius: "var(--radius-md)",
+                                borderLeft: `2px solid ${STUDIO}`,
+                                opacity: 0.75,
+                              }}
+                            >
+                              <span className="text-xs font-mono mt-0.5 shrink-0" style={{ color: STUDIO }}>{n.ts}</span>
+                              <p className="text-sm leading-snug" style={{ color: "var(--text-secondary)" }}>{n.text}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           {/* Session sub-tasks — input always visible; checklist shows when tasks exist */}
@@ -1119,10 +1213,7 @@ export default function Session() {
                 Session Tasks
               </p>
               {sessionTasks.length > 0 && (
-                <div
-                  className="overflow-y-auto mb-2 space-y-1.5"
-                  style={{ maxHeight: "200px" }}
-                >
+                <div className="mb-2 space-y-1.5">
                   {sessionTasks.map((t) => (
                     <button
                       key={t.block_id}
@@ -1199,8 +1290,8 @@ export default function Session() {
             </div>
           )}
 
-          {/* Spacer for fixed bottom bar */}
-          <div className="shrink-0" style={{ height: 120 }} />
+          </div>
+          {/* end scrollable content region */}
 
           {/* Mic input bar — fixed to bottom */}
           <div
