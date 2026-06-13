@@ -43,6 +43,7 @@ const SECTIONS: MenuSection[] = [
       { label: "Triage",           icon: Shuffle,        path: "/triage" },
       { label: "Scheduler",        icon: CalendarClock,  path: "/scheduler" },
       { label: "Tasks",            icon: Brain,          path: "/tasks", badge: "tasksToday" },
+      { label: "Reminders",        icon: Bell,           path: "/reminders", badge: "reminders" },
     ],
   },
   {
@@ -60,7 +61,6 @@ const SECTIONS: MenuSection[] = [
     items: [
       { label: "Scorecard",     icon: BarChart2,      path: "/scorecard" },
       { label: "Time Track",    icon: Clock,          path: "/time-track" },
-      { label: "Reminders",     icon: Bell,           path: "/reminders", badge: "reminders" },
       { label: "Exercise",      icon: Dumbbell,       path: "/exercise" },
       { label: "Weekly Review", icon: ClipboardCheck, path: "#weekly-review" },
     ],
