@@ -22,7 +22,7 @@ interface MenuItem {
   label: string;
   icon: LucideIcon;
   path: string;
-  badge?: "tasksToday" | "reminders";   // tasksToday = amber count (Tasks); reminders = Growth-blue count
+  badge?: "tasksToday" | "reminders";   // tasksToday = amber count (Tasks); reminders = tonight/purple count
 }
 
 interface MenuSection {
@@ -198,8 +198,8 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
           <span
             className="shrink-0"
             style={{
-              background: "var(--color-calls-bg)",
-              color: "var(--color-calls)",
+              background: "var(--color-tonight-bg)",
+              color: "var(--color-tonight)",
               fontSize: "10px",
               padding: "1px 7px",
               borderRadius: "var(--radius-pill)",
