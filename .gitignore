@@ -37,3 +37,6 @@ Thumbs.db
 
 # Claude Code local session/config dir
 .claude/
+
+# Design reference images (not version-controlled)
+design-references/
