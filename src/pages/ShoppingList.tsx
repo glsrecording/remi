@@ -22,9 +22,11 @@ interface ErrandItem {
 function SwipeableErrandCard({
   item,
   onDone,
+  onEdit,
 }: {
   item: ErrandItem;
   onDone: () => void;
+  onEdit: () => void;
 }) {
   const [offsetX, setOffsetX]     = useState(0);
   const [committing, setCommitting] = useState(false);
@@ -81,6 +83,11 @@ function SwipeableErrandCard({
         onDone();
       }, 200);
       return;
+    }
+
+    // Tap (no committed direction → movement stayed under the 8px threshold) → edit.
+    if (directionRef.current === "undecided") {
+      onEdit();
     }
 
     directionRef.current = "undecided";
@@ -141,6 +148,119 @@ function SwipeableErrandCard({
   );
 }
 
+// ── Item editor — bottom sheet (tap an item to edit name + store) ───────────
+
+const STORE_OPTIONS = ["Costco", "Walmart", "Fred Meyer", "Amazon", "WinCo", "Other"];
+
+function ErrandEditorSheet({
+  item,
+  onSave,
+  onCancel,
+}: {
+  item: ErrandItem;
+  onSave: (name: string, store: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName]   = useState(item.name);
+  // Pre-select the saved store if it matches an option; otherwise leave unset.
+  const [store, setStore] = useState(STORE_OPTIONS.includes(item.store) ? item.store : "");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const canSave = name.trim().length > 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end"
+      style={{ background: "rgba(0,0,0,0.55)" }}
+      onClick={onCancel}
+      data-testid="errand-editor-overlay"
+    >
+      <div
+        className="w-full rounded-t-2xl"
+        style={{
+          background: "var(--t-surface)",
+          borderTop: "1px solid var(--t-border)",
+          padding: "20px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)",
+          animation: "slide-up 0.2s ease",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p
+          className="text-xs uppercase tracking-widest mb-3"
+          style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
+        >
+          Edit item
+        </p>
+
+        {/* Item name */}
+        <input
+          ref={inputRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && canSave) onSave(name.trim(), store); }}
+          placeholder="Item name"
+          className="w-full rounded-xl px-3.5 py-3 text-base outline-none mb-4"
+          style={{
+            background: "var(--t-input-bg)",
+            border: "1px solid var(--t-border-md)",
+            color: "var(--t-text2)",
+          }}
+          data-testid="errand-editor-name"
+        />
+
+        {/* Store pills */}
+        <p className="text-xs mb-2" style={{ color: "var(--t-text5)" }}>Store</p>
+        <div className="flex flex-wrap gap-2 mb-6">
+          {STORE_OPTIONS.map((s) => {
+            const active = store === s;
+            return (
+              <button
+                key={s}
+                onClick={() => setStore(active ? "" : s)}
+                className="px-3.5 py-2 rounded-full text-sm font-medium transition-all duration-150"
+                style={
+                  active
+                    ? { background: TEAL, color: "#000", border: `1.5px solid ${TEAL}` }
+                    : { background: "transparent", color: "var(--t-text4)", border: "1.5px solid rgba(255,255,255,0.15)" }
+                }
+                data-testid={`errand-editor-store-${s.toLowerCase().replace(/ /g, "-")}`}
+              >
+                {s}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2.5">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
+            style={{ background: "var(--t-el-med)", color: "var(--t-text3)" }}
+            data-testid="errand-editor-cancel"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => canSave && onSave(name.trim(), store)}
+            disabled={!canSave}
+            className="flex-1 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
+            style={{
+              background: canSave ? TEAL : "var(--t-el-low)",
+              color: canSave ? "#000" : "var(--t-text6)",
+            }}
+            data-testid="errand-editor-save"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function ShoppingList() {
@@ -148,6 +268,7 @@ export default function ShoppingList() {
   const [items, setItems]           = useState<ErrandItem[]>([]);
   const [loading, setLoading]       = useState(true);
   const [activeStore, setActiveStore] = useState("All");
+  const [editingItem, setEditingItem] = useState<ErrandItem | null>(null);
   const [input, setInput]           = useState("");
   const [isRecording, setIsRecording]   = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -225,6 +346,20 @@ export default function ShoppingList() {
       method: "PATCH",
       headers: { Authorization: `Bearer ${REMI_API_KEY}` },
     }).catch((err) => console.error("[ShoppingList] PATCH done failed:", err));
+  }, []);
+
+  // Save an edited item — optimistic local update, then PATCH the fields.
+  // NOTE: the backend PATCH /errands/{id} (name/store) endpoint does NOT exist
+  // yet — only /errands/{id}/done. The optimistic update shows the change now;
+  // it will persist to Notion once that endpoint is added (see report).
+  const handleSaveEdit = useCallback((id: string, name: string, store: string) => {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, name, store } : i)));
+    setEditingItem(null);
+    fetch(`${JARVIS_URL}/errands/${id}`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name, store }),
+    }).catch((err) => console.error("[ShoppingList] PATCH edit failed:", err));
   }, []);
 
   // Send text to /remi then refresh
@@ -422,6 +557,7 @@ export default function ShoppingList() {
                       key={item.id}
                       item={item}
                       onDone={() => handleDone(item)}
+                      onEdit={() => setEditingItem(item)}
                     />
                   ))}
                 </div>
@@ -474,6 +610,15 @@ export default function ShoppingList() {
           </button>
         </div>
       </div>
+
+      {/* Tap-to-edit bottom sheet */}
+      {editingItem && (
+        <ErrandEditorSheet
+          item={editingItem}
+          onSave={(name, store) => handleSaveEdit(editingItem.id, name, store)}
+          onCancel={() => setEditingItem(null)}
+        />
+      )}
 
     </div>
   );

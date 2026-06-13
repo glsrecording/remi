@@ -328,6 +328,11 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .voice-button-idle {
   animation: voice-pulse 3s ease-in-out infinite;
 }
