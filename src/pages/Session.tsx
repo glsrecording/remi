@@ -17,11 +17,12 @@ const SESSION_START_KEY = "remi_session_start";  // ms epoch backup for timer re
 // `color + "33"` alpha-concat glow pattern works — same approach as Tasks.tsx).
 // These accent hues are mode-independent (not overridden in light mode), so
 // they're safe in both themes; surfaces/borders/text use tokens that flip.
-const STUDIO = "#3dd6b0";  // --color-studio — screen identity (teal)
-const AMBER  = "#f5a623";  // --color-tasks  — break state
-const DONE   = "#5bc468";  // --color-done   — earnings
-const BLUE   = "#378add";  // --color-calls  — switch song
-const ALERT  = "#ef4444";  // semantic stop / error (mode-independent)
+const STUDIO  = "#3dd6b0";  // --color-studio  — screen identity (teal) — notes
+const TONIGHT = "#9b8de8";  // --color-tonight — session tasks (purple), distinct from notes
+const AMBER   = "#f5a623";  // --color-tasks   — break state / add-task button
+const DONE    = "#5bc468";  // --color-done    — earnings
+const BLUE    = "#378add";  // --color-calls   — switch song
+const ALERT   = "#ef4444";  // semantic stop / error (mode-independent)
 
 type RateType = "hourly" | "day_rate" | "project_rate" | "no_charge";
 const RATE_TYPE_LABELS: Record<RateType, string> = {
@@ -1131,7 +1132,8 @@ export default function Session() {
                       style={{
                         background: "var(--surface-card)",
                         borderRadius: "var(--radius-md)",
-                        borderLeft: `3px solid ${t.checked ? DONE : STUDIO}`,
+                        // Purple (tonight) accent — visually distinct from teal notes.
+                        borderLeft: `3px solid ${TONIGHT}`,
                         borderTop: "1px solid var(--border-subtle)",
                         borderRight: "1px solid var(--border-subtle)",
                         borderBottom: "1px solid var(--border-subtle)",
@@ -1143,11 +1145,11 @@ export default function Session() {
                           width: 22,
                           height: 22,
                           borderRadius: "var(--radius-sm)",
-                          border: `1.5px solid ${t.checked ? DONE : "var(--border-strong)"}`,
-                          background: t.checked ? DONE : `${STUDIO}1a`,
+                          border: `1.5px solid ${t.checked ? TONIGHT : "var(--border-strong)"}`,
+                          background: t.checked ? TONIGHT : "var(--color-tonight-bg)",
                         }}
                       >
-                        {t.checked && <Check className="h-3.5 w-3.5" style={{ color: "#08110f" }} />}
+                        {t.checked && <Check className="h-3.5 w-3.5" style={{ color: "#1a1430" }} />}
                       </span>
                       <span
                         className="text-sm leading-snug"
