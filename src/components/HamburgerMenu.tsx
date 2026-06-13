@@ -2,11 +2,14 @@ import { useLocation } from "wouter";
 import {
   X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, MessageSquare,
   Terminal, Shuffle, Radio, BookOpen, RefreshCw, ClipboardCheck, ShoppingCart,
-  Layers, Phone, Film, Link2, Bell, Archive, Users,
+  Layers, Phone, Film, Link2, Bell, Archive, Users, CalendarClock, Dumbbell,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "@/hooks/use-theme";
+
+const JARVIS_URL   = "https://jarvis.joshhollandgls.com";
+const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
 interface HamburgerMenuProps {
   open: boolean;
@@ -19,7 +22,7 @@ interface MenuItem {
   label: string;
   icon: LucideIcon;
   path: string;
-  badge?: "tasksToday";   // amber today-count badge (Tasks)
+  badge?: "tasksToday" | "reminders";   // tasksToday = amber count (Tasks); reminders = Growth-blue count
 }
 
 interface MenuSection {
@@ -38,6 +41,7 @@ const SECTIONS: MenuSection[] = [
       { label: "Morning Briefing", icon: Sun,           path: "/morning-briefing" },
       { label: "Chat",             icon: MessageSquare,  path: "/" },
       { label: "Triage",           icon: Shuffle,        path: "/triage" },
+      { label: "Scheduler",        icon: CalendarClock,  path: "/scheduler" },
       { label: "Tasks",            icon: Brain,          path: "/tasks", badge: "tasksToday" },
     ],
   },
@@ -56,7 +60,8 @@ const SECTIONS: MenuSection[] = [
     items: [
       { label: "Scorecard",     icon: BarChart2,      path: "/scorecard" },
       { label: "Time Track",    icon: Clock,          path: "/time-track" },
-      { label: "Reminders",     icon: Bell,           path: "/reminders" },
+      { label: "Reminders",     icon: Bell,           path: "/reminders", badge: "reminders" },
+      { label: "Exercise",      icon: Dumbbell,       path: "/exercise" },
       { label: "Weekly Review", icon: ClipboardCheck, path: "#weekly-review" },
     ],
   },
@@ -100,10 +105,27 @@ function readTasksTodayCount(): number {
 export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeeklyReview }: HamburgerMenuProps) {
   const [location, navigate] = useLocation();
   const { isLight, toggleTheme } = useTheme();
+  const [reminderCount, setReminderCount] = useState(0);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
+  // On open: pull the count of pending (non-fired) reminders for the badge.
+  // Same endpoint the Reminders page uses. On failure or 0, no badge is shown.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch(`${JARVIS_URL}/reminders`, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        const list = Array.isArray(data?.reminders) ? data.reminders : [];
+        setReminderCount(list.filter((r: { fired?: boolean }) => !r.fired).length);
+      })
+      .catch(() => { if (!cancelled) setReminderCount(0); });
+    return () => { cancelled = true; };
   }, [open]);
 
   if (!open) return null;
@@ -124,6 +146,7 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
     const Icon = item.icon;
     const isActive = location === item.path;
     const showTasksBadge = item.badge === "tasksToday" && tasksToday > 0;
+    const showRemindersBadge = item.badge === "reminders" && reminderCount > 0;
     return (
       <button
         key={item.label}
@@ -169,6 +192,22 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
             data-testid="menu-badge-tasks-today"
           >
             {tasksToday}
+          </span>
+        )}
+        {showRemindersBadge && (
+          <span
+            className="shrink-0"
+            style={{
+              background: "var(--color-calls-bg)",
+              color: "var(--color-calls)",
+              fontSize: "10px",
+              padding: "1px 7px",
+              borderRadius: "var(--radius-pill)",
+              fontFamily: "'Space Mono', monospace",
+            }}
+            data-testid="menu-badge-reminders"
+          >
+            {reminderCount}
           </span>
         )}
       </button>
