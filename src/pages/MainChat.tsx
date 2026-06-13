@@ -601,8 +601,9 @@ export default function MainChat() {
   }, [messages, isJarvisLoading]);
   // On mount: pull shared history from server; fall back to localStorage silently
   useEffect(() => {
-    fetch(`${JARVIS_URL}/remi/history`, {
+    fetch(`${JARVIS_URL}/remi/history?t=${Date.now()}`, {
       headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+      cache: "no-store",
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -1106,16 +1107,38 @@ export default function MainChat() {
   const refreshData = useCallback(async () => {
     setSyncing(true);
     const minSpin = new Promise<void>((resolve) => setTimeout(resolve, 450));
-    const loadHistory = fetch(`${JARVIS_URL}/remi/history`, {
+    // cache: "no-store" + cache-busting param: /remi/history sends no
+    // Cache-Control header, so the PWA/WebView HTTP cache was serving a stale
+    // body on refresh — setMessages got the same old array and the list never
+    // visibly changed. Force the network so refresh always pulls fresh data.
+    const loadHistory = fetch(`${JARVIS_URL}/remi/history?t=${Date.now()}`, {
       headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+      cache: "no-store",
     })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (data?.messages?.length) setMessages(data.messages as ChatMessage[]); })
-      .catch(() => {});
+      .then((r) => {
+        console.log("[refresh] GET /remi/history →", r.status, "ok:", r.ok);
+        return r.ok ? r.json() : null;
+      })
+      .then((data) => {
+        const msgs = data?.messages;
+        console.log("[refresh] history payload:", {
+          count: Array.isArray(msgs) ? msgs.length : null,
+          firstId: msgs?.[0]?.id,
+          lastId: msgs?.[msgs.length - 1]?.id,
+        });
+        if (Array.isArray(msgs) && msgs.length) {
+          setMessages(msgs as ChatMessage[]);
+          console.log("[refresh] setMessages called with", msgs.length, "messages");
+        } else {
+          console.warn("[refresh] history empty/malformed — setMessages skipped");
+        }
+      })
+      .catch((err) => { console.error("[refresh] /remi/history failed:", err); });
     const loadDeadlines = sessionStorage.getItem("deadline_banner_dismissed") === "1"
       ? Promise.resolve()
-      : fetch(`${JARVIS_URL}/deadlines/check`, {
+      : fetch(`${JARVIS_URL}/deadlines/check?t=${Date.now()}`, {
           headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+          cache: "no-store",
         })
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => { if (d?.has_upcoming && d.count > 0) setDeadlineCount(d.count); })
