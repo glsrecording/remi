@@ -1746,14 +1746,17 @@ export default function MainChat() {
             style={
               inputText.trim()
                 ? {
-                    background: "var(--color-tonight)",
+                    // Darker, more saturated purple than --color-tonight (#9b8de8),
+                    // which read washed-out. Solid color carries it — no border.
+                    background: "#7c6fd4",
                     color: "#ffffff",
-                    boxShadow: "0 0 16px color-mix(in srgb, var(--color-tonight) 50%, transparent)",
+                    boxShadow: "0 0 16px rgba(124,111,212,0.5)",
                   }
                 : {
+                    // Purple-outlined when empty so it still reads as a Send button.
                     background: "var(--surface-elevated)",
                     color: "var(--text-secondary)",
-                    border: "1px solid var(--border-default)",
+                    border: "1.5px solid color-mix(in srgb, var(--color-tonight) 60%, transparent)",
                     boxShadow: "none",
                   }
             }
