@@ -184,34 +184,36 @@ function isWrapUpCommand(text: string): boolean {
 // unchanged). The subtle box-shadow glow + slightly-brighter luminous border are
 // the redesign's "lit from within" treatment, keyed off the same picked color.
 function userBubbleStyles(color: string, style: UserBubbleStyle) {
+  // Neon-edge glow: centered (0 0) so it haloes all sides, ~0.45 opacity, 16px blur.
   if (style === "outline")
     return {
       background: "transparent",
       border: `1.5px solid ${color}cc`,
       color: "var(--t-text2)" as const,
-      boxShadow: `0 2px 18px ${color}33`,
+      boxShadow: `0 0 16px ${color}73`,
     };
   return {
     background: color + "28",
-    border: `1.5px solid ${color}55`,
+    border: `1.5px solid ${color}99`,
     color: "var(--t-text2)" as const,
-    boxShadow: `0 2px 18px ${color}33`,
+    boxShadow: `0 0 16px ${color}73`,
   };
 }
 
 function remiBubbleStyles(color: string, style: UserBubbleStyle) {
+  // Neon-edge glow: centered (0 0), ~0.35 opacity, 14px blur; border ~0.5.
   if (style === "outline")
     return {
       background: "var(--t-bg-deep)",
-      border: `1px solid ${color}66`,
+      border: `1px solid ${color}80`,
       color: "var(--t-text2)" as const,
-      boxShadow: `0 2px 16px ${color}2b`,
+      boxShadow: `0 0 14px ${color}59`,
     };
   return {
     background: color + "18",
-    border: `1px solid ${color}4d`,
+    border: `1px solid ${color}80`,
     color: "var(--t-text2)" as const,
-    boxShadow: `0 2px 16px ${color}2b`,
+    boxShadow: `0 0 14px ${color}59`,
   };
 }
 
