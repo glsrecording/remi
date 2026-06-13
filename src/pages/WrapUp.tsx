@@ -6,6 +6,13 @@ const JARVIS_URL   = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 const AUTH_HEADERS = { Authorization: `Bearer ${REMI_API_KEY}` };
 
+// Design-system context colors (mirror design-system.css; hex so the `color + "26"`
+// alpha-concat glow pattern works — mode-independent, safe in light + dark).
+const TEAL  = "#3dd6b0";  // --color-studio — screen identity / summary / notes
+const GREEN = "#5bc468";  // --color-done   — "Added" confirmation
+const AMBER = "#f5a623";  // --color-tasks  — mic / voice capture / timestamp
+const ALERT = "#ef4444";  // recording cancel (semantic, mode-independent)
+
 interface SessionData {
   active: boolean;
   artist?: string;
@@ -44,6 +51,7 @@ export default function WrapUp() {
   const [isLocked, setIsLocked]         = useState(false);
   const [noteAdded, setNoteAdded]       = useState(false);
   const [ending, setEnding]             = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);  // teal pill glow on focus
 
   const mediaRecorderRef  = useRef<MediaRecorder | null>(null);
   const audioChunksRef    = useRef<BlobPart[]>([]);
@@ -221,89 +229,109 @@ export default function WrapUp() {
   return (
     <div
       className="flex flex-col min-h-screen"
-      style={{ background: "var(--t-bg)", color: "var(--t-text)" }}
+      style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}
     >
       {/* Header */}
       <div
-        className="flex items-center gap-3 px-4 py-4 border-b border-white/5"
-        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
+        className="flex items-center gap-3 px-4 py-4"
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)", borderBottom: "1px solid var(--border-subtle)" }}
       >
         <button
           onClick={() => navigate("/", { replace: true })}
-          className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+          className="p-2 rounded-xl hover:bg-white/5 transition-colors"
+          style={{ color: TEAL }}
           data-testid="button-back"
         >
           <ArrowLeft size={20} />
         </button>
         <span
-          className="text-sm font-semibold tracking-widest uppercase"
-          style={{ color: "#f59e0b" }}
+          className="text-sm font-bold tracking-widest uppercase"
+          style={{ color: TEAL, fontFamily: "'Space Mono', monospace" }}
         >
-          Session Wrap
+          Wrap Up
         </span>
       </div>
 
       {/* Scrollable body */}
       <div className="flex-1 px-5 pt-5 pb-52 space-y-5 overflow-y-auto">
 
-        {/* ── Session summary card ─────────────────────────────────────────── */}
+        {/* ── Session summary card — teal hero ─────────────────────────────── */}
         <div
-          className="rounded-2xl px-4 py-4 border"
+          className="px-4 py-4"
           style={{
-            background: "var(--t-surface)",
-            borderColor: session?.active ? "rgba(245,158,11,0.35)" : "var(--t-border)",
+            background: "var(--surface-elevated)",
+            borderRadius: "var(--radius-lg)",
+            borderLeft: `3px solid ${TEAL}`,
+            borderTop: "1px solid var(--border-subtle)",
+            borderRight: "1px solid var(--border-subtle)",
+            borderBottom: "1px solid var(--border-subtle)",
+            boxShadow: session?.active ? `0 0 18px ${TEAL}33` : `0 0 12px ${TEAL}1a`,
           }}
         >
           {loading ? (
             <div className="flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin" style={{ color: "#f59e0b" }} />
-              <span className="text-sm" style={{ color: "var(--t-text5)" }}>Loading…</span>
+              <Loader2 size={14} className="animate-spin" style={{ color: TEAL }} />
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading…</span>
             </div>
           ) : session?.active && sessionLabel ? (
             <>
-              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: "#f59e0b" }}>
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: TEAL, fontFamily: "'Space Mono', monospace" }}>
                 Active Session
               </p>
-              <p className="text-base font-semibold" style={{ color: "var(--t-text)" }}>
+              <p className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
                 🎵 {sessionLabel}
               </p>
               <div className="flex gap-6 mt-3">
                 {duration && (
                   <div>
-                    <p className="text-xs mb-0.5" style={{ color: "var(--t-text6)" }}>Duration</p>
-                    <p className="text-sm font-mono font-semibold" style={{ color: "var(--t-text)" }}>
+                    <p className="text-xs mb-0.5" style={{ color: "var(--text-muted)" }}>Duration</p>
+                    <p className="text-sm font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
                       {duration}
                     </p>
                   </div>
                 )}
                 <div>
-                  <p className="text-xs mb-0.5" style={{ color: "var(--t-text6)" }}>Notes</p>
-                  <p className="text-sm font-mono font-semibold" style={{ color: "var(--t-text)" }}>
+                  <p className="text-xs mb-0.5" style={{ color: "var(--text-muted)" }}>Notes</p>
+                  <p className="text-sm font-mono font-semibold" style={{ color: "var(--text-primary)" }}>
                     {notes.length}
                   </p>
                 </div>
               </div>
             </>
           ) : (
-            <p className="text-sm" style={{ color: "var(--t-text5)" }}>No active session</p>
+            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No active session</p>
           )}
         </div>
 
-        {/* ── Capture log ──────────────────────────────────────────────────── */}
+        {/* ── Capture log — notes captured (teal) ──────────────────────────── */}
         <div>
-          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--t-text6)" }}>
-            Capture Log
-          </p>
+          <div className="flex items-center gap-2.5 mb-3">
+            <span className="shrink-0 rounded-full" style={{ width: 8, height: 8, background: TEAL, boxShadow: `0 0 8px ${TEAL}66` }} />
+            <span
+              className="font-bold uppercase flex-1"
+              style={{ color: TEAL, fontFamily: "'Space Mono', monospace", fontSize: "var(--font-size-sm)", letterSpacing: "0.08em" }}
+            >
+              Capture Log
+            </span>
+            {notes.length > 0 && (
+              <span
+                className="font-mono rounded-full shrink-0"
+                style={{ background: `${TEAL}1f`, color: TEAL, fontSize: "var(--font-size-xs)", padding: "2px 8px" }}
+              >
+                {notes.length}
+              </span>
+            )}
+          </div>
           <div
-            className="rounded-xl border overflow-hidden"
-            style={{ background: "var(--t-surface)", borderColor: "var(--t-border)" }}
+            className="overflow-hidden"
+            style={{ background: "var(--surface-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)" }}
           >
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 size={16} className="animate-spin" style={{ color: "var(--t-text6)" }} />
+                <Loader2 size={16} className="animate-spin" style={{ color: TEAL }} />
               </div>
             ) : notes.length === 0 ? (
-              <p className="text-sm text-center py-8" style={{ color: "var(--t-text6)" }}>
+              <p className="text-sm text-center py-8" style={{ color: "var(--text-muted)" }}>
                 Nothing captured this session
               </p>
             ) : (
@@ -311,16 +339,20 @@ export default function WrapUp() {
                 {notes.map((n, i) => (
                   <div
                     key={i}
-                    className="flex gap-3 py-2 px-3 rounded-lg"
-                    style={{ background: "var(--t-el-low)" }}
+                    className="flex gap-3 py-2 px-3"
+                    style={{
+                      background: "var(--surface-elevated)",
+                      borderRadius: "var(--radius-md)",
+                      borderLeft: `2px solid ${n.type === "timestamp" ? AMBER : TEAL}`,
+                    }}
                   >
                     <span
                       className="text-xs font-mono mt-0.5 shrink-0"
-                      style={{ color: n.type === "timestamp" ? "#f59e0b" : "#4ade80" }}
+                      style={{ color: n.type === "timestamp" ? AMBER : TEAL }}
                     >
                       {n.ts}
                     </span>
-                    <p className="text-sm leading-snug" style={{ color: "var(--t-text3)" }}>
+                    <p className="text-sm leading-snug" style={{ color: "var(--text-secondary)" }}>
                       {n.text}
                     </p>
                   </div>
@@ -340,10 +372,10 @@ export default function WrapUp() {
           bottom: 0,
           left: 0,
           right: 0,
-          background: "var(--t-bg)",
+          background: "var(--surface-base)",
           zIndex: 10,
           padding: "12px 16px 48px",
-          borderTop: "1px solid rgba(255,255,255,0.05)",
+          borderTop: "1px solid var(--border-subtle)",
         }}
       >
         {/* Lock bar */}
@@ -353,16 +385,16 @@ export default function WrapUp() {
               type="button"
               onClick={handleCancelLocked}
               className="text-xs px-3 py-1.5 rounded-lg"
-              style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}
+              style={{ background: `${ALERT}20`, border: `1px solid ${ALERT}40`, color: ALERT }}
             >
               ✕ Cancel
             </button>
-            <span className="text-xs" style={{ color: "#ef4444" }}>🔒 Recording</span>
+            <span className="text-xs" style={{ color: ALERT }}>🔒 Recording</span>
             <button
               type="button"
               onClick={handleSendLocked}
               className="text-xs px-3 py-1.5 rounded-lg"
-              style={{ background: "#f59e0b20", border: "1px solid #f59e0b40", color: "#f59e0b" }}
+              style={{ background: `${AMBER}20`, border: `1px solid ${AMBER}40`, color: AMBER }}
             >
               Send ↑
             </button>
@@ -374,9 +406,9 @@ export default function WrapUp() {
           {isRecording ? (
             <div
               className="flex-1 flex items-center px-4 rounded-xl record-zone"
-              style={{ background: "#f59e0b26", border: "1.5px solid #f59e0b", minHeight: "42px" }}
+              style={{ background: `${AMBER}26`, border: `1.5px solid ${AMBER}`, minHeight: "42px" }}
             >
-              <span style={{ color: "#f59e0b", fontSize: "0.875rem", fontStyle: "italic" }}>
+              <span style={{ color: AMBER, fontSize: "0.875rem", fontStyle: "italic" }}>
                 Recording…
               </span>
             </div>
@@ -384,13 +416,13 @@ export default function WrapUp() {
             <div
               className="flex-1 flex items-center px-4 rounded-xl"
               style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.10)",
+                background: "var(--surface-elevated)",
+                border: "1px solid var(--border-default)",
                 minHeight: "42px",
               }}
             >
-              <Loader2 size={14} className="animate-spin mr-2" style={{ color: "#f59e0b" }} />
-              <span style={{ color: "#f59e0b", fontSize: "0.875rem", fontStyle: "italic" }}>
+              <Loader2 size={14} className="animate-spin mr-2" style={{ color: AMBER }} />
+              <span style={{ color: AMBER, fontSize: "0.875rem", fontStyle: "italic" }}>
                 Transcribing…
               </span>
             </div>
@@ -399,8 +431,19 @@ export default function WrapUp() {
               value={noteText}
               onChange={e => setNoteText(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleNoteSubmit()}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               placeholder="Anything to add before closing out?"
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+              className="flex-1 px-4 py-2.5 text-sm outline-none placeholder:opacity-50"
+              style={{
+                background: "var(--surface-elevated)",
+                borderRadius: "var(--radius-pill)",
+                color: "var(--text-primary)",
+                // Teal pill, brightens + glows on focus (MainChat pattern).
+                border: inputFocused ? `1.5px solid ${TEAL}` : `1.5px solid ${TEAL}66`,
+                boxShadow: inputFocused ? `0 0 16px ${TEAL}40, inset 0 0 10px ${TEAL}1f` : "none",
+                transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+              }}
             />
           )}
 
@@ -409,8 +452,8 @@ export default function WrapUp() {
             type="button"
             className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
             style={{
-              background: isRecording ? "#f59e0b" : "#f59e0b14",
-              border: `1.5px solid ${isRecording ? "#f59e0b" : "#f59e0b50"}`,
+              background: isRecording ? AMBER : `${AMBER}14`,
+              border: `1.5px solid ${isRecording ? AMBER : `${AMBER}50`}`,
               transform: isRecording ? "scale(1.15)" : "scale(1)",
               transition: "all 0.1s ease",
               marginRight: "20px",
@@ -433,8 +476,8 @@ export default function WrapUp() {
             data-testid="button-voice"
           >
             {isTranscribing
-              ? <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
-              : <Mic size={16} style={{ color: isRecording ? "#000" : "#f59e0b" }} />
+              ? <Loader2 size={16} className="animate-spin" style={{ color: AMBER }} />
+              : <Mic size={16} style={{ color: isRecording ? "#1a1200" : AMBER }} />
             }
           </button>
         </div>
@@ -442,21 +485,21 @@ export default function WrapUp() {
         {/* "Added" confirmation */}
         {noteAdded && (
           <div className="flex items-center justify-center gap-1.5 mb-2">
-            <CheckCircle size={13} style={{ color: "#4ade80" }} />
-            <span className="text-xs" style={{ color: "#4ade80" }}>Added</span>
+            <CheckCircle size={13} style={{ color: GREEN }} />
+            <span className="text-xs" style={{ color: GREEN }}>Added</span>
           </div>
         )}
 
-        {/* End Session / Done button */}
+        {/* End Session / Done button — teal filled + glow when active */}
         <button
           onClick={handleEnd}
           disabled={ending}
           className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all active:scale-95"
-          style={{
-            background: session?.active ? "#f59e0b" : "rgba(245,158,11,0.12)",
-            color: session?.active ? "#000" : "#f59e0b",
-            border: session?.active ? "none" : "1px solid rgba(245,158,11,0.3)",
-          }}
+          style={
+            session?.active
+              ? { background: TEAL, color: "#08110f", border: "none", boxShadow: `0 0 20px ${TEAL}55` }
+              : { background: "transparent", color: TEAL, border: `1.5px solid ${TEAL}80`, boxShadow: "none" }
+          }
           data-testid="button-end-session"
         >
           {ending ? "Ending…" : session?.active ? "End Session" : "Done"}
