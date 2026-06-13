@@ -180,17 +180,22 @@ function isWrapUpCommand(text: string): boolean {
   );
 }
 
+// Bubble fills/borders are driven by the picked color (color-picker behavior,
+// unchanged). The subtle box-shadow glow + slightly-brighter luminous border are
+// the redesign's "lit from within" treatment, keyed off the same picked color.
 function userBubbleStyles(color: string, style: UserBubbleStyle) {
   if (style === "outline")
     return {
       background: "transparent",
       border: `1.5px solid ${color}cc`,
       color: "var(--t-text2)" as const,
+      boxShadow: `0 2px 18px ${color}33`,
     };
   return {
     background: color + "28",
-    border: `1.5px solid ${color}30`,
+    border: `1.5px solid ${color}55`,
     color: "var(--t-text2)" as const,
+    boxShadow: `0 2px 18px ${color}33`,
   };
 }
 
@@ -198,13 +203,15 @@ function remiBubbleStyles(color: string, style: UserBubbleStyle) {
   if (style === "outline")
     return {
       background: "var(--t-bg-deep)",
-      border: `1px solid ${color}55`,
+      border: `1px solid ${color}66`,
       color: "var(--t-text2)" as const,
+      boxShadow: `0 2px 16px ${color}2b`,
     };
   return {
     background: color + "18",
-    border: `1px solid ${color}35`,
+    border: `1px solid ${color}4d`,
     color: "var(--t-text2)" as const,
+    boxShadow: `0 2px 16px ${color}2b`,
   };
 }
 
@@ -353,7 +360,11 @@ function SuggestionBar({ command, onUse, onDismiss }: SuggestionBarProps) {
     >
       <div
         className="flex items-center gap-2 px-3 py-2 rounded-xl"
-        style={{ background: "var(--t-card)", border: `1px solid ${accentColor}22` }}
+        style={{
+          background: "var(--surface-elevated)",
+          border: `1px solid ${accentColor}3a`,
+          boxShadow: `0 0 14px ${accentColor}24`,
+        }}
       >
         <div
           className="w-0.5 h-7 rounded-full shrink-0"
@@ -1166,14 +1177,14 @@ export default function MainChat() {
         <div className="flex items-center flex-1 -ml-1">
         <div className="relative">
           <button
-            className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-white/5 active:bg-white/10 transition-colors"
             onClick={() => {
               setMenuOpen(true);
               setOpenPicker(null);
             }}
             data-testid="button-hamburger-menu"
           >
-            <Menu size={20} />
+            <Menu size={20} style={{ color: "var(--color-tonight)", filter: "drop-shadow(0 0 4px #9b8de866)" }} />
           </button>
           {brainItems.filter((i) => i.bucket === "today").length > 0 && (
             <div
@@ -1197,7 +1208,7 @@ export default function MainChat() {
           )}
         </div>
           <button
-            className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-white/5 active:bg-white/10 transition-colors"
             onClick={cycleFontSize}
             data-testid="button-font-size"
             title="Font size"
@@ -1207,11 +1218,12 @@ export default function MainChat() {
               fontWeight: 700,
               lineHeight: 1,
               display: "block",
-              color: "inherit",
+              color: "var(--color-tasks)",
+              filter: "drop-shadow(0 0 4px #f5a62366)",
             }}>A</span>
           </button>
           <button
-            className="p-2 rounded-lg text-white/50 hover:text-white hover:bg-white/5 active:bg-white/10 transition-colors"
+            className="p-2 rounded-lg hover:bg-white/5 active:bg-white/10 transition-colors"
             onClick={() => { if (!syncing) refreshData(); }}
             data-testid="button-sync-refresh"
             title="Sync / refresh"
@@ -1220,6 +1232,8 @@ export default function MainChat() {
             <RefreshCw
               size={18}
               style={{
+                color: "var(--color-studio)",
+                filter: "drop-shadow(0 0 4px #3dd6b066)",
                 transition: "transform 400ms ease",
                 transform: syncing ? "rotate(360deg)" : "rotate(0deg)",
               }}
@@ -1449,10 +1463,14 @@ export default function MainChat() {
                             rel="noreferrer"
                             style={{
                               display: "block",
-                              padding: "5px 10px",
-                              borderRadius: "7px",
-                              background: "var(--t-el-low)",
-                              border: "1px solid var(--t-border-md)",
+                              padding: "6px 10px",
+                              borderRadius: "8px",
+                              background: "var(--surface-elevated)",
+                              borderLeft: "2px solid #3dd6b0",
+                              borderTop: "1px solid #3dd6b026",
+                              borderRight: "1px solid #3dd6b026",
+                              borderBottom: "1px solid #3dd6b026",
+                              boxShadow: "0 0 12px #3dd6b01f",
                               color: "var(--t-text3)",
                               fontSize: "0.78em",
                               textDecoration: "none",
@@ -1481,17 +1499,28 @@ export default function MainChat() {
                     </div>
                   )}
                   {msg.card?.type === "task_done" && (
-                    <div style={{ marginTop: "10px", padding: "10px 12px", borderRadius: "10px", background: msg.card.show_undo ? "rgba(20,184,166,0.07)" : "rgba(245,158,11,0.07)", border: msg.card.show_undo ? "1px solid rgba(20,184,166,0.2)" : "1px solid rgba(245,158,11,0.2)" }}>
+                    // Capture card: 3px left accent + category-color glow on an
+                    // elevated surface. Done (✓) → studio teal; reminder (⏰) → tonight purple.
+                    <div style={{
+                      marginTop: "10px", padding: "10px 12px",
+                      borderRadius: "10px",
+                      background: "var(--surface-elevated)",
+                      borderLeft: `3px solid ${msg.card.show_undo ? "#3dd6b0" : "#9b8de8"}`,
+                      borderTop: `1px solid ${msg.card.show_undo ? "#3dd6b0" : "#9b8de8"}2e`,
+                      borderRight: `1px solid ${msg.card.show_undo ? "#3dd6b0" : "#9b8de8"}2e`,
+                      borderBottom: `1px solid ${msg.card.show_undo ? "#3dd6b0" : "#9b8de8"}2e`,
+                      boxShadow: `0 0 16px ${msg.card.show_undo ? "#3dd6b0" : "#9b8de8"}33`,
+                    }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "7px", marginBottom: "9px" }}>
-                        <span style={{ color: msg.card.show_undo ? "#22c55e" : "#f59e0b", fontSize: "1em", lineHeight: 1 }}>{msg.card.show_undo ? "✓" : "⏰"}</span>
-                        <span style={{ color: "var(--t-text2)", fontSize: "0.85em", fontWeight: 500, lineHeight: 1.3 }}>{msg.card.task_name}</span>
+                        <span style={{ color: msg.card.show_undo ? "#3dd6b0" : "#9b8de8", fontSize: "1em", lineHeight: 1 }}>{msg.card.show_undo ? "✓" : "⏰"}</span>
+                        <span style={{ color: "var(--text-primary)", fontSize: "0.85em", fontWeight: 500, lineHeight: 1.3 }}>{msg.card.task_name}</span>
                       </div>
                       <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                         <a
                           href={msg.card.notion_url}
                           target="_blank"
                           rel="noreferrer"
-                          style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "6px", background: msg.card.show_undo ? "rgba(20,184,166,0.12)" : "rgba(245,158,11,0.12)", border: msg.card.show_undo ? "1px solid rgba(20,184,166,0.25)" : "1px solid rgba(245,158,11,0.25)", color: msg.card.show_undo ? "#14b8a6" : "#f59e0b", fontSize: "0.78em", textDecoration: "none", lineHeight: 1 }}
+                          style={{ display: "inline-flex", alignItems: "center", gap: "4px", padding: "4px 10px", borderRadius: "6px", background: `${msg.card.show_undo ? "#3dd6b0" : "#9b8de8"}1f`, border: `1px solid ${msg.card.show_undo ? "#3dd6b0" : "#9b8de8"}45`, color: msg.card.show_undo ? "#3dd6b0" : "#9b8de8", fontSize: "0.78em", textDecoration: "none", lineHeight: 1 }}
                         >
                           <ExternalLink size={11} />
                           View in Notion
@@ -1499,7 +1528,7 @@ export default function MainChat() {
                         {msg.card.show_undo && (
                           <button
                             onClick={() => sendMessage("undo that")}
-                            style={{ padding: "4px 10px", borderRadius: "6px", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", color: "var(--t-text5)", fontSize: "0.78em", cursor: "pointer", lineHeight: 1 }}
+                            style={{ padding: "4px 10px", borderRadius: "6px", background: "transparent", border: "1px solid var(--border-default)", color: "var(--text-secondary)", fontSize: "0.78em", cursor: "pointer", lineHeight: 1 }}
                           >
                             Undo
                           </button>
@@ -1637,8 +1666,9 @@ export default function MainChat() {
                     key={trigger}
                     className="flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all active:scale-95"
                     style={{
-                      background: color + "14",
-                      border: `1px solid ${color}30`,
+                      background: color + "1a",
+                      border: `1px solid ${color}40`,
+                      boxShadow: `0 0 10px ${color}24`,
                       color: "var(--t-text3)",
                     }}
                     onClick={() => handleUseSuggestion(trigger)}
@@ -1702,7 +1732,8 @@ export default function MainChat() {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder='Try "Mix note for [song] — [note]"'
-              className="min-w-0 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 md:py-3 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+              className="remi-chat-input min-w-0 w-full px-4 py-2.5 md:py-3 text-sm placeholder:text-white/20"
+              style={{ color: "var(--text-primary)" }}
               data-testid="input-text-command"
             />
           )}
@@ -1710,7 +1741,11 @@ export default function MainChat() {
           <button
             type="submit"
             className="shrink-0 px-4 py-2.5 md:py-3 rounded-xl text-sm font-medium transition-all active:scale-95"
-            style={{ background: userColor, color: "#111111" }}
+            style={
+              inputText.trim()
+                ? { background: "var(--color-tonight)", color: "#ffffff", boxShadow: "0 0 16px #9b8de855" }
+                : { background: "var(--surface-elevated)", color: "var(--text-muted)", border: "1px solid var(--border-default)" }
+            }
             data-testid="button-send"
           >
             Send
@@ -1721,8 +1756,9 @@ export default function MainChat() {
             type="button"
             className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center"
             style={{
-              background: isRecording ? userColor : `${userColor}14`,
-              border: `1.5px solid ${isRecording ? userColor : `${userColor}50`}`,
+              background: isRecording ? "#3dd6b0" : "#3dd6b014",
+              border: `1.5px solid ${isRecording ? "#3dd6b0" : "#3dd6b050"}`,
+              boxShadow: "0 0 12px #3dd6b03a",
               // No scale on recording — a size change shifted the button under the
               // user's finger. Recording feedback is the bg/border/icon-color change.
               // Fixed dimensions (w-10 h-10 / md:w-12 h-12) keep position identical.
@@ -1747,9 +1783,9 @@ export default function MainChat() {
             data-testid="button-voice"
           >
             {isTranscribing ? (
-              <Loader2 size={16} className="animate-spin" style={{ color: userColor }} />
+              <Loader2 size={16} className="animate-spin" style={{ color: "var(--color-studio)" }} />
             ) : (
-              <Mic size={16} style={{ color: isRecording ? "#ffffff" : userColor }} />
+              <Mic size={16} style={{ color: isRecording ? "#ffffff" : "var(--color-studio)" }} />
             )}
           </button>
 

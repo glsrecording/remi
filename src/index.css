@@ -333,6 +333,20 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* MainChat input — elevated pill with a faint inner glow on focus (design-system tokens) */
+.remi-chat-input {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-pill);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.remi-chat-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--color-tonight) 55%, transparent);
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--color-tonight) 16%, transparent),
+              0 0 0 1px color-mix(in srgb, var(--color-tonight) 25%, transparent);
+}
+
 .voice-button-idle {
   animation: voice-pulse 3s ease-in-out infinite;
 }
