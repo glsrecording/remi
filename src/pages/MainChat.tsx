@@ -521,6 +521,9 @@ export default function MainChat() {
     STORAGE_KEYS.REMI_COLOR,
     "#f59e0b",
   );
+  // Drives the input's border/glow color from userColor (the picked bubble color).
+  // Tracked in JS because :focus styling can't be done inline.
+  const [inputFocused, setInputFocused] = useState(false);
   const [bubbleStyle, setBubbleStyle] = useLocalStorage<UserBubbleStyle>(
     STORAGE_KEYS.USER_BUBBLE_STYLE,
     "filled",
@@ -1733,9 +1736,21 @@ export default function MainChat() {
             <input
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               placeholder='Try "Mix note for [song] — [note]"'
               className="remi-chat-input min-w-0 w-full px-4 py-2.5 md:py-3 text-sm"
-              style={{ color: "var(--text-primary)" }}
+              style={{
+                color: "var(--text-primary)",
+                // Border + glow follow the picked user color. Inline beats the
+                // shared .remi-chat-input class (which other pages keep on tonight).
+                border: inputFocused
+                  ? `1.5px solid ${userColor}`
+                  : `1.5px solid color-mix(in srgb, ${userColor} 60%, transparent)`,
+                boxShadow: inputFocused
+                  ? `0 0 20px color-mix(in srgb, ${userColor} 35%, transparent), inset 0 0 12px color-mix(in srgb, ${userColor} 25%, transparent)`
+                  : "none",
+              }}
               data-testid="input-text-command"
             />
           )}
@@ -1746,17 +1761,17 @@ export default function MainChat() {
             style={
               inputText.trim()
                 ? {
-                    // Darker, more saturated purple than --color-tonight (#9b8de8),
-                    // which read washed-out. Solid color carries it — no border.
-                    background: "#7c6fd4",
+                    // Picked user color, darkened ~15% (mix toward black) so it's
+                    // richer/not washed out while white text + glow stay crisp.
+                    background: `color-mix(in srgb, ${userColor} 85%, #000)`,
                     color: "#ffffff",
-                    boxShadow: "0 0 16px rgba(124,111,212,0.5)",
+                    boxShadow: `0 0 16px color-mix(in srgb, ${userColor} 50%, transparent)`,
                   }
                 : {
-                    // Purple-outlined when empty so it still reads as a Send button.
-                    background: "var(--surface-elevated)",
+                    // Outlined in the user color when empty — still clearly "your color".
+                    background: "transparent",
                     color: "var(--text-secondary)",
-                    border: "1.5px solid color-mix(in srgb, var(--color-tonight) 60%, transparent)",
+                    border: `1.5px solid color-mix(in srgb, ${userColor} 50%, transparent)`,
                     boxShadow: "none",
                   }
             }
@@ -1770,9 +1785,11 @@ export default function MainChat() {
             type="button"
             className="shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center"
             style={{
-              background: isRecording ? "#3dd6b0" : "#3dd6b014",
-              border: `1.5px solid ${isRecording ? "#3dd6b0" : "#3dd6b050"}`,
-              boxShadow: "0 0 12px #3dd6b03a",
+              // Solid remiColor mic with a white icon — reads in both light + dark.
+              // Recording feedback is a white ring (no size change → stays under finger).
+              background: remiColor,
+              border: `1.5px solid ${isRecording ? "#ffffff" : `color-mix(in srgb, ${remiColor} 65%, #000)`}`,
+              boxShadow: `0 0 12px color-mix(in srgb, ${remiColor} 40%, transparent)`,
               // No scale on recording — a size change shifted the button under the
               // user's finger. Recording feedback is the bg/border/icon-color change.
               // Fixed dimensions (w-10 h-10 / md:w-12 h-12) keep position identical.
@@ -1797,9 +1814,9 @@ export default function MainChat() {
             data-testid="button-voice"
           >
             {isTranscribing ? (
-              <Loader2 size={16} className="animate-spin" style={{ color: "var(--color-studio)" }} />
+              <Loader2 size={16} className="animate-spin" style={{ color: "#ffffff" }} />
             ) : (
-              <Mic size={16} style={{ color: isRecording ? "#ffffff" : "var(--color-studio)" }} />
+              <Mic size={16} style={{ color: "#ffffff" }} />
             )}
           </button>
 
