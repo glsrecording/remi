@@ -937,7 +937,7 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
           borderRight: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
           borderBottom: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
           // Starred (focused) tasks get a brighter amber glow on the left accent bar.
-          boxShadow: isFocused ? "inset 3px 0 12px rgba(245,166,35,0.45)" : "none",
+          boxShadow: isFocused ? "inset 4px 0 16px rgba(245,166,35,0.5)" : "none",
           transform: `translate(${offset.x}px, ${offset.y}px)`,
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
