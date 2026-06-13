@@ -2,11 +2,16 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Mic, MicOff, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
-import { useLocalStorage } from "@/hooks/use-local-storage";
-import { STORAGE_KEYS } from "@/lib/storage";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
+
+// Screen identity — Mix Notes is the studio capture tool → --color-studio teal.
+// Mics / voice capture use --color-tasks amber; recording/error stay semantic red.
+const ACCENT = "#3dd6b0";  // --color-studio (teal) — title, badges, accents, glow
+const AMBER  = "#f5a623";  // --color-tasks  — mic / voice capture / jog
+const ALERT  = "#ef4444";  // recording / error (semantic, mode-independent)
+const DONE   = "#5bc468";  // --color-done   — "saved" flash
 
 interface SessionNote {
   id: string;
@@ -74,10 +79,16 @@ function SwipeableNote({
 
   return (
     <div
-      className="px-4 py-3 rounded-xl"
+      className="px-4 py-3"
       style={{
-        background: "var(--t-card)",
-        border: `1px solid ${dx > 30 ? accent + "60" : "var(--t-border)"}`,
+        background: "var(--surface-card)",
+        borderRadius: "var(--radius-md)",
+        borderLeft: `2px solid ${accent}`,
+        borderTop: `1px solid ${dx > 30 ? accent + "60" : "var(--border-subtle)"}`,
+        borderRight: `1px solid ${dx > 30 ? accent + "60" : "var(--border-subtle)"}`,
+        borderBottom: `1px solid ${dx > 30 ? accent + "60" : "var(--border-subtle)"}`,
+        // Lighter glow than task cards — notes are secondary to songs.
+        boxShadow: `0 0 8px ${accent}26`,
         touchAction: "pan-y",
         userSelect: "none",
         transform: `translateX(${dx}px)`,
@@ -89,8 +100,8 @@ function SwipeableNote({
       onPointerUp={onUp}
       onPointerCancel={onCancel}
     >
-      <p className="text-sm leading-snug" style={{ color: "var(--t-text)" }}>{note.note}</p>
-      <p className="text-xs mt-1.5" style={{ color: "var(--t-text6)" }}>{fmtDateTime(note.created_time)}</p>
+      <p className="text-sm leading-snug" style={{ color: "var(--text-primary)" }}>{note.note}</p>
+      <p className="text-xs mt-1.5" style={{ color: "var(--text-muted)" }}>{fmtDateTime(note.created_time)}</p>
     </div>
   );
 }
@@ -106,9 +117,9 @@ function fmtDateTime(iso: string): string {
 }
 
 export default function MixNotes() {
-  const [ACCENT] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
   const [menuOpen, setMenuOpen] = useState(false);
   const [mode, setMode] = useState<"new" | "view" | "jog">("new");
+  const [noteFocused, setNoteFocused] = useState(false);  // teal pill glow on focus
 
   // ── Jog Mode feedback (observes the shared capture path, never modifies it) ──
   const [jogFlash, setJogFlash]   = useState<null | "saved" | "error">(null);
@@ -333,15 +344,23 @@ export default function MixNotes() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
+    <div
+      className="flex flex-col h-full w-full"
+      style={{
+        background: "var(--surface-base)",
+        // Jog mode: subtle whole-screen teal glow to signal the different mode.
+        boxShadow: mode === "jog" ? `inset 0 0 80px ${ACCENT}1f` : "none",
+        transition: "box-shadow 0.3s ease",
+      }}
+    >
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <PageHeader title="Mix Notes" color={ACCENT} onMenu={() => setMenuOpen(true)} />
 
-      {/* Mode toggle */}
-      <div className="px-4 py-2.5 border-b shrink-0" style={{ borderColor: "var(--t-border)" }}>
+      {/* Mode toggle — pill segmented control, teal active (matches Tasks filters) */}
+      <div className="px-4 py-2.5 shrink-0" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
         <div
-          className="flex p-0.5 rounded-xl"
-          style={{ background: "var(--t-card)", border: "1px solid var(--t-border-md)" }}
+          className="flex p-0.5"
+          style={{ background: "var(--surface-card)", borderRadius: "var(--radius-pill)", border: "1px solid var(--border-default)" }}
         >
           {([
             { label: "New Note",   value: "new"  },
@@ -352,11 +371,12 @@ export default function MixNotes() {
             return (
               <button
                 key={value}
-                className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                className="flex-1 py-1.5 text-xs font-semibold transition-all"
                 style={{
-                  background: isActive ? ACCENT + "22" : "transparent",
-                  color:      isActive ? ACCENT : "var(--t-text5)",
-                  border:     isActive ? `1px solid ${ACCENT}50` : "1px solid transparent",
+                  background: isActive ? `${ACCENT}22` : "transparent",
+                  color:      isActive ? ACCENT : "var(--text-muted)",
+                  border:     isActive ? `1px solid ${ACCENT}66` : "1px solid transparent",
+                  borderRadius: "var(--radius-pill)",
                 }}
                 onClick={() => setMode(value)}
               >
@@ -370,19 +390,31 @@ export default function MixNotes() {
       {/* ── NEW NOTE mode ───────────────────────────────────────────────────── */}
       {mode === "new" && (
         <>
-          <div className="px-4 py-3 border-b border-white/5 shrink-0">
+          <div className="px-4 py-3 shrink-0" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
             <div className="flex gap-2">
               <input
                 value={artist}
                 onChange={(e) => setArtist(e.target.value)}
                 placeholder="Artist"
-                className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+                className="flex-1 min-w-0 px-3 py-2 text-sm outline-none placeholder:opacity-60"
+                style={{
+                  background: "var(--surface-elevated)",
+                  border: `1px solid ${ACCENT}40`,
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-primary)",
+                }}
               />
               <input
                 value={song}
                 onChange={(e) => setSong(e.target.value)}
                 placeholder="Song"
-                className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+                className="flex-1 min-w-0 px-3 py-2 text-sm outline-none placeholder:opacity-60"
+                style={{
+                  background: "var(--surface-elevated)",
+                  border: `1px solid ${ACCENT}40`,
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-primary)",
+                }}
               />
             </div>
           </div>
@@ -390,14 +422,26 @@ export default function MixNotes() {
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2" style={{ paddingBottom: "120px" }}>
             {sessionNotes.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 gap-2">
-                <p className="text-sm text-white/30">Hold mic to capture a note</p>
-                <p className="text-xs text-white/20">Notes go straight to Notion</p>
+                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Hold mic to capture a note</p>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Notes go straight to Notion</p>
               </div>
             ) : (
               sessionNotes.map((n) => (
-                <div key={n.id} className="px-4 py-3 rounded-xl border border-white/8" style={{ background: "var(--t-card)" }}>
-                  <p className="text-sm text-white/85 leading-snug">{n.note}</p>
-                  <p className="text-xs text-white/25 mt-1">
+                <div
+                  key={n.id}
+                  className="px-4 py-3"
+                  style={{
+                    background: "var(--surface-card)",
+                    borderRadius: "var(--radius-md)",
+                    borderLeft: `2px solid ${ACCENT}`,
+                    borderTop: "1px solid var(--border-subtle)",
+                    borderRight: "1px solid var(--border-subtle)",
+                    borderBottom: "1px solid var(--border-subtle)",
+                    boxShadow: `0 0 8px ${ACCENT}26`,
+                  }}
+                >
+                  <p className="text-sm leading-snug" style={{ color: "var(--text-primary)" }}>{n.note}</p>
+                  <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
                     {n.timestamp}
                     {(n.artist || n.song) && " · "}
                     {n.artist}{n.artist && n.song ? " / " : ""}{n.song}
@@ -408,26 +452,26 @@ export default function MixNotes() {
           </div>
 
           {/* Fixed bottom mic bar */}
-          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--t-surface)", zIndex: 10, padding: "12px 16px 48px" }}>
+          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--surface-base)", zIndex: 10, padding: "12px 16px 48px" }}>
             {recordingError && (
-              <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
+              <p className="text-xs mb-1.5 text-center" style={{ color: ALERT }}>{recordingError}</p>
             )}
             {isLocked && (
               <div className="flex items-center justify-between mb-2 px-1">
                 <button type="button" onClick={handleCancelLocked} className="text-xs px-3 py-1.5 rounded-lg"
-                  style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}>
+                  style={{ background: `${ALERT}20`, border: `1px solid ${ALERT}40`, color: ALERT }}>
                   ✕ Cancel
                 </button>
-                <span className="text-xs" style={{ color: "#ef4444" }}>🔒 Recording</span>
+                <span className="text-xs" style={{ color: ALERT }}>🔒 Recording</span>
                 <button type="button" onClick={handleSendLocked} className="text-xs px-3 py-1.5 rounded-lg"
-                  style={{ background: "#22c55e20", border: "1px solid #22c55e40", color: "#22c55e" }}>
+                  style={{ background: `${DONE}20`, border: `1px solid ${DONE}40`, color: DONE }}>
                   Send ↑
                 </button>
               </div>
             )}
             {isRecording && !isLocked && (
               <div className="flex items-center justify-center gap-2 mb-2 h-5">
-                <span className="text-xs" style={{ color: "#ef4444" }}>Recording…</span>
+                <span className="text-xs" style={{ color: ALERT }}>Recording…</span>
               </div>
             )}
             <form
@@ -437,17 +481,36 @@ export default function MixNotes() {
               <input
                 value={noteText}
                 onChange={(e) => setNoteText(e.target.value)}
+                onFocus={() => setNoteFocused(true)}
+                onBlur={() => setNoteFocused(false)}
                 placeholder={
                   artist || song
                     ? `Mix note for ${artist}${artist && song ? " / " : ""}${song}…`
                     : "Type a mix note…"
                 }
-                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+                className="flex-1 px-4 py-2.5 text-sm outline-none placeholder:opacity-60"
+                style={{
+                  background: "var(--surface-elevated)",
+                  borderRadius: "var(--radius-pill)",
+                  color: "var(--text-primary)",
+                  // Teal pill, brightens + glows on focus (same idea as MainChat input).
+                  border: noteFocused
+                    ? `1.5px solid ${ACCENT}`
+                    : `1.5px solid ${ACCENT}66`,
+                  boxShadow: noteFocused
+                    ? `0 0 16px ${ACCENT}40, inset 0 0 10px ${ACCENT}1f`
+                    : "none",
+                  transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+                }}
               />
               <button
                 type="submit"
-                className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
-                style={{ background: ACCENT, color: "#111111" }}
+                className="shrink-0 px-4 py-2.5 text-sm font-medium transition-all active:scale-95"
+                style={
+                  noteText.trim()
+                    ? { background: ACCENT, color: "#08110f", borderRadius: "var(--radius-pill)", boxShadow: `0 0 16px ${ACCENT}55` }
+                    : { background: "transparent", color: "var(--text-secondary)", border: `1.5px solid ${ACCENT}80`, borderRadius: "var(--radius-pill)" }
+                }
               >
                 Send
               </button>
@@ -455,8 +518,9 @@ export default function MixNotes() {
                 type="button"
                 className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-150"
                 style={{
-                  background: isRecording ? "#ef444422" : "#f59e0b14",
-                  border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+                  background: isRecording ? `${ALERT}22` : `${AMBER}14`,
+                  border: `1.5px solid ${isRecording ? ALERT : `${AMBER}50`}`,
+                  boxShadow: `0 0 12px ${AMBER}3a`,
                   marginRight: "20px",
                   touchAction: "none",
                 }}
@@ -466,8 +530,8 @@ export default function MixNotes() {
                 onPointerLeave={handleMicUp}
               >
                 {isRecording
-                  ? <MicOff size={16} style={{ color: "#ef4444" }} />
-                  : <Mic size={16} style={{ color: "#f59e0b" }} />}
+                  ? <MicOff size={16} style={{ color: ALERT }} />
+                  : <Mic size={16} style={{ color: AMBER }} />}
               </button>
             </form>
           </div>
@@ -486,23 +550,23 @@ export default function MixNotes() {
           {pulling && (
             <div className="flex items-center justify-center gap-2 py-2">
               <Loader2 size={14} className="animate-spin" style={{ color: ACCENT }} />
-              <span className="text-xs" style={{ color: "var(--t-text6)" }}>Refreshing…</span>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>Refreshing…</span>
             </div>
           )}
 
           {viewLoading && !pulling && (
             <div className="flex items-center justify-center gap-2 py-16">
               <Loader2 size={18} className="animate-spin" style={{ color: ACCENT }} />
-              <span className="text-sm" style={{ color: "var(--t-text5)" }}>Loading notes…</span>
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Loading notes…</span>
             </div>
           )}
 
           {!viewLoading && viewError && (
             <div className="flex flex-col items-center gap-3 py-16">
-              <p className="text-sm" style={{ color: "rgba(239,68,68,0.8)" }}>Could not load ({viewError})</p>
+              <p className="text-sm" style={{ color: ALERT }}>Could not load ({viewError})</p>
               <button
                 className="px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95"
-                style={{ background: ACCENT + "20", color: ACCENT }}
+                style={{ background: `${ACCENT}20`, color: ACCENT }}
                 onClick={loadViewNotes}
               >
                 Retry
@@ -512,43 +576,54 @@ export default function MixNotes() {
 
           {!viewLoading && !viewError && viewGroups.length === 0 && (
             <div className="flex flex-col items-center justify-center gap-2 py-16">
-              <p className="text-sm" style={{ color: "var(--t-text5)" }}>No mix notes yet.</p>
-              <p className="text-xs" style={{ color: "var(--t-text6)" }}>Capture notes in New Note mode</p>
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No mix notes yet.</p>
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>Capture notes in New Note mode</p>
             </div>
           )}
 
           {!viewLoading && !viewError && viewGroups.map((group) => (
             <div key={`${group.artist}||${group.song}`}>
-              <div className="flex items-baseline gap-2 mb-2 px-1">
+              <div
+                className="flex items-center gap-2 mb-2 px-3 py-2"
+                style={{
+                  background: "var(--surface-card)",
+                  borderRadius: "var(--radius-md)",
+                  borderLeft: `3px solid ${ACCENT}`,
+                  borderTop: "1px solid var(--border-subtle)",
+                  borderRight: "1px solid var(--border-subtle)",
+                  borderBottom: "1px solid var(--border-subtle)",
+                  boxShadow: `0 0 10px ${ACCENT}26`,
+                }}
+              >
                 <div className="flex-1 min-w-0">
-                  {(group.artist || group.song) ? (
+                  {group.artist && group.song ? (
                     <>
-                      {group.artist && (
-                        <span
-                          className="text-xs font-bold tracking-wide uppercase"
-                          style={{ color: ACCENT, fontFamily: "'Space Mono', monospace" }}
-                        >
-                          {group.artist}
-                        </span>
-                      )}
-                      {group.song && (
-                        <span className="text-xs" style={{ color: "var(--t-text5)" }}>
-                          {group.artist ? "/ " : ""}{group.song}
-                        </span>
-                      )}
+                      <p
+                        className="text-xs uppercase tracking-wide truncate"
+                        style={{ color: "var(--text-secondary)", fontFamily: "'Space Mono', monospace" }}
+                      >
+                        {group.artist}
+                      </p>
+                      <p className="text-sm truncate" style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+                        {group.song}
+                      </p>
                     </>
+                  ) : (group.artist || group.song) ? (
+                    <p className="text-sm truncate" style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+                      {group.song || group.artist}
+                    </p>
                   ) : (
-                    <span
-                      className="text-xs font-bold uppercase tracking-wide"
-                      style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
+                    <p
+                      className="text-sm uppercase tracking-wide"
+                      style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}
                     >
                       Untitled
-                    </span>
+                    </p>
                   )}
                 </div>
                 <span
-                  className="text-xs font-mono px-1.5 py-0.5 rounded-full shrink-0"
-                  style={{ background: ACCENT + "18", color: ACCENT }}
+                  className="text-xs font-mono px-2 py-0.5 rounded-full shrink-0"
+                  style={{ background: `${ACCENT}1f`, color: ACCENT }}
                 >
                   {group.notes.length}
                 </span>
@@ -587,7 +662,7 @@ export default function MixNotes() {
                 </span>
               )}
               {song && (
-                <span className="text-sm" style={{ color: "var(--t-text5)" }}>
+                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>
                   {artist ? " / " : ""}{song}
                 </span>
               )}
@@ -595,7 +670,8 @@ export default function MixNotes() {
           )}
 
           {/* Large centered mic — hold to record, release to send (reuses the
-              exact handlers from New Note: handleMicDown / handleMicUp + slide-lock) */}
+              exact handlers from New Note: handleMicDown / handleMicUp + slide-lock).
+              Amber = voice capture, consistent with the New Note mic. */}
           <button
             type="button"
             aria-label="Hold to record mix note"
@@ -603,9 +679,9 @@ export default function MixNotes() {
             style={{
               width: 120,
               height: 120,
-              background: isRecording ? "#ef444422" : ACCENT + "1f",
-              border: `3px solid ${isRecording ? "#ef4444" : ACCENT}`,
-              boxShadow: isRecording ? "0 0 0 10px #ef444412" : `0 0 0 8px ${ACCENT}12`,
+              background: isRecording ? `${ALERT}22` : `${AMBER}1f`,
+              border: `3px solid ${isRecording ? ALERT : AMBER}`,
+              boxShadow: isRecording ? `0 0 0 10px ${ALERT}12` : `0 0 0 8px ${AMBER}12`,
               touchAction: "none",
               WebkitTapHighlightColor: "transparent",
             }}
@@ -615,20 +691,20 @@ export default function MixNotes() {
             onPointerLeave={handleMicUp}
           >
             {isRecording
-              ? <MicOff size={48} style={{ color: "#ef4444" }} />
-              : <Mic size={48} style={{ color: ACCENT }} />}
+              ? <MicOff size={48} style={{ color: ALERT }} />
+              : <Mic size={48} style={{ color: AMBER }} />}
           </button>
 
           {/* Status line — saved/error flash, recording prompt, or idle hint */}
           <div className="mt-10 h-6 flex items-center justify-center px-4 text-center">
             {jogFlash === "saved" ? (
-              <span className="text-sm font-semibold" style={{ color: "#22c55e" }}>✓ Note saved</span>
+              <span className="text-sm font-semibold" style={{ color: DONE }}>✓ Note saved</span>
             ) : jogFlash === "error" ? (
-              <span className="text-sm font-medium" style={{ color: "#ef4444" }}>{recordingError || "Error — try again"}</span>
+              <span className="text-sm font-medium" style={{ color: ALERT }}>{recordingError || "Error — try again"}</span>
             ) : isRecording ? (
-              <span className="text-sm" style={{ color: "#ef4444" }}>Recording… release to send</span>
+              <span className="text-sm" style={{ color: ALERT }}>Recording… release to send</span>
             ) : (
-              <span className="text-sm" style={{ color: "var(--t-text5)" }}>Hold to record</span>
+              <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Hold to record</span>
             )}
           </div>
 
@@ -636,11 +712,11 @@ export default function MixNotes() {
           {isLocked && (
             <div className="flex items-center gap-4 mt-6">
               <button type="button" onClick={handleCancelLocked} className="text-sm px-4 py-2 rounded-xl"
-                style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}>
+                style={{ background: `${ALERT}20`, border: `1px solid ${ALERT}40`, color: ALERT }}>
                 ✕ Cancel
               </button>
               <button type="button" onClick={handleSendLocked} className="text-sm px-4 py-2 rounded-xl"
-                style={{ background: "#22c55e20", border: "1px solid #22c55e40", color: "#22c55e" }}>
+                style={{ background: `${DONE}20`, border: `1px solid ${DONE}40`, color: DONE }}>
                 Send ↑
               </button>
             </div>
