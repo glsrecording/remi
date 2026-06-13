@@ -260,16 +260,16 @@ function StageOverdue({ onNext }: { onNext: () => void }) {
       </CardStack>
       <p className="text-center text-xs" style={{ color: "var(--t-text5)" }}>{tasks.length} remaining</p>
       {!pickDate && (
-        <div className="grid grid-cols-5 gap-1.5">
-          <button onClick={() => handleAction("today")} className="py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-1.5">
+          <button onClick={() => handleAction("today")} className="py-2.5 px-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
             style={{ background: remiColor + "20", color: remiColor }}>Today</button>
-          <button onClick={() => setPickDate(true)} className="py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+          <button onClick={() => setPickDate(true)} className="py-2.5 px-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
             style={{ background: "var(--t-el-med)", color: "var(--t-text3)" }}>Reschedule</button>
-          <button onClick={() => handleAction("queue")} className="py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+          <button onClick={() => handleAction("queue")} className="py-2.5 px-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
             style={{ background: "var(--t-el-med)", color: "var(--t-text3)" }}>Queue</button>
-          <button onClick={() => handleAction("someday")} className="py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+          <button onClick={() => handleAction("someday")} className="py-2.5 px-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
             style={{ background: "var(--t-el-med)", color: "var(--t-text5)" }}>Someday</button>
-          <button onClick={() => handleAction("done")} className="py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+          <button onClick={() => handleAction("done")} className="py-2.5 px-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 whitespace-nowrap"
             style={{ background: "rgba(34,197,94,0.12)", color: "rgba(34,197,94,0.85)" }}>Done ✓</button>
         </div>
       )}
