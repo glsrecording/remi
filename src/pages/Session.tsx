@@ -13,6 +13,16 @@ const DAY_RATE_KEY    = "remi_session_day_rate";
 const RATE_TYPE_KEY   = "remi_session_rate_type";
 const SESSION_START_KEY = "remi_session_start";  // ms epoch backup for timer rehydration
 
+// Design-system context colors (mirror design-system.css; kept as hex so the
+// `color + "33"` alpha-concat glow pattern works — same approach as Tasks.tsx).
+// These accent hues are mode-independent (not overridden in light mode), so
+// they're safe in both themes; surfaces/borders/text use tokens that flip.
+const STUDIO = "#3dd6b0";  // --color-studio — screen identity (teal)
+const AMBER  = "#f5a623";  // --color-tasks  — break state
+const DONE   = "#5bc468";  // --color-done   — earnings
+const BLUE   = "#378add";  // --color-calls  — switch song
+const ALERT  = "#ef4444";  // semantic stop / error (mode-independent)
+
 type RateType = "hourly" | "day_rate" | "project_rate" | "no_charge";
 const RATE_TYPE_LABELS: Record<RateType, string> = {
   hourly: "Hourly",
@@ -659,32 +669,43 @@ export default function Session() {
   return (
     <div
       className="flex flex-col min-h-screen"
-      style={{ background: "var(--t-bg)", color: "var(--t-text)" }}
+      style={{
+        background: "var(--surface-base)",
+        color: "var(--text-primary)",
+        // Mix-revision mode: whole-screen teal tint + inset glow ring so it's
+        // visibly a different mode. transition keeps the shift soft, not harsh.
+        boxShadow: mixRevOpen ? `inset 0 0 80px ${STUDIO}1f` : "none",
+        transition: "box-shadow 0.3s ease",
+      }}
     >
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
 
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-4 border-b border-white/5"
-        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
+        className="flex items-center justify-between px-4 py-4"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)",
+          borderBottom: "1px solid var(--border-subtle)",
+        }}
       >
         <button
           onClick={() => setMenuOpen(true)}
-          className="p-2 rounded-xl text-white/40 hover:text-white hover:bg-white/5 transition-colors"
+          className="p-2 rounded-xl hover:bg-white/5 transition-colors"
+          style={{ color: STUDIO }}
           data-testid="button-menu"
         >
           <Menu size={20} />
         </button>
         <span
-          className="text-sm font-semibold tracking-widest uppercase"
-          style={{ color: "#4ade80" }}
+          className="text-sm font-bold tracking-widest uppercase"
+          style={{ color: STUDIO, fontFamily: "'Space Mono', monospace" }}
         >
-          Studio Session
+          Session
         </span>
         <button
           onClick={toggleTheme}
           className="p-1.5 rounded-full hover:bg-white/5 transition-colors"
-          style={{ color: "var(--t-text6)" }}
+          style={{ color: "var(--text-muted)" }}
           title={isLight ? "Switch to dark mode" : "Switch to light mode"}
           data-testid="button-theme-toggle"
         >
@@ -699,27 +720,32 @@ export default function Session() {
         >
           {starting ? (
             <div className="flex flex-col items-center gap-3">
-              <Loader2 size={24} className="animate-spin" style={{ color: "#4ade80" }} />
-              <p className="text-sm" style={{ color: "var(--t-text5)" }}>Starting session…</p>
+              <Loader2 size={24} className="animate-spin" style={{ color: STUDIO }} />
+              <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Starting session…</p>
             </div>
           ) : matchState === "suggest" ? (
             <div className="w-full max-w-xs space-y-3">
               <p className="text-center text-xs uppercase tracking-widest mb-4"
-                style={{ color: "var(--t-text7)" }}>
+                style={{ color: "var(--text-muted)" }}>
                 Song Match
               </p>
               <div
-                className="rounded-xl px-4 py-4 text-center border"
-                style={{ background: "var(--t-surface)", borderColor: "rgba(74,222,128,0.3)" }}
+                className="px-4 py-4 text-center"
+                style={{
+                  background: "var(--surface-elevated)",
+                  borderRadius: "var(--radius-lg)",
+                  border: `1px solid ${STUDIO}4d`,
+                  boxShadow: `0 0 16px ${STUDIO}26`,
+                }}
               >
-                <p className="text-xs mb-2" style={{ color: "var(--t-text5)" }}>Did you mean</p>
-                <p className="text-sm font-semibold" style={{ color: "var(--t-text)" }}>{suggestionTitle}</p>
+                <p className="text-xs mb-2" style={{ color: "var(--text-secondary)" }}>Did you mean</p>
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{suggestionTitle}</p>
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={handleConfirmSuggestion}
-                  className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95"
-                  style={{ background: "#4ade80", color: "#000" }}
+                  className="flex-1 py-3 font-semibold text-sm transition-all active:scale-95"
+                  style={{ background: STUDIO, color: "#08110f", borderRadius: "var(--radius-pill)", boxShadow: `0 0 16px ${STUDIO}55` }}
                 >
                   Yes
                 </button>
@@ -728,52 +754,52 @@ export default function Session() {
                     setNotFoundPrompt(`Create new page for "${startSong.trim()}"?`);
                     setMatchState("not_found");
                   }}
-                  className="flex-1 py-3 rounded-xl font-semibold text-sm border transition-all active:scale-95"
-                  style={{ background: "transparent", borderColor: "var(--t-border-lg)", color: "var(--t-text3)" }}
+                  className="flex-1 py-3 font-semibold text-sm transition-all active:scale-95"
+                  style={{ background: "var(--surface-elevated)", border: "1px solid var(--border-default)", color: "var(--text-secondary)", borderRadius: "var(--radius-pill)" }}
                 >
                   No
                 </button>
               </div>
               {startError && (
-                <p className="text-xs text-center pt-1" style={{ color: "#ef4444" }}>{startError}</p>
+                <p className="text-xs text-center pt-1" style={{ color: ALERT }}>{startError}</p>
               )}
             </div>
           ) : matchState === "not_found" ? (
             <div className="w-full max-w-xs space-y-3">
               <p className="text-center text-xs uppercase tracking-widest mb-4"
-                style={{ color: "var(--t-text7)" }}>
+                style={{ color: "var(--text-muted)" }}>
                 No Song Found
               </p>
               <div
-                className="rounded-xl px-4 py-4 text-center border"
-                style={{ background: "var(--t-surface)", borderColor: "var(--t-border-md)" }}
+                className="px-4 py-4 text-center"
+                style={{ background: "var(--surface-elevated)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-default)" }}
               >
-                <p className="text-sm" style={{ color: "var(--t-text3)" }}>{notFoundPrompt}</p>
+                <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{notFoundPrompt}</p>
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={handleForceCreate}
-                  className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95"
-                  style={{ background: "#4ade80", color: "#000" }}
+                  className="flex-1 py-3 font-semibold text-sm transition-all active:scale-95"
+                  style={{ background: STUDIO, color: "#08110f", borderRadius: "var(--radius-pill)", boxShadow: `0 0 16px ${STUDIO}55` }}
                 >
                   Create
                 </button>
                 <button
                   onClick={handleMatchCancel}
-                  className="flex-1 py-3 rounded-xl font-semibold text-sm border transition-all active:scale-95"
-                  style={{ background: "transparent", borderColor: "var(--t-border-lg)", color: "var(--t-text3)" }}
+                  className="flex-1 py-3 font-semibold text-sm transition-all active:scale-95"
+                  style={{ background: "var(--surface-elevated)", border: "1px solid var(--border-default)", color: "var(--text-secondary)", borderRadius: "var(--radius-pill)" }}
                 >
                   Cancel
                 </button>
               </div>
               {startError && (
-                <p className="text-xs text-center pt-1" style={{ color: "#ef4444" }}>{startError}</p>
+                <p className="text-xs text-center pt-1" style={{ color: ALERT }}>{startError}</p>
               )}
             </div>
           ) : (
             <div className="w-full max-w-xs space-y-3">
               <p className="text-center text-xs uppercase tracking-widest mb-4"
-                style={{ color: "var(--t-text7)" }}>
+                style={{ color: "var(--text-muted)" }}>
                 No active session
               </p>
               <input
@@ -781,28 +807,31 @@ export default function Session() {
                 onChange={(e) => setStartArtist(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.nextElementSibling && (e.currentTarget.nextElementSibling as HTMLInputElement).focus()}
                 placeholder="Artist name"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+                className="remi-chat-input w-full px-4 py-3 text-sm"
+                style={{ color: "var(--text-primary)" }}
               />
               <input
                 value={startSong}
                 onChange={(e) => setStartSong(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleStartSession()}
                 placeholder="Song title"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+                className="remi-chat-input w-full px-4 py-3 text-sm"
+                style={{ color: "var(--text-primary)" }}
               />
               <button
                 onClick={handleStartSession}
                 disabled={!startArtist.trim() && !startSong.trim()}
-                className="w-full py-3 rounded-xl font-semibold text-sm transition-all active:scale-95"
-                style={{
-                  background: (startArtist.trim() || startSong.trim()) ? "#4ade80" : "rgba(74,222,128,0.12)",
-                  color: (startArtist.trim() || startSong.trim()) ? "#000" : "rgba(74,222,128,0.35)",
-                }}
+                className="w-full py-3 font-semibold text-sm transition-all active:scale-95"
+                style={
+                  (startArtist.trim() || startSong.trim())
+                    ? { background: STUDIO, color: "#08110f", borderRadius: "var(--radius-pill)", boxShadow: `0 0 16px ${STUDIO}55` }
+                    : { background: "var(--surface-elevated)", color: "var(--text-muted)", borderRadius: "var(--radius-pill)" }
+                }
               >
                 Start Session
               </button>
               {startError && (
-                <p className="text-xs text-center pt-1" style={{ color: "#ef4444" }}>
+                <p className="text-xs text-center pt-1" style={{ color: ALERT }}>
                   {startError}
                 </p>
               )}
@@ -814,65 +843,85 @@ export default function Session() {
       {/* ── ACTIVE: timer, rate, notes, mic bar ──────────────────────── */}
       {session.active && (
         <>
-          {/* Session banner */}
+          {/* Current song / active session card — the hero element */}
           <div className="px-5 pt-5 pb-2">
             <div
-              className="rounded-xl px-4 py-3 border"
-              style={{ background: "var(--t-surface)", borderColor: "rgba(74,222,128,0.35)" }}
+              className="px-4 py-4"
+              style={{
+                background: "var(--surface-elevated)",
+                borderRadius: "var(--radius-lg)",
+                borderLeft: `3px solid ${STUDIO}`,
+                borderTop: `1px solid ${STUDIO}40`,
+                borderRight: `1px solid ${STUDIO}40`,
+                borderBottom: `1px solid ${STUDIO}40`,
+                boxShadow: `0 0 18px ${STUDIO}33`,
+              }}
             >
-              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: "#4ade80" }}>
-                Active
+              <p
+                className="text-xs uppercase tracking-widest mb-1.5"
+                style={{ color: STUDIO, fontFamily: "'Space Mono', monospace" }}
+              >
+                Active Session
               </p>
-              <p className="text-base font-semibold truncate" style={{ color: "var(--t-text)" }}>
-                {session.artist && session.song
-                  ? `🎵 ${session.artist} — ${session.song}`
-                  : session.song || session.artist
-                  ? `🎵 ${session.song || session.artist}`
-                  : "🎵 Session active"}
+              <p className="text-xl font-bold leading-tight truncate" style={{ color: "var(--text-primary)" }}>
+                {session.song || session.artist || "Session active"}
               </p>
+              {session.artist && session.song && (
+                <p className="text-sm mt-0.5 truncate" style={{ color: "var(--text-secondary)" }}>
+                  {session.artist}
+                </p>
+              )}
             </div>
           </div>
 
           {switchConfirm && (
             <div className="px-5 -mt-1 pb-1">
-              <p className="text-xs text-center font-medium" style={{ color: "#4ade80" }}>{switchConfirm}</p>
+              <p className="text-xs text-center font-medium" style={{ color: STUDIO }}>{switchConfirm}</p>
             </div>
           )}
 
           {/* Timer */}
           <div className="px-5 py-4">
             <div
-              className="rounded-2xl px-4 py-6 border text-center"
-              style={{ background: "var(--t-surface)", borderColor: "var(--t-border)" }}
+              className="px-4 py-6 text-center"
+              style={{
+                background: "var(--surface-card)",
+                borderRadius: "var(--radius-lg)",
+                border: "1px solid var(--border-subtle)",
+              }}
             >
               <p
                 className="font-mono text-5xl font-bold tracking-tight mb-1"
-                style={{ color: onBreak ? "#f59e0b" : "#4ade80", letterSpacing: "-0.02em" }}
+                style={{
+                  color: onBreak ? AMBER : STUDIO,
+                  letterSpacing: "-0.02em",
+                  textShadow: `0 0 18px ${onBreak ? AMBER : STUDIO}66`,
+                }}
               >
                 {fmt(elapsed)}
               </p>
               {onBreak && (
-                <p className="text-xs uppercase tracking-widest mt-1" style={{ color: "#f59e0b" }}>
+                <p className="text-xs uppercase tracking-widest mt-1" style={{ color: AMBER }}>
                   On break
                 </p>
               )}
 
-              {/* Controls */}
+              {/* Controls — pill-shaped, colored by state */}
               <div className="flex flex-wrap gap-3 justify-center mt-5">
                 {!running ? (
                   <>
                     <button
                       onClick={handleStart}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all"
-                      style={{ background: "#4ade80", color: "#000" }}
+                      className="flex items-center gap-2 px-5 py-2.5 font-semibold text-sm transition-all active:scale-95"
+                      style={{ background: STUDIO, color: "#08110f", borderRadius: "var(--radius-pill)", boxShadow: `0 0 16px ${STUDIO}55` }}
                     >
                       <Play size={16} />
                       Start
                     </button>
                     <button
                       onClick={handleEndSession}
-                      className="px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
-                      style={{ background: "transparent", borderColor: "var(--t-border-lg)", color: "var(--t-text5)" }}
+                      className="px-4 py-2.5 font-semibold text-sm transition-all active:scale-95"
+                      style={{ background: "var(--surface-elevated)", border: "1px solid var(--border-default)", color: "var(--text-secondary)", borderRadius: "var(--radius-pill)" }}
                     >
                       End Session
                     </button>
@@ -881,12 +930,12 @@ export default function Session() {
                   <>
                     <button
                       onClick={handleBreak}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
-                      style={{
-                        background: onBreak ? "rgba(245,158,11,0.15)" : "transparent",
-                        borderColor: "#f59e0b",
-                        color: "#f59e0b",
-                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 font-semibold text-sm transition-all active:scale-95"
+                      style={
+                        onBreak
+                          ? { background: AMBER, color: "#1a1200", borderRadius: "var(--radius-pill)", boxShadow: `0 0 16px ${AMBER}55` }
+                          : { background: "var(--surface-elevated)", border: `1px solid ${AMBER}66`, color: AMBER, borderRadius: "var(--radius-pill)" }
+                      }
                     >
                       <Coffee size={16} />
                       {onBreak ? "Resume" : "Break"}
@@ -894,24 +943,24 @@ export default function Session() {
                     <button
                       onClick={handleStop}
                       disabled={stopping}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all"
-                      style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444", border: "1px solid #ef4444" }}
+                      className="flex items-center gap-2 px-4 py-2.5 font-semibold text-sm transition-all active:scale-95"
+                      style={{ background: `${ALERT}1f`, color: ALERT, border: `1px solid ${ALERT}`, borderRadius: "var(--radius-pill)" }}
                     >
                       <Square size={16} />
                       {stopping ? "Logging…" : "Stop"}
                     </button>
                     <button
                       onClick={() => { setSwitchInput(""); setSwitchError(null); setSwitching(true); }}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
-                      style={{ background: "transparent", borderColor: "#60a5fa", color: "#60a5fa" }}
+                      className="flex items-center gap-2 px-4 py-2.5 font-semibold text-sm transition-all active:scale-95"
+                      style={{ background: "var(--surface-elevated)", border: `1px solid ${BLUE}66`, color: BLUE, borderRadius: "var(--radius-pill)" }}
                     >
                       <ArrowLeftRight size={16} />
                       Switch
                     </button>
                     <button
                       onClick={() => setMixRevOpen(true)}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all border"
-                      style={{ background: "transparent", borderColor: MIX_REV_COLOR, color: MIX_REV_COLOR }}
+                      className="flex items-center gap-2 px-4 py-2.5 font-semibold text-sm transition-all active:scale-95"
+                      style={{ background: `${MIX_REV_COLOR}1a`, border: `1px solid ${MIX_REV_COLOR}66`, color: MIX_REV_COLOR, borderRadius: "var(--radius-pill)" }}
                     >
                       <SlidersHorizontal size={16} />
                       Mix Revision
@@ -934,11 +983,12 @@ export default function Session() {
                     setEditingRate(false);
                     setEditingDayRate(false);
                   }}
-                  className="flex-1 py-1.5 text-xs rounded-lg font-medium transition-all"
+                  className="flex-1 py-1.5 text-xs font-medium transition-all"
                   style={{
-                    background: rateType === type ? "rgba(74,222,128,0.12)" : "var(--t-el-low)",
-                    border: `1px solid ${rateType === type ? "rgba(74,222,128,0.6)" : "var(--t-border-md)"}`,
-                    color: rateType === type ? "#4ade80" : "var(--t-text5)",
+                    background: rateType === type ? `${DONE}1f` : "var(--surface-elevated)",
+                    border: `1px solid ${rateType === type ? `${DONE}99` : "var(--border-subtle)"}`,
+                    color: rateType === type ? DONE : "var(--text-muted)",
+                    borderRadius: "var(--radius-pill)",
                   }}
                 >
                   {RATE_TYPE_LABELS[type]}
@@ -947,20 +997,20 @@ export default function Session() {
             </div>
 
             <div
-              className="rounded-xl px-4 py-3 border flex items-center justify-between"
-              style={{ background: "var(--t-surface)", borderColor: "var(--t-border)" }}
+              className="px-4 py-3 flex items-center justify-between"
+              style={{ background: "var(--surface-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)" }}
             >
               <div className="flex items-center gap-2">
-                <DollarSign size={15} style={{ color: "#4ade80" }} />
-                <span className="text-sm text-white/50">Earnings</span>
+                <DollarSign size={15} style={{ color: DONE }} />
+                <span className="text-sm" style={{ color: "var(--text-secondary)" }}>Earnings</span>
               </div>
 
               {rateType === "hourly" && (
                 <div className="flex items-center gap-3">
-                  <span className="text-lg font-semibold font-mono" style={{ color: "#4ade80" }}>
+                  <span className="text-lg font-semibold font-mono" style={{ color: DONE }}>
                     ${earnings.toFixed(2)}
                   </span>
-                  <span className="text-xs text-white/30">@</span>
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>@</span>
                   {editingRate ? (
                     <input
                       type="number"
@@ -969,13 +1019,14 @@ export default function Session() {
                       onBlur={saveRate}
                       onKeyDown={(e) => e.key === "Enter" && saveRate()}
                       className="w-16 bg-transparent border-b text-sm text-right outline-none"
-                      style={{ borderColor: "#4ade80", color: "#4ade80" }}
+                      style={{ borderColor: DONE, color: DONE }}
                       autoFocus
                     />
                   ) : (
                     <button
                       onClick={() => { setRateInput(String(hourlyRate)); setEditingRate(true); }}
-                      className="text-sm text-white/40 hover:text-white/70 transition-colors"
+                      className="text-sm transition-colors"
+                      style={{ color: "var(--text-secondary)" }}
                     >
                       ${hourlyRate}/hr
                     </button>
@@ -993,26 +1044,26 @@ export default function Session() {
                       onBlur={saveDayRate}
                       onKeyDown={(e) => e.key === "Enter" && saveDayRate()}
                       className="w-20 bg-transparent border-b text-lg text-right outline-none font-mono font-semibold"
-                      style={{ borderColor: "#4ade80", color: "#4ade80" }}
+                      style={{ borderColor: DONE, color: DONE }}
                       autoFocus
                     />
                   ) : (
                     <button
                       onClick={() => { setDayRateInput(String(dayRateAmount)); setEditingDayRate(true); }}
                       className="text-lg font-semibold font-mono"
-                      style={{ color: "#4ade80" }}
+                      style={{ color: DONE }}
                     >
                       ${dayRateAmount}
                     </button>
                   )}
-                  <span className="text-xs text-white/30">flat</span>
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>flat</span>
                 </div>
               )}
 
               {(rateType === "project_rate" || rateType === "no_charge") && (
                 <div className="flex items-center gap-2">
-                  <span className="text-lg font-semibold font-mono" style={{ color: "var(--t-text7)" }}>$0</span>
-                  <span className="text-xs" style={{ color: "var(--t-text6)" }}>
+                  <span className="text-lg font-semibold font-mono" style={{ color: "var(--text-muted)" }}>$0</span>
+                  <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                     {rateType === "project_rate" ? "Project rate" : "No charge"}
                   </span>
                 </div>
@@ -1022,15 +1073,15 @@ export default function Session() {
 
           {/* Session notes */}
           <div className="px-5 mb-3 flex-1 flex flex-col min-h-0">
-            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--t-text6)" }}>
+            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}>
               Session Notes
             </p>
             <div
-              className="flex-1 rounded-xl border overflow-y-auto"
-              style={{ background: "var(--t-surface)", borderColor: "var(--t-border)", maxHeight: "200px" }}
+              className="flex-1 overflow-y-auto"
+              style={{ background: "var(--surface-card)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border-subtle)", maxHeight: "200px" }}
             >
               {notes.length === 0 ? (
-                <p className="text-sm text-white/25 p-4 text-center">
+                <p className="text-sm p-4 text-center" style={{ color: "var(--text-muted)" }}>
                   Notes captured via Jarvis or the mic below will appear here
                 </p>
               ) : (
@@ -1038,16 +1089,20 @@ export default function Session() {
                   {notes.map((n, i) => (
                     <div
                       key={i}
-                      className="flex gap-3 py-2 px-3 rounded-lg"
-                      style={{ background: "var(--t-el-low)" }}
+                      className="flex gap-3 py-2 px-3"
+                      style={{
+                        background: "var(--surface-elevated)",
+                        borderRadius: "var(--radius-md)",
+                        borderLeft: `2px solid ${n.type === "timestamp" ? AMBER : STUDIO}`,
+                      }}
                     >
                       <span
                         className="text-xs font-mono mt-0.5 shrink-0"
-                        style={{ color: n.type === "timestamp" ? "#f59e0b" : "#4ade80" }}
+                        style={{ color: n.type === "timestamp" ? AMBER : STUDIO }}
                       >
                         {n.ts}
                       </span>
-                      <p className="text-sm text-white/70 leading-snug">{n.text}</p>
+                      <p className="text-sm leading-snug" style={{ color: "var(--text-secondary)" }}>{n.text}</p>
                     </div>
                   ))}
                   <div ref={notesEndRef} />
@@ -1059,46 +1114,52 @@ export default function Session() {
           {/* Session sub-tasks — input always visible; checklist shows when tasks exist */}
           {session.song && (
             <div className="px-5 mb-3 shrink-0">
-              <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--t-text6)" }}>
+              <p className="text-xs uppercase tracking-widest mb-3" style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}>
                 Session Tasks
               </p>
               {sessionTasks.length > 0 && (
                 <div
-                  className="rounded-xl border overflow-y-auto mb-2"
-                  style={{ background: "var(--t-surface)", borderColor: "var(--t-border)", maxHeight: "200px" }}
+                  className="overflow-y-auto mb-2 space-y-1.5"
+                  style={{ maxHeight: "200px" }}
                 >
-                  <div className="p-3 space-y-1">
-                    {sessionTasks.map((t) => (
-                      <button
-                        key={t.block_id}
-                        type="button"
-                        onClick={() => toggleTask(t.block_id, !t.checked)}
-                        className="w-full flex items-center gap-3 py-2 px-3 rounded-lg text-left"
-                        style={{ background: "var(--t-el-low)" }}
+                  {sessionTasks.map((t) => (
+                    <button
+                      key={t.block_id}
+                      type="button"
+                      onClick={() => toggleTask(t.block_id, !t.checked)}
+                      className="w-full flex items-center gap-3 py-2.5 px-3 text-left transition-all active:scale-[0.99]"
+                      style={{
+                        background: "var(--surface-card)",
+                        borderRadius: "var(--radius-md)",
+                        borderLeft: `3px solid ${t.checked ? DONE : STUDIO}`,
+                        borderTop: "1px solid var(--border-subtle)",
+                        borderRight: "1px solid var(--border-subtle)",
+                        borderBottom: "1px solid var(--border-subtle)",
+                      }}
+                    >
+                      <span
+                        className="shrink-0 grid place-content-center"
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: "var(--radius-sm)",
+                          border: `1.5px solid ${t.checked ? DONE : "var(--border-strong)"}`,
+                          background: t.checked ? DONE : `${STUDIO}1a`,
+                        }}
                       >
-                        <span
-                          className="shrink-0 grid place-content-center rounded"
-                          style={{
-                            width: 18,
-                            height: 18,
-                            border: `1.5px solid ${t.checked ? "#f59e0b" : "var(--t-border-md)"}`,
-                            background: t.checked ? "#f59e0b" : "transparent",
-                          }}
-                        >
-                          {t.checked && <Check className="h-3 w-3" style={{ color: "#1a1a1a" }} />}
-                        </span>
-                        <span
-                          className="text-sm leading-snug"
-                          style={{
-                            color: t.checked ? "var(--t-text3)" : "var(--t-text)",
-                            textDecoration: t.checked ? "line-through" : "none",
-                          }}
-                        >
-                          {t.text}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                        {t.checked && <Check className="h-3.5 w-3.5" style={{ color: "#08110f" }} />}
+                      </span>
+                      <span
+                        className="text-sm leading-snug"
+                        style={{
+                          color: t.checked ? "var(--text-muted)" : "var(--text-primary)",
+                          textDecoration: t.checked ? "line-through" : "none",
+                        }}
+                      >
+                        {t.text}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               )}
 
@@ -1115,15 +1176,20 @@ export default function Session() {
                     }
                   }}
                   placeholder="Add session task..."
-                  className="flex-1 rounded-lg border px-3 py-2 text-sm outline-none"
-                  style={{ background: "var(--t-surface)", borderColor: "var(--t-border)", color: "var(--t-text)" }}
+                  className="flex-1 px-3 py-2 text-sm outline-none"
+                  style={{
+                    background: "var(--surface-elevated)",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)",
+                  }}
                 />
                 <button
                   type="button"
                   onClick={addTask}
                   disabled={!taskInput.trim()}
-                  className="px-4 rounded-lg text-sm font-semibold disabled:opacity-40"
-                  style={{ background: "#f59e0b", color: "#1a1a1a" }}
+                  className="px-4 text-sm font-semibold disabled:opacity-40"
+                  style={{ background: AMBER, color: "#1a1200", borderRadius: "var(--radius-md)" }}
                 >
                   Add
                 </button>
@@ -1141,13 +1207,13 @@ export default function Session() {
               bottom: 0,
               left: 0,
               right: 0,
-              background: "var(--t-bg)",
+              background: "var(--surface-base)",
               zIndex: 10,
               padding: "12px 16px 48px",
             }}
           >
             {recordingError && (
-              <p className="text-xs text-red-400/80 mb-1.5 text-center">{recordingError}</p>
+              <p className="text-xs mb-1.5 text-center" style={{ color: ALERT }}>{recordingError}</p>
             )}
             {isLocked && (
               <div className="flex items-center justify-between mb-2 px-1">
@@ -1155,16 +1221,16 @@ export default function Session() {
                   type="button"
                   onClick={handleCancelLocked}
                   className="text-xs px-3 py-1.5 rounded-lg"
-                  style={{ background: "#ef444420", border: "1px solid #ef444440", color: "#ef4444" }}
+                  style={{ background: `${ALERT}20`, border: `1px solid ${ALERT}40`, color: ALERT }}
                 >
                   ✕ Cancel
                 </button>
-                <span className="text-xs" style={{ color: "#ef4444" }}>🔒 Recording</span>
+                <span className="text-xs" style={{ color: ALERT }}>🔒 Recording</span>
                 <button
                   type="button"
                   onClick={handleSendLocked}
                   className="text-xs px-3 py-1.5 rounded-lg"
-                  style={{ background: "#22c55e20", border: "1px solid #22c55e40", color: "#22c55e" }}
+                  style={{ background: `${STUDIO}20`, border: `1px solid ${STUDIO}40`, color: STUDIO }}
                 >
                   Send ↑
                 </button>
@@ -1173,8 +1239,8 @@ export default function Session() {
             {(isRecording || isTranscribing) && !isLocked && (
               <div className="flex items-center justify-center gap-2 mb-2 h-5">
                 {isTranscribing
-                  ? <><Loader2 size={13} className="animate-spin" style={{ color: "#f59e0b" }} /><span className="text-xs" style={{ color: "#f59e0b" }}>Transcribing...</span></>
-                  : <span className="text-xs" style={{ color: "#ef4444" }}>Recording…</span>}
+                  ? <><Loader2 size={13} className="animate-spin" style={{ color: AMBER }} /><span className="text-xs" style={{ color: AMBER }}>Transcribing...</span></>
+                  : <span className="text-xs" style={{ color: ALERT }}>Recording…</span>}
               </div>
             )}
             {/* Grid (not flex): minmax(0,1fr) sizes the input track deterministically
@@ -1189,14 +1255,15 @@ export default function Session() {
                 onChange={(e) => setNoteText(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleNoteSubmit()}
                 placeholder="Drop a session note…"
-                className="min-w-0 w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/20 transition-colors"
+                className="remi-chat-input min-w-0 w-full px-4 py-2.5 text-sm"
+                style={{ color: "var(--text-primary)" }}
               />
 
               <button
                 type="button"
                 onClick={handleNoteSubmit}
                 className="shrink-0 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
-                style={{ background: "#4ade80", color: "#000" }}
+                style={{ background: STUDIO, color: "#08110f", boxShadow: `0 0 16px ${STUDIO}55` }}
               >
                 Send
               </button>
@@ -1206,8 +1273,9 @@ export default function Session() {
                 type="button"
                 className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
                 style={{
-                  background: isRecording ? "#ef444422" : "#f59e0b14",
-                  border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+                  background: isRecording ? `${ALERT}22` : `${AMBER}14`,
+                  border: `1.5px solid ${isRecording ? ALERT : `${AMBER}50`}`,
+                  boxShadow: `0 0 12px ${AMBER}3a`,
                   // Mobile fix: transition COLOR only — never "all". transition-all
                   // animated the button's layout/position through mobile viewport
                   // reflows (URL bar, keyboard), parking it clipped at the right edge
@@ -1223,10 +1291,10 @@ export default function Session() {
                 data-testid="button-voice"
               >
                 {isTranscribing
-                  ? <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+                  ? <Loader2 size={16} className="animate-spin" style={{ color: AMBER }} />
                   : isRecording
-                  ? <MicOff size={16} style={{ color: "#ef4444" }} />
-                  : <Mic size={16} style={{ color: "#f59e0b" }} />}
+                  ? <MicOff size={16} style={{ color: ALERT }} />
+                  : <Mic size={16} style={{ color: AMBER }} />}
               </button>
             </div>
           </div>
@@ -1241,15 +1309,15 @@ export default function Session() {
           onClick={() => setSwitching(false)}
         >
           <div
-            className="w-full max-w-xs rounded-2xl p-5 space-y-3"
-            style={{ background: "var(--t-surface)", border: "1px solid var(--t-border)" }}
+            className="w-full max-w-xs p-5 space-y-3"
+            style={{ background: "var(--surface-elevated)", borderRadius: "var(--radius-xl)", border: `1px solid ${BLUE}40`, boxShadow: `0 0 24px ${BLUE}26` }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-center text-xs uppercase tracking-widest" style={{ color: "var(--t-text7)" }}>
+            <p className="text-center text-xs uppercase tracking-widest" style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}>
               Switch Song
             </p>
             {session.artist && (
-              <p className="text-center text-xs" style={{ color: "var(--t-text6)" }}>
+              <p className="text-center text-xs" style={{ color: "var(--text-secondary)" }}>
                 {session.artist} · currently {session.song || "—"}
               </p>
             )}
@@ -1259,28 +1327,30 @@ export default function Session() {
               onKeyDown={(e) => e.key === "Enter" && handleSwitchSong()}
               placeholder="New song title"
               autoFocus
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
+              className="remi-chat-input w-full px-4 py-3 text-sm"
+              style={{ color: "var(--text-primary)" }}
             />
             {switchError && (
-              <p className="text-xs text-center" style={{ color: "#ef4444" }}>{switchError}</p>
+              <p className="text-xs text-center" style={{ color: ALERT }}>{switchError}</p>
             )}
             <div className="flex gap-3">
               <button
                 onClick={handleSwitchSong}
                 disabled={!switchInput.trim() || switchBusy}
-                className="flex-1 py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 flex items-center justify-center gap-2"
-                style={{
-                  background: (switchInput.trim() && !switchBusy) ? "#4ade80" : "rgba(74,222,128,0.12)",
-                  color: (switchInput.trim() && !switchBusy) ? "#000" : "rgba(74,222,128,0.35)",
-                }}
+                className="flex-1 py-3 font-semibold text-sm transition-all active:scale-95 flex items-center justify-center gap-2"
+                style={
+                  (switchInput.trim() && !switchBusy)
+                    ? { background: BLUE, color: "#06101c", borderRadius: "var(--radius-pill)", boxShadow: `0 0 16px ${BLUE}55` }
+                    : { background: "var(--surface-card)", color: "var(--text-muted)", borderRadius: "var(--radius-pill)" }
+                }
               >
                 {switchBusy && <Loader2 size={15} className="animate-spin" />}
                 Switch
               </button>
               <button
                 onClick={() => setSwitching(false)}
-                className="flex-1 py-3 rounded-xl font-semibold text-sm border transition-all active:scale-95"
-                style={{ background: "transparent", borderColor: "var(--t-border-lg)", color: "var(--t-text3)" }}
+                className="flex-1 py-3 font-semibold text-sm transition-all active:scale-95"
+                style={{ background: "var(--surface-card)", border: "1px solid var(--border-default)", color: "var(--text-secondary)", borderRadius: "var(--radius-pill)" }}
               >
                 Cancel
               </button>
