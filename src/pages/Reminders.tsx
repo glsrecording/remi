@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { RefreshCw, Loader2, Bell, Plus, X, Send } from "lucide-react";
+import { RefreshCw, Loader2, Bell, BellRing, Repeat, Plus, X, Send } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import { useGutterScroll } from "@/hooks/useGutterScroll";
@@ -10,6 +10,8 @@ const ACCENT           = "#a78bfa";
 const DELETE_COLOR     = "#ef4444";
 const COMMIT_THRESHOLD = 65;
 
+type Recurrence = "daily" | "weekly" | "monthly" | "twice_monthly" | null;
+
 interface Reminder {
   id: string;
   title: string;
@@ -18,10 +20,42 @@ interface Reminder {
   recurrence: string | null;
   notion_page_id: string | null;
   fired: boolean;
+  nag_mode?: boolean;
+  nag_interval_hours?: number;
   call?: boolean;
 }
 
 type FilterKey = "All" | "Upcoming" | "Recurring" | "Fired";
+
+const RECUR_OPTIONS: { key: Recurrence; label: string }[] = [
+  { key: null,            label: "None" },
+  { key: "daily",         label: "Daily" },
+  { key: "weekly",        label: "Weekly" },
+  { key: "monthly",       label: "Monthly" },
+  { key: "twice_monthly", label: "Twice a month" },
+];
+
+const WEEKDAYS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+
+// "Repeats weekly • Mondays" — for weekly we append the weekday derived from fire_date.
+function recurrenceLabel(rec: string | null, fireDate?: string): string {
+  switch (rec) {
+    case "daily":         return "Repeats daily";
+    case "monthly":       return "Repeats monthly";
+    case "twice_monthly": return "Repeats twice a month";
+    case "weekly": {
+      let suffix = "";
+      if (fireDate) {
+        try {
+          const [y, m, d] = fireDate.split("-").map(Number);
+          suffix = ` • ${WEEKDAYS[new Date(y, m - 1, d).getDay()]}`;
+        } catch { /* ignore */ }
+      }
+      return `Repeats weekly${suffix}`;
+    }
+    default: return "";
+  }
+}
 
 function formatDateTime(date: string, time: string): string {
   try {
@@ -47,9 +81,11 @@ function formatDateTime(date: string, time: string): string {
 function SwipeableReminderCard({
   reminder,
   onDelete,
+  onEdit,
 }: {
   reminder: Reminder;
   onDelete: () => void;
+  onEdit: () => void;
 }) {
   const [offsetX, setOffsetX]      = useState(0);
   const [committing, setCommitting] = useState(false);
@@ -130,6 +166,15 @@ function SwipeableReminderCard({
       return;
     }
 
+    // Tap (never crossed the 8px threshold → direction still undecided) → open editor.
+    if (directionRef.current === "undecided" && Math.abs(offsetRef.current) < 8) {
+      directionRef.current = "undecided";
+      offsetRef.current = 0;
+      setOffsetX(0);
+      onEdit();
+      return;
+    }
+
     directionRef.current = "undecided";
     offsetRef.current = 0;
     setOffsetX(0);
@@ -205,24 +250,32 @@ function SwipeableReminderCard({
                 Fired
               </p>
             )}
+            {(reminder.recurrence || reminder.nag_mode) && (
+              <div className="flex items-center gap-3 mt-1.5">
+                {reminder.recurrence && (
+                  <span className="flex items-center gap-1" style={{ color: ACCENT, opacity: isFired ? 0.6 : 0.95 }}>
+                    <Repeat size={12} strokeWidth={2.25} />
+                    <span className="text-xs font-medium tracking-wide">
+                      {recurrenceLabel(reminder.recurrence, reminder.fire_date)}
+                    </span>
+                  </span>
+                )}
+                {reminder.nag_mode && (
+                  <span className="flex items-center gap-1" style={{ color: "#f5a623", opacity: isFired ? 0.6 : 0.95 }}>
+                    <BellRing size={12} strokeWidth={2.25} />
+                    <span className="text-xs font-medium tracking-wide">
+                      Nags every {reminder.nag_interval_hours ?? 4}h
+                    </span>
+                  </span>
+                )}
+              </div>
+            )}
             {error && (
               <p className="text-xs mt-1" style={{ color: DELETE_COLOR }}>
                 Couldn't delete — swipe again to retry.
               </p>
             )}
           </div>
-          {reminder.recurrence && (
-            <span
-              className="shrink-0 text-xs px-2.5 py-1 rounded-full font-medium tracking-wide capitalize"
-              style={{
-                background: `${ACCENT}18`,
-                color: ACCENT,
-                border: `1px solid ${ACCENT}44`,
-              }}
-            >
-              {reminder.recurrence}
-            </span>
-          )}
         </div>
       </div>
     </div>
@@ -253,6 +306,17 @@ export default function Reminders() {
   const [whenText, setWhenText] = useState("");
   const [sending, setSending]   = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+
+  // ── Edit-reminder sheet state ──
+  const [editing, setEditing]       = useState<Reminder | null>(null);
+  const [edTitle, setEdTitle]       = useState("");
+  const [edDate, setEdDate]         = useState("");
+  const [edTime, setEdTime]         = useState("");
+  const [edRecur, setEdRecur]       = useState<Recurrence>(null);
+  const [edNag, setEdNag]           = useState(false);
+  const [edNagHours, setEdNagHours] = useState(4);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError]   = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useGutterScroll(scrollRef);
@@ -286,6 +350,66 @@ export default function Reminders() {
 
   function handleDelete(id: string) {
     setReminders((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  function openEditor(r: Reminder) {
+    setEditing(r);
+    setEdTitle(r.title);
+    setEdDate(r.fire_date);
+    setEdTime((r.fire_time || "09:00").slice(0, 5));
+    setEdRecur((r.recurrence as Recurrence) ?? null);
+    setEdNag(!!r.nag_mode);
+    setEdNagHours(r.nag_interval_hours ?? 4);
+    setEditError(null);
+  }
+
+  function closeEditor() {
+    setEditing(null);
+    setEditError(null);
+  }
+
+  async function saveEdit() {
+    if (!editing || savingEdit) return;
+    const title = edTitle.trim();
+    if (!title) { setEditError("Title can't be empty."); return; }
+    setSavingEdit(true);
+    setEditError(null);
+    const patch = {
+      title,
+      fire_date: edDate,
+      fire_time: edTime,
+      recurrence: edRecur ?? "",
+      nag_mode: edNag,
+      nag_interval_hours: edNagHours,
+    };
+    try {
+      const r = await fetch(`${JARVIS_URL}/reminder/${editing.id}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${REMI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(patch),
+      });
+      if (!r.ok) throw new Error(`${r.status}`);
+      const data = await r.json().catch(() => ({}));
+      const updated: Reminder = data.reminder ?? {
+        ...editing,
+        title,
+        fire_date: edDate,
+        fire_time: edTime,
+        recurrence: edRecur,
+        nag_mode: edNag,
+        nag_interval_hours: edNagHours,
+      };
+      setReminders((prev) => prev.map((x) => (x.id === editing.id ? { ...x, ...updated } : x)));
+      closeEditor();
+    } catch (e) {
+      console.error("[Reminders] edit failed:", e);
+      setEditError("Couldn't save changes — try again.");
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   function closeAddSheet() {
@@ -399,6 +523,7 @@ export default function Reminders() {
               key={r.id}
               reminder={r}
               onDelete={() => handleDelete(r.id)}
+              onEdit={() => openEditor(r)}
             />
           ))
         )}
@@ -509,6 +634,189 @@ export default function Reminders() {
                   <Send size={16} /> Send
                 </>
               )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit-reminder bottom sheet */}
+      {editing && (
+        <div
+          className="absolute inset-0 z-30 flex flex-col justify-end"
+          style={{ background: "rgba(0,0,0,0.55)" }}
+          onClick={closeEditor}
+        >
+          <div
+            className="rounded-t-2xl px-5 pt-4 overflow-y-auto"
+            style={{
+              background: "var(--t-bg)",
+              borderTop: `1px solid ${ACCENT}33`,
+              maxHeight: "88%",
+              paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 18px)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold" style={{ color: "var(--t-text)" }}>
+                Edit Reminder
+              </h2>
+              <button
+                onClick={closeEditor}
+                className="p-1 rounded-lg hover:bg-white/5 transition-colors"
+                style={{ color: "var(--t-text5)" }}
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <label className="block text-xs mb-1.5" style={{ color: "var(--t-text6)" }}>
+              Reminder
+            </label>
+            <input
+              value={edTitle}
+              onChange={(e) => setEdTitle(e.target.value)}
+              placeholder="call the vet"
+              className="w-full rounded-xl px-3.5 py-3 text-base outline-none mb-3.5"
+              style={{
+                background: "var(--t-card)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "var(--t-text)",
+              }}
+            />
+
+            <div className="flex gap-3 mb-3.5">
+              <div className="flex-1">
+                <label className="block text-xs mb-1.5" style={{ color: "var(--t-text6)" }}>
+                  Date
+                </label>
+                <input
+                  type="date"
+                  value={edDate}
+                  onChange={(e) => setEdDate(e.target.value)}
+                  className="w-full rounded-xl px-3 py-3 text-sm outline-none"
+                  style={{
+                    background: "var(--t-card)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "var(--t-text)",
+                    colorScheme: "dark",
+                  }}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs mb-1.5" style={{ color: "var(--t-text6)" }}>
+                  Time
+                </label>
+                <input
+                  type="time"
+                  value={edTime}
+                  onChange={(e) => setEdTime(e.target.value)}
+                  className="w-full rounded-xl px-3 py-3 text-sm outline-none"
+                  style={{
+                    background: "var(--t-card)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "var(--t-text)",
+                    colorScheme: "dark",
+                  }}
+                />
+              </div>
+            </div>
+
+            <label className="block text-xs mb-1.5" style={{ color: "var(--t-text6)" }}>
+              Repeat
+            </label>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {RECUR_OPTIONS.map((opt) => {
+                const active = edRecur === opt.key;
+                return (
+                  <button
+                    key={opt.label}
+                    onClick={() => setEdRecur(opt.key)}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-full tracking-wide transition-all"
+                    style={{
+                      background: active ? `${ACCENT}20` : "var(--t-card)",
+                      color:      active ? ACCENT : "var(--t-text5)",
+                      border: `1.5px solid ${active ? `${ACCENT}55` : "rgba(255,255,255,0.07)"}`,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Nag toggle */}
+            <div
+              className="flex items-center justify-between rounded-xl px-3.5 py-3 mb-1"
+              style={{ background: "var(--t-card)", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              <div className="flex items-center gap-2">
+                <BellRing size={16} style={{ color: edNag ? "#f5a623" : "var(--t-text6)" }} />
+                <span className="text-sm" style={{ color: "var(--t-text)" }}>
+                  Nag until done
+                </span>
+              </div>
+              <button
+                onClick={() => setEdNag((v) => !v)}
+                role="switch"
+                aria-checked={edNag}
+                className="relative rounded-full transition-colors"
+                style={{
+                  width: 44,
+                  height: 26,
+                  background: edNag ? "#f5a623" : "rgba(255,255,255,0.12)",
+                }}
+              >
+                <span
+                  className="absolute rounded-full bg-white transition-transform"
+                  style={{
+                    width: 20,
+                    height: 20,
+                    top: 3,
+                    left: 3,
+                    transform: edNag ? "translateX(18px)" : "translateX(0)",
+                  }}
+                />
+              </button>
+            </div>
+            {edNag && (
+              <div className="flex items-center gap-2 mb-4 mt-2 px-1">
+                <span className="text-xs" style={{ color: "var(--t-text6)" }}>Re-notify every</span>
+                <select
+                  value={edNagHours}
+                  onChange={(e) => setEdNagHours(Number(e.target.value))}
+                  className="rounded-lg px-2 py-1 text-xs outline-none"
+                  style={{
+                    background: "var(--t-card)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "var(--t-text)",
+                  }}
+                >
+                  {[1, 2, 3, 4, 6, 8, 12].map((h) => (
+                    <option key={h} value={h}>{h}h</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {!edNag && <div className="mb-4" />}
+
+            {editError && (
+              <p className="text-xs mb-3" style={{ color: DELETE_COLOR }}>
+                {editError}
+              </p>
+            )}
+
+            <button
+              onClick={saveEdit}
+              disabled={!edTitle.trim() || savingEdit}
+              className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-base font-semibold transition-opacity"
+              style={{
+                background: ACCENT,
+                color: "#1a1625",
+                opacity: !edTitle.trim() || savingEdit ? 0.5 : 1,
+              }}
+            >
+              {savingEdit ? <Loader2 size={18} className="animate-spin" /> : "Save changes"}
             </button>
           </div>
         </div>
