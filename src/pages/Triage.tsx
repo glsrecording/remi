@@ -9,6 +9,18 @@ const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 const COMMIT_THRESHOLD = 65; // identical to Tasks.tsx
 const LONG_PRESS_MS    = 500; // identical to Tasks.tsx
 
+// Design-system context colors (mirror design-system.css; hex so the `color + "33"`
+// alpha-concat glow pattern works — mode-independent, safe in light + dark).
+// Triage's identity is personal pink; swipe targets map to the context palette.
+const PINK   = "#d4537e";  // --color-personal — screen identity / cards / Bio
+const AMBER  = "#f5a623";  // --color-tasks    — Today / Key Insight
+const TEAL   = "#3dd6b0";  // --color-studio   — Tomorrow
+const PURPLE = "#9b8de8";  // --color-tonight  — Queue
+const BLUE   = "#378add";  // --color-calls    — Someday / Memory (pass 2)
+const GREEN  = "#5bc468";  // --color-done     — Gratitude
+const GRAY   = "#888890";  // --text-secondary — Memory / Insight (neutral, pass 1)
+const ALERT  = "#ef4444";  // recording / delete (semantic, mode-independent)
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type Phase       = "capture" | "pass2" | "done";
@@ -26,18 +38,20 @@ interface Counts {
 // Long press → Someday (same as Tasks.tsx).
 
 const P1_TARGETS = [
-  { action: "today"    as Pass1Action, label: "Today",            color: "#f59e0b", arrow: "↑" },
-  { action: "tomorrow" as Pass1Action, label: "Tomorrow",         color: "#60a5fa", arrow: "→" },
-  { action: "queue"    as Pass1Action, label: "Queue",            color: "#c084fc", arrow: "↓" },
-  { action: "memory"   as Pass1Action, label: "Memory / Insight", color: "#94a3b8", arrow: "←" },
+  { action: "today"    as Pass1Action, label: "Today",            color: AMBER,  arrow: "↑" },
+  { action: "tomorrow" as Pass1Action, label: "Tomorrow",         color: TEAL,   arrow: "→" },
+  { action: "queue"    as Pass1Action, label: "Queue",            color: PURPLE, arrow: "↓" },
+  { action: "memory"   as Pass1Action, label: "Memory / Insight", color: GRAY,   arrow: "←" },
 ];
 
 const P2_TARGETS = [
-  { action: "insight"   as Pass2Action, label: "Key Insight", color: "#f59e0b", arrow: "→" },
-  { action: "memory"    as Pass2Action, label: "Memory",      color: "#60a5fa", arrow: "←" },
-  { action: "gratitude" as Pass2Action, label: "Gratitude",   color: "#22c55e", arrow: "↑" },
-  { action: "bio"       as Pass2Action, label: "Bio Note",    color: "#fb923c", arrow: "↓" },
+  { action: "insight"   as Pass2Action, label: "Key Insight", color: AMBER, arrow: "→" },
+  { action: "memory"    as Pass2Action, label: "Memory",      color: BLUE,  arrow: "←" },
+  { action: "gratitude" as Pass2Action, label: "Gratitude",   color: GREEN, arrow: "↑" },
+  { action: "bio"       as Pass2Action, label: "Bio Note",    color: PINK,  arrow: "↓" },
 ];
+
+const SOMEDAY_COLOR = BLUE;  // long-press → Someday (was gray)
 
 // ── API helpers ──────────────────────────────────────────────────────────────
 
@@ -126,6 +140,7 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
   const [isLocked, setIsLocked] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [justSubmitted, setJustSubmitted] = useState(false);
+  const [focused, setFocused] = useState(false);  // pink glow on focus (MainChat pattern)
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
@@ -233,51 +248,51 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
 
   return (
     <div
-      className="rounded-xl"
       style={{
-        background: "var(--t-input-bg)",
-        borderLeft: "3px solid rgba(245,158,11,0.4)",
-        borderTop: "1px solid var(--t-border-md)",
-        borderRight: "1px solid var(--t-border-md)",
-        borderBottom: "1px solid var(--t-border-md)",
+        background: "var(--surface-elevated)",
+        borderRadius: "var(--radius-lg)",
+        // Pink border at 0.4, brightening + glowing when the textarea is focused.
+        border: focused ? `1.5px solid ${PINK}` : `1.5px solid ${PINK}66`,
+        boxShadow: focused ? `0 0 18px ${PINK}40, inset 0 0 10px ${PINK}1f` : "none",
+        transition: "border-color 0.15s ease, box-shadow 0.15s ease",
       }}
     >
       {/* Lock bar */}
       {isLocked && (
-        <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-white/5">
+        <div className="flex items-center justify-between gap-3 px-3 py-2" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
           <button type="button" onClick={handleMicCancel}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95"
-            style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#ef4444" }}>
+            style={{ background: `${ALERT}1f`, border: `1px solid ${ALERT}40`, color: ALERT }}>
             <X size={12} /> Cancel
           </button>
           <div className="flex items-center gap-1.5">
             {[1,2,3,4,5].map((i) => (
-              <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i-1)*0.1}s` }} />
+              <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: ALERT, animationDelay: `${(i-1)*0.1}s` }} />
             ))}
-            <Lock size={12} className="ml-1" style={{ color: "#f59e0b" }} />
+            <Lock size={12} className="ml-1" style={{ color: PINK }} />
           </div>
           <button type="button" onClick={handleMicSend}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95"
-            style={{ background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", color: "#f59e0b" }}>
+            style={{ background: `${PINK}26`, border: `1px solid ${PINK}66`, color: PINK }}>
             Send ↑
           </button>
         </div>
       )}
       {/* Recording indicator */}
       {(isRecording && !isLocked) && (
-        <div className="flex items-center justify-center gap-2 px-3 py-1.5 border-b border-white/5">
+        <div className="flex items-center justify-center gap-2 px-3 py-1.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
           {[1,2,3,4,5].map((i) => (
-            <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: "#ef4444", animationDelay: `${(i-1)*0.1}s` }} />
+            <div key={i} className="wave-bar w-0.5 rounded-full" style={{ height: "14px", background: ALERT, animationDelay: `${(i-1)*0.1}s` }} />
           ))}
-          <span className="text-xs ml-1" style={{ color: "#ef4444" }}>Recording</span>
-          <span className="text-xs text-white/25 ml-2">↑ slide to lock</span>
+          <span className="text-xs ml-1" style={{ color: ALERT }}>Recording</span>
+          <span className="text-xs ml-2" style={{ color: "var(--text-muted)" }}>↑ slide to lock</span>
         </div>
       )}
-      {/* Capture feedback — brief amber ✓ after text or voice submit */}
+      {/* Capture feedback — brief pink ✓ after text or voice submit */}
       {justSubmitted && !isRecording && !isProcessing && !isLocked && (
-        <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 border-b border-white/5">
-          <Check size={11} style={{ color: "#f59e0b" }} />
-          <span className="text-xs" style={{ color: "#f59e0b" }}>Added</span>
+        <div className="flex items-center justify-center gap-1.5 px-3 py-1.5" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+          <Check size={11} style={{ color: PINK }} />
+          <span className="text-xs" style={{ color: PINK }}>Added</span>
         </div>
       )}
       {/* Input row */}
@@ -287,31 +302,34 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKey}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           placeholder="Add an item…"
           rows={1}
-          className="flex-1 bg-transparent text-lg text-white/85 outline-none min-w-0 placeholder:text-white/25 resize-none overflow-hidden"
-          style={{ lineHeight: "1.4" }}
+          className="flex-1 bg-transparent text-lg outline-none min-w-0 resize-none overflow-hidden placeholder:opacity-50"
+          style={{ lineHeight: "1.4", color: "var(--text-primary)" }}
         />
-        {/* Confirm */}
+        {/* Confirm / Send — pink filled when text present, pink-outlined when empty */}
         <button
           type="button"
           className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
           style={{
-            background: canSubmit ? "#f59e0b22" : "transparent",
-            border: `1px solid ${canSubmit ? "#f59e0b60" : "rgba(255,255,255,0.08)"}`,
+            background: canSubmit ? PINK : "transparent",
+            border: `1px solid ${canSubmit ? PINK : `${PINK}80`}`,
           }}
           onClick={submit}
           disabled={!canSubmit}
         >
-          <Check size={11} style={{ color: canSubmit ? "#f59e0b" : "rgba(255,255,255,0.2)" }} />
+          <Check size={11} style={{ color: canSubmit ? "#1a0a12" : `${PINK}99` }} />
         </button>
-        {/* Single amber mic — hold 150ms to record, release to transcribe+add, slide up to lock */}
+        {/* Mic — outlined pink at rest, filled (red) while recording, slide up to lock */}
         <button
           type="button"
           className={`shrink-0 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-150 active:scale-90 ${isRecording && !isLocked ? "voice-button-recording" : ""}`}
           style={{
-            background: isRecording ? "#ef444422" : isProcessing ? "#f59e0b18" : "#f59e0b14",
-            border: `1.5px solid ${isRecording ? "#ef4444" : "#f59e0b50"}`,
+            background: isRecording ? ALERT : "transparent",
+            border: `1.5px solid ${isRecording ? ALERT : PINK}`,
+            boxShadow: `0 0 12px ${isRecording ? ALERT : PINK}3a`,
             marginRight: "20px",
             touchAction: "none",
           }}
@@ -361,13 +379,13 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
           }}
         >
           {isProcessing ? (
-            <Loader2 size={16} className="animate-spin" style={{ color: "#f59e0b" }} />
+            <Loader2 size={16} className="animate-spin" style={{ color: PINK }} />
           ) : isRecording && isLocked ? (
-            <Lock size={16} style={{ color: "#f59e0b" }} />
+            <Lock size={16} style={{ color: "#ffffff" }} />
           ) : isRecording ? (
-            <MicOff size={16} style={{ color: "#ef4444" }} />
+            <MicOff size={16} style={{ color: "#ffffff" }} />
           ) : (
-            <Mic size={16} style={{ color: "#f59e0b" }} />
+            <Mic size={16} style={{ color: PINK }} />
           )}
         </button>
       </div>
@@ -395,7 +413,7 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
   const offsetRef      = useRef({ x: 0, y: 0 });
   const dirRef         = useRef<"undecided" | "swipe" | "scroll">("undecided");
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const commitColorRef = useRef("#94a3b8");
+  const commitColorRef = useRef(SOMEDAY_COLOR);
 
   const mag      = Math.sqrt(offset.x ** 2 + offset.y ** 2);
   const progress = Math.min(1, mag / COMMIT_THRESHOLD);
@@ -425,7 +443,7 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
       if (Math.sqrt(offsetRef.current.x ** 2 + offsetRef.current.y ** 2) < 8) {
         setLongPressing(true);
         dragging.current = false; dirRef.current = "undecided";
-        commitColorRef.current = "#94a3b8";
+        commitColorRef.current = SOMEDAY_COLOR;
         setCommitting(true);
         setTimeout(() => { setCommitted(true); onSwiped(item, "someday"); }, 200);
       }
@@ -475,12 +493,12 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
           background: dominant
             ? `color-mix(in srgb, ${swipeColor} ${Math.round(progress * 25)}%, transparent)`
             : longPressing
-            ? "color-mix(in srgb, #94a3b8 20%, transparent)"
+            ? `color-mix(in srgb, ${SOMEDAY_COLOR} 20%, transparent)`
             : "transparent",
           border: dominant
             ? `1.5px solid color-mix(in srgb, ${swipeColor} ${Math.round(progress * 70)}%, transparent)`
             : longPressing
-            ? "1.5px solid #94a3b870"
+            ? `1.5px solid ${SOMEDAY_COLOR}70`
             : "1.5px solid transparent",
           transition: dragging.current ? "none" : "all 0.25s ease",
         }}
@@ -500,7 +518,7 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
         {longPressing && !dominant && (
           <span
             className="text-xs font-bold tracking-widest uppercase"
-            style={{ color: "#94a3b8", fontFamily: "'Space Mono', monospace" }}
+            style={{ color: SOMEDAY_COLOR, fontFamily: "'Space Mono', monospace" }}
           >
             Someday
           </span>
@@ -508,13 +526,15 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
       </div>
       {/* Sliding card */}
       <div
-        className="relative flex flex-col px-4 md:px-5 pt-3.5 md:pt-4 pb-2.5 md:pb-3 rounded-xl select-none"
+        className="relative flex flex-col px-4 md:px-5 pt-3.5 md:pt-4 pb-2.5 md:pb-3 select-none"
         style={{
-          background: committing ? `${commitColorRef.current}22` : "var(--t-card)",
-          borderLeft: "3px solid rgba(245,158,11,0.4)",
-          borderTop: "1px solid var(--t-border)",
-          borderRight: "1px solid var(--t-border)",
-          borderBottom: "1px solid var(--t-border)",
+          background: committing ? `${commitColorRef.current}22` : "var(--surface-card)",
+          borderRadius: "var(--radius-lg)",
+          borderLeft: `3px solid ${PINK}`,
+          borderTop: "1px solid var(--border-subtle)",
+          borderRight: "1px solid var(--border-subtle)",
+          borderBottom: "1px solid var(--border-subtle)",
+          boxShadow: committing ? "none" : `0 0 10px ${PINK}33`,
           transform: `translate(${offset.x}px, ${offset.y}px)`,
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
@@ -527,14 +547,14 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
         onPointerCancel={onUp}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <p className="text-base md:text-lg text-white/85 leading-snug min-w-0 whitespace-normal break-words pr-5">
+        <p className="text-base md:text-lg leading-snug min-w-0 whitespace-normal break-words pr-5" style={{ color: "var(--text-primary)" }}>
           {item.text}
         </p>
         <p
           className="text-right pointer-events-none select-none"
           style={{
             fontSize: "9px",
-            color: "var(--t-text5)",
+            color: "var(--text-muted)",
             fontFamily: "'Space Mono', monospace",
             letterSpacing: "0.04em",
             marginTop: "6px",
@@ -543,12 +563,12 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
           hold → someday
         </p>
         <button
-          className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity active:scale-90"
-          style={{ background: "var(--t-el-low)", border: "1px solid var(--t-border-lg)" }}
+          className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-40 hover:opacity-80 transition-opacity active:scale-90"
+          style={{ background: `${ALERT}1a`, border: `1px solid ${ALERT}40` }}
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
           onClick={(e) => { e.stopPropagation(); setCommitted(true); onDismissed(item); }}
         >
-          <X size={8} style={{ color: "var(--t-text3)" }} />
+          <X size={8} style={{ color: ALERT }} />
         </button>
       </div>
     </div>
@@ -573,7 +593,7 @@ function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
   const dragging       = useRef(false);
   const offsetRef      = useRef({ x: 0, y: 0 });
   const dirRef         = useRef<"undecided" | "swipe" | "scroll">("undecided");
-  const commitColorRef = useRef("#60a5fa");
+  const commitColorRef = useRef(BLUE);
 
   const mag      = Math.sqrt(offset.x ** 2 + offset.y ** 2);
   const progress = Math.min(1, mag / COMMIT_THRESHOLD);
@@ -653,13 +673,15 @@ function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
         )}
       </div>
       <div
-        className="relative flex items-start gap-3 px-4 py-3.5 md:px-5 md:py-4 rounded-xl select-none"
+        className="relative flex items-start gap-3 px-4 py-3.5 md:px-5 md:py-4 select-none"
         style={{
-          background: committing ? `${commitColorRef.current}22` : "var(--t-card)",
-          borderLeft: "3px solid rgba(148,163,184,0.4)", // gray — from memory swipe in pass 1
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          borderRight: "1px solid rgba(255,255,255,0.05)",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          background: committing ? `${commitColorRef.current}22` : "var(--surface-card)",
+          borderRadius: "var(--radius-lg)",
+          borderLeft: `3px solid ${PINK}`,
+          borderTop: "1px solid var(--border-subtle)",
+          borderRight: "1px solid var(--border-subtle)",
+          borderBottom: "1px solid var(--border-subtle)",
+          boxShadow: committing ? "none" : `0 0 10px ${PINK}33`,
           transform: `translate(${offset.x}px, ${offset.y}px)`,
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
@@ -672,16 +694,16 @@ function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
         onPointerCancel={onUp}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <p className="text-base md:text-lg text-white/85 leading-snug flex-1 min-w-0 whitespace-normal break-words pr-5">
+        <p className="text-base md:text-lg leading-snug flex-1 min-w-0 whitespace-normal break-words pr-5" style={{ color: "var(--text-primary)" }}>
           {item.text}
         </p>
         <button
-          className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity active:scale-90"
-          style={{ background: "var(--t-el-low)", border: "1px solid var(--t-border-lg)" }}
+          className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center opacity-40 hover:opacity-80 transition-opacity active:scale-90"
+          style={{ background: `${ALERT}1a`, border: `1px solid ${ALERT}40` }}
           onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); }}
           onClick={(e) => { e.stopPropagation(); setCommitted(true); onDismissed(item); }}
         >
-          <X size={8} style={{ color: "var(--t-text3)" }} />
+          <X size={8} style={{ color: ALERT }} />
         </button>
       </div>
     </div>
@@ -693,18 +715,19 @@ function Pass2Card({ item, onSwiped, onDismissed }: P2CardProps) {
 function SkeletonCard() {
   return (
     <div
-      className="animate-pulse px-4 py-3.5 rounded-xl"
+      className="animate-pulse px-4 py-3.5"
       style={{
-        background: "var(--t-card)",
-        borderLeft: "3px solid rgba(245,158,11,0.12)",
-        borderTop: "1px solid var(--t-border)",
-        borderRight: "1px solid rgba(255,255,255,0.04)",
-        borderBottom: "1px solid rgba(255,255,255,0.04)",
+        background: "var(--surface-card)",
+        borderRadius: "var(--radius-lg)",
+        borderLeft: `3px solid ${PINK}33`,
+        borderTop: "1px solid var(--border-subtle)",
+        borderRight: "1px solid var(--border-subtle)",
+        borderBottom: "1px solid var(--border-subtle)",
       }}
     >
       <div
         className="rounded"
-        style={{ height: "20px", background: "rgba(255,255,255,0.07)", width: "72%" }}
+        style={{ height: "20px", background: "var(--border-default)", width: "72%" }}
       />
     </div>
   );
@@ -721,17 +744,17 @@ function HintStrip({ pass }: { pass: 1 | 2 }) {
     >
       {pass === 1 ? (
         <>
-          <span style={{ color: "#94a3b8" }}>← Memory</span>
-          <span style={{ color: "#f59e0b" }}>↑ Today</span>
-          <span style={{ color: "#c084fc" }}>↓ Queue</span>
-          <span style={{ color: "#60a5fa" }}>→ Tomorrow</span>
+          <span style={{ color: GRAY }}>← Memory</span>
+          <span style={{ color: AMBER }}>↑ Today</span>
+          <span style={{ color: PURPLE }}>↓ Queue</span>
+          <span style={{ color: TEAL }}>→ Tomorrow</span>
         </>
       ) : (
         <>
-          <span style={{ color: "#22c55e" }}>↑ Gratitude</span>
-          <span style={{ color: "#60a5fa" }}>← Memory</span>
-          <span style={{ color: "#f59e0b" }}>→ Insight</span>
-          <span style={{ color: "#fb923c" }}>↓ Bio</span>
+          <span style={{ color: GREEN }}>↑ Gratitude</span>
+          <span style={{ color: BLUE }}>← Memory</span>
+          <span style={{ color: AMBER }}>→ Insight</span>
+          <span style={{ color: PINK }}>↓ Bio</span>
         </>
       )}
     </div>
@@ -747,7 +770,7 @@ function Header({ label, accent, count, onMenu }: { label: string; accent: strin
       color={accent}
       onMenu={onMenu}
       right={count !== undefined && count > 0 ? (
-        <span className="text-xs text-white/30 mr-1" style={{ fontFamily: "'Space Mono', monospace" }}>
+        <span className="text-xs mr-1" style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}>
           {count} left
         </span>
       ) : undefined}
@@ -855,72 +878,72 @@ export default function Triage() {
     const total = counts.today + counts.queue + counts.tomorrow + counts.someday
                 + counts.insight + counts.memory + counts.gratitude + counts.bio;
     return (
-      <div className="flex flex-col h-[100dvh]" style={{ background: "var(--t-surface)" }}>
+      <div className="flex flex-col h-[100dvh]" style={{ background: "var(--surface-base)" }}>
         <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
-        <Header label="Triage" accent="#f59e0b" onMenu={() => setMenuOpen(true)} />
+        <Header label="Triage" accent={PINK} onMenu={() => setMenuOpen(true)} />
         <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6">
           <div className="text-center space-y-2">
             <p
-              className="text-white/30 text-xs font-bold tracking-widest uppercase mb-6"
-              style={{ fontFamily: "'Space Mono', monospace" }}
+              className="text-xs font-bold tracking-widest uppercase mb-6"
+              style={{ color: "var(--text-muted)", fontFamily: "'Space Mono', monospace" }}
             >
               Done
             </p>
             {counts.today > 0 && (
-              <p className="text-lg" style={{ color: "#f59e0b" }}>
+              <p className="text-lg" style={{ color: AMBER }}>
                 {counts.today} today
               </p>
             )}
             {counts.tomorrow > 0 && (
-              <p className="text-lg" style={{ color: "#60a5fa" }}>
+              <p className="text-lg" style={{ color: TEAL }}>
                 {counts.tomorrow} tomorrow
               </p>
             )}
             {counts.queue > 0 && (
-              <p className="text-lg" style={{ color: "#c084fc" }}>
+              <p className="text-lg" style={{ color: PURPLE }}>
                 {counts.queue} queued
               </p>
             )}
             {counts.someday > 0 && (
-              <p className="text-lg" style={{ color: "#94a3b8" }}>
+              <p className="text-lg" style={{ color: SOMEDAY_COLOR }}>
                 {counts.someday} someday
               </p>
             )}
             {counts.insight > 0 && (
-              <p className="text-lg" style={{ color: "#f59e0b" }}>
+              <p className="text-lg" style={{ color: AMBER }}>
                 {counts.insight} key insight{counts.insight !== 1 ? "s" : ""}
               </p>
             )}
             {counts.memory > 0 && (
-              <p className="text-lg" style={{ color: "#60a5fa" }}>
+              <p className="text-lg" style={{ color: BLUE }}>
                 {counts.memory} to memory
               </p>
             )}
             {counts.gratitude > 0 && (
-              <p className="text-lg" style={{ color: "#22c55e" }}>
+              <p className="text-lg" style={{ color: GREEN }}>
                 {counts.gratitude} gratitude{counts.gratitude !== 1 ? "s" : ""}
               </p>
             )}
             {counts.bio > 0 && (
-              <p className="text-lg" style={{ color: "#fb923c" }}>
+              <p className="text-lg" style={{ color: PINK }}>
                 {counts.bio} bio note{counts.bio !== 1 ? "s" : ""}
               </p>
             )}
             {total === 0 && (
-              <p className="text-lg text-white/30">Nothing sorted.</p>
+              <p className="text-lg" style={{ color: "var(--text-muted)" }}>Nothing sorted.</p>
             )}
           </div>
           <div className="flex gap-3">
             <button
               className="px-6 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
-              style={{ background: "var(--t-el-med)", color: "var(--t-text4)", border: "1px solid var(--t-border-md)" }}
+              style={{ background: "var(--surface-elevated)", color: "var(--text-secondary)", border: "1px solid var(--border-default)" }}
               onClick={reset}
             >
               New session
             </button>
             <button
               className="px-6 py-3 rounded-xl text-sm font-semibold transition-all active:scale-95"
-              style={{ background: "#f59e0b22", color: "#f59e0b", border: "1px solid #f59e0b40" }}
+              style={{ background: `${PINK}22`, color: PINK, border: `1px solid ${PINK}40` }}
               onClick={() => navigate("/tasks")}
             >
               Task view
@@ -934,9 +957,9 @@ export default function Triage() {
   // ── Pass 2 screen ────────────────────────────────────────────────────────────
   if (phase === "pass2") {
     return (
-      <div className="flex flex-col h-[100dvh]" style={{ background: "var(--t-surface)" }}>
+      <div className="flex flex-col h-[100dvh]" style={{ background: "var(--surface-base)" }}>
         <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
-        <Header label="What type?" accent="#94a3b8" count={pass2Queue.length} onMenu={() => setMenuOpen(true)} />
+        <Header label="What type?" accent={PINK} count={pass2Queue.length} onMenu={() => setMenuOpen(true)} />
         <div className="flex-1 flex flex-col gap-4 px-4 py-4 overflow-y-auto">
           <HintStrip pass={2} />
           <div className="flex flex-col gap-3" style={{ touchAction: "none" }}>
@@ -956,9 +979,9 @@ export default function Triage() {
 
   // ── Capture + Pass 1 screen ──────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-[100dvh]" style={{ background: "var(--t-surface)" }}>
+    <div className="flex flex-col h-[100dvh]" style={{ background: "var(--surface-base)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
-      <Header label="Triage" accent="#f59e0b" count={pass1Queue.length > 0 ? pass1Queue.length : undefined} onMenu={() => setMenuOpen(true)} />
+      <Header label="Triage" accent={PINK} count={pass1Queue.length > 0 ? pass1Queue.length : undefined} onMenu={() => setMenuOpen(true)} />
       {/* Scrollable card area — input row is NOT here */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
         {pass1Queue.length === 0 && decomposing ? (
@@ -968,12 +991,18 @@ export default function Triage() {
             <SkeletonCard />
           </div>
         ) : pass1Queue.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center">
-            <p
-              className="text-white/30 text-sm text-center leading-loose"
-              style={{ fontFamily: "'Space Mono', monospace" }}
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 -mt-6">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center"
+              style={{ background: `${PINK}15`, border: `1.5px solid ${PINK}33`, boxShadow: `0 0 20px ${PINK}26` }}
             >
-              Type or speak below,<br />then swipe to sort.
+              <Mic size={26} style={{ color: PINK }} />
+            </div>
+            <p className="text-sm text-center" style={{ color: "var(--text-secondary)" }}>
+              Nothing here yet
+            </p>
+            <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
+              speak or type to capture
             </p>
           </div>
         ) : (
