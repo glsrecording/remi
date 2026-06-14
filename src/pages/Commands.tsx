@@ -49,13 +49,18 @@ export default function Commands() {
           </span>
         </div>
 
+        <p className="text-xs text-white/40 mb-3 leading-snug">
+          What Remi can do today. Say any of these in chat, or tap a suggestion's
+          "Use it" when it pops up.
+        </p>
+
         <div className="relative">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search trigger phrases..."
+            placeholder="Search commands..."
             className="w-full bg-white/5 border border-white/8 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder:text-white/25 focus:outline-none focus:border-white/20 transition-colors"
             data-testid="input-command-search"
           />
