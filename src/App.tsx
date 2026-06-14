@@ -26,6 +26,7 @@ import ContentPipeline from "@/pages/ContentPipeline";
 import QuickLinks from "@/pages/QuickLinks";
 import Exercise from "@/pages/Exercise";
 import Reminders from "@/pages/Reminders";
+import MemoryReview from "@/pages/MemoryReview";
 import WrapUp from "@/pages/WrapUp";
 import SanityCheck from "@/pages/SanityCheck";
 import NotFound from "@/pages/not-found";
@@ -60,6 +61,7 @@ function Router() {
       <Route path="/links" component={QuickLinks} />
       <Route path="/exercise" component={Exercise} />
       <Route path="/reminders" component={Reminders} />
+      <Route path="/memory-review" component={MemoryReview} />
       <Route path="/wrap-up" component={WrapUp} />
       <Route path="/sanity-check" component={SanityCheck} />
       <Route component={NotFound} />

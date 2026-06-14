@@ -22,7 +22,7 @@ interface MenuItem {
   label: string;
   icon: LucideIcon;
   path: string;
-  badge?: "tasksToday" | "reminders";   // tasksToday = amber count (Tasks); reminders = tonight/purple count
+  badge?: "tasksToday" | "reminders" | "memoryReview";   // tasksToday = amber (Tasks); reminders = tonight/purple; memoryReview = teal
 }
 
 interface MenuSection {
@@ -63,6 +63,7 @@ const SECTIONS: MenuSection[] = [
       { label: "Time Track",    icon: Clock,          path: "/time-track" },
       { label: "Exercise",      icon: Dumbbell,       path: "/exercise" },
       { label: "Weekly Review", icon: ClipboardCheck, path: "#weekly-review" },
+      { label: "Memory Review", icon: Brain,          path: "/memory-review", badge: "memoryReview" },
     ],
   },
   {
@@ -106,6 +107,7 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
   const [location, navigate] = useLocation();
   const { isLight, toggleTheme } = useTheme();
   const [reminderCount, setReminderCount] = useState(0);
+  const [memoryCount, setMemoryCount] = useState(0);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -128,6 +130,17 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
     return () => { cancelled = true; };
   }, [open]);
 
+  // On open: pull the combined pending memory count (personal + jarvis) for the badge.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch(`${JARVIS_URL}/memory/count`, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (!cancelled) setMemoryCount(typeof data?.total === "number" ? data.total : 0); })
+      .catch(() => { if (!cancelled) setMemoryCount(0); });
+    return () => { cancelled = true; };
+  }, [open]);
+
   if (!open) return null;
 
   const tasksToday = readTasksTodayCount();
@@ -147,6 +160,7 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
     const isActive = location === item.path;
     const showTasksBadge = item.badge === "tasksToday" && tasksToday > 0;
     const showRemindersBadge = item.badge === "reminders" && reminderCount > 0;
+    const showMemoryBadge = item.badge === "memoryReview" && memoryCount > 0;
     return (
       <button
         key={item.label}
@@ -208,6 +222,22 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
             data-testid="menu-badge-reminders"
           >
             {reminderCount}
+          </span>
+        )}
+        {showMemoryBadge && (
+          <span
+            className="shrink-0"
+            style={{
+              background: "var(--color-studio-bg)",
+              color: "var(--color-studio)",
+              fontSize: "10px",
+              padding: "1px 7px",
+              borderRadius: "var(--radius-pill)",
+              fontFamily: "'Space Mono', monospace",
+            }}
+            data-testid="menu-badge-memory-review"
+          >
+            {memoryCount}
           </span>
         )}
       </button>
