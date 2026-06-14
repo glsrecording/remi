@@ -2,7 +2,7 @@ import { useLocation } from "wouter";
 import {
   X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, MessageSquare,
   Terminal, Shuffle, Radio, BookOpen, RefreshCw, ClipboardCheck, ShoppingCart,
-  Layers, Phone, Film, Link2, Bell, Archive, Users, CalendarClock, Dumbbell,
+  Layers, Phone, Film, Link2, Bell, Archive, Users, CalendarClock, Dumbbell, Database,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -22,7 +22,7 @@ interface MenuItem {
   label: string;
   icon: LucideIcon;
   path: string;
-  badge?: "tasksToday" | "reminders" | "memoryReview";   // tasksToday = amber (Tasks); reminders = tonight/purple; memoryReview = teal
+  badge?: "tasksToday" | "reminders" | "personalMemory" | "jarvisKnowledge";   // tasksToday = amber; reminders = purple; memory badges = teal
 }
 
 interface MenuSection {
@@ -63,7 +63,7 @@ const SECTIONS: MenuSection[] = [
       { label: "Time Track",    icon: Clock,          path: "/time-track" },
       { label: "Exercise",      icon: Dumbbell,       path: "/exercise" },
       { label: "Weekly Review", icon: ClipboardCheck, path: "#weekly-review" },
-      { label: "Memory Review", icon: Brain,          path: "/memory-review", badge: "memoryReview" },
+      { label: "Personal Memory", icon: Brain,        path: "/personal-memory", badge: "personalMemory" },
     ],
   },
   {
@@ -83,9 +83,10 @@ const SECTIONS: MenuSection[] = [
   {
     name: "System", accent: "#888890", bg: "var(--surface-elevated)",     // --text-secondary (readable gray)
     items: [
-      { label: "Sanity Check", icon: Users,    path: "/sanity-check" },
-      { label: "Links",        icon: Link2,    path: "/links" },
-      { label: "Commands",     icon: Terminal, path: "/commands" },
+      { label: "Sanity Check",     icon: Users,    path: "/sanity-check" },
+      { label: "Jarvis Knowledge", icon: Database, path: "/jarvis-knowledge", badge: "jarvisKnowledge" },
+      { label: "Links",            icon: Link2,    path: "/links" },
+      { label: "Commands",         icon: Terminal, path: "/commands" },
     ],
   },
 ];
@@ -107,7 +108,8 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
   const [location, navigate] = useLocation();
   const { isLight, toggleTheme } = useTheme();
   const [reminderCount, setReminderCount] = useState(0);
-  const [memoryCount, setMemoryCount] = useState(0);
+  const [personalCount, setPersonalCount] = useState(0);
+  const [jarvisCount, setJarvisCount]     = useState(0);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -130,14 +132,29 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
     return () => { cancelled = true; };
   }, [open]);
 
-  // On open: pull the combined pending memory count (personal + jarvis) for the badge.
+  // On open: pull each memory list and count what needs review (mirrors how the
+  // pages group). Counted client-side — like the reminders badge above — so
+  // legacy entries with no Status (which the /count endpoint ignores) still show.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    fetch(`${JARVIS_URL}/memory/count`, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (!cancelled) setMemoryCount(typeof data?.total === "number" ? data.total : 0); })
-      .catch(() => { if (!cancelled) setMemoryCount(0); });
+    const hdr = { Authorization: `Bearer ${REMI_API_KEY}` };
+    fetch(`${JARVIS_URL}/memory_bank`, { headers: hdr })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => {
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setPersonalCount(arr.filter((e: { status?: string }) => e.status !== "Approved").length);
+      })
+      .catch(() => { if (!cancelled) setPersonalCount(0); });
+    fetch(`${JARVIS_URL}/jarvis_knowledge`, { headers: hdr })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => {
+        if (cancelled) return;
+        const arr = Array.isArray(list) ? list : [];
+        setJarvisCount(arr.filter((e: { status?: string }) => e.status !== "Approved" && e.status !== "Active").length);
+      })
+      .catch(() => { if (!cancelled) setJarvisCount(0); });
     return () => { cancelled = true; };
   }, [open]);
 
@@ -160,7 +177,8 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
     const isActive = location === item.path;
     const showTasksBadge = item.badge === "tasksToday" && tasksToday > 0;
     const showRemindersBadge = item.badge === "reminders" && reminderCount > 0;
-    const showMemoryBadge = item.badge === "memoryReview" && memoryCount > 0;
+    const showPersonalBadge = item.badge === "personalMemory" && personalCount > 0;
+    const showJarvisBadge   = item.badge === "jarvisKnowledge" && jarvisCount > 0;
     return (
       <button
         key={item.label}
@@ -224,7 +242,7 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
             {reminderCount}
           </span>
         )}
-        {showMemoryBadge && (
+        {(showPersonalBadge || showJarvisBadge) && (
           <span
             className="shrink-0"
             style={{
@@ -235,9 +253,9 @@ export default function HamburgerMenu({ open, onClose, onRefreshContext, onWeekl
               borderRadius: "var(--radius-pill)",
               fontFamily: "'Space Mono', monospace",
             }}
-            data-testid="menu-badge-memory-review"
+            data-testid={showPersonalBadge ? "menu-badge-personal-memory" : "menu-badge-jarvis-knowledge"}
           >
-            {memoryCount}
+            {showPersonalBadge ? personalCount : jarvisCount}
           </span>
         )}
       </button>
