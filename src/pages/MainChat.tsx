@@ -489,10 +489,9 @@ function _resolveMixArtist(rest: string): { artist: string; song: string } {
 
 export default function MainChat() {
   const [, navigate] = useLocation();
-  const [messages, setMessages] = useLocalStorage<ChatMessage[]>(
-    STORAGE_KEYS.CHAT_MESSAGES,
-    SEED_MESSAGES,
-  );
+  // Chat history is server-owned (see the sync effect below) — never persisted
+  // to localStorage, which caused per-device divergence. React state only.
+  const [messages, setMessages] = useState<ChatMessage[]>(SEED_MESSAGES);
   const [mixNotes, setMixNotes] = useLocalStorage<MixNote[]>(
     STORAGE_KEYS.MIX_NOTES,
     [],
@@ -600,6 +599,11 @@ export default function MainChat() {
 
   useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
 
+  // Mirror the in-flight send flag into a ref so the background sync (visibility +
+  // polling) can skip a refresh mid-send without resubscribing its listeners.
+  const isSendingRef = useRef(false);
+  useEffect(() => { isSendingRef.current = isJarvisLoading; }, [isJarvisLoading]);
+
   useEffect(() => {
     document.documentElement.style.setProperty("--remi-accent", remiColor);
   }, [remiColor]);
@@ -615,17 +619,41 @@ export default function MainChat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isJarvisLoading]);
-  // On mount: pull shared history from server; fall back to localStorage silently
+  // Chat history sync — the server (/remi/history) is the single source of truth.
+  // Clear any stale localStorage from older builds, load on mount, and keep fresh
+  // via a visibilitychange re-sync (switching back to Remi) + a 60s background
+  // poll. All silent (no spinner). Skips while a send is in flight so the next
+  // sync can't clobber the optimistic append before the server has stored it.
   useEffect(() => {
-    fetch(`${JARVIS_URL}/remi/history?t=${Date.now()}`, {
-      headers: { Authorization: `Bearer ${REMI_API_KEY}` },
-      cache: "no-store",
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.messages?.length) setMessages(data.messages as ChatMessage[]);
+    try { localStorage.removeItem(STORAGE_KEYS.CHAT_MESSAGES); } catch { /* ignore */ }
+
+    const sync = (onlyIfDifferent: boolean) => {
+      if (isSendingRef.current) return;
+      fetch(`${JARVIS_URL}/remi/history?t=${Date.now()}`, {
+        headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+        cache: "no-store",
       })
-      .catch(() => {});
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const msgs = data?.messages;
+          if (!Array.isArray(msgs) || !msgs.length) return;
+          setMessages((prev) =>
+            onlyIfDifferent && msgs.length === prev.length ? prev : (msgs as ChatMessage[]),
+          );
+        })
+        .catch(() => {});
+    };
+
+    sync(false); // initial load
+
+    const onVisible = () => { if (document.visibilityState === "visible") sync(false); };
+    document.addEventListener("visibilitychange", onVisible);
+    const pollId = setInterval(() => sync(true), 60000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(pollId);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // On mount: check for upcoming deadlines — show banner in background, don't block chat
   useEffect(() => {
@@ -1131,25 +1159,12 @@ export default function MainChat() {
       headers: { Authorization: `Bearer ${REMI_API_KEY}` },
       cache: "no-store",
     })
-      .then((r) => {
-        console.log("[refresh] GET /remi/history →", r.status, "ok:", r.ok);
-        return r.ok ? r.json() : null;
-      })
+      .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         const msgs = data?.messages;
-        console.log("[refresh] history payload:", {
-          count: Array.isArray(msgs) ? msgs.length : null,
-          firstId: msgs?.[0]?.id,
-          lastId: msgs?.[msgs.length - 1]?.id,
-        });
-        if (Array.isArray(msgs) && msgs.length) {
-          setMessages(msgs as ChatMessage[]);
-          console.log("[refresh] setMessages called with", msgs.length, "messages");
-        } else {
-          console.warn("[refresh] history empty/malformed — setMessages skipped");
-        }
+        if (Array.isArray(msgs) && msgs.length) setMessages(msgs as ChatMessage[]);
       })
-      .catch((err) => { console.error("[refresh] /remi/history failed:", err); });
+      .catch(() => {});
     const loadDeadlines = sessionStorage.getItem("deadline_banner_dismissed") === "1"
       ? Promise.resolve()
       : fetch(`${JARVIS_URL}/deadlines/check?t=${Date.now()}`, {
