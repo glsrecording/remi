@@ -41,6 +41,9 @@ import type { Command } from "@/lib/commands";
 const JARVIS_URL   = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
+// Notion page URLs in confirmation text → rendered as a tappable chip, not raw text.
+const NOTION_URL_RE = /https?:\/\/(?:app\.notion\.com|(?:www\.)?notion\.so)\/\S+/g;
+
 const ACCENT_COLORS = [
   { name: "green", value: "#22c55e" },
   { name: "blue", value: "#3b82f6" },
@@ -486,6 +489,41 @@ function _resolveMixArtist(rest: string): { artist: string; song: string } {
   return { artist: tokens[0] || "", song: tokens.slice(1).join(" ") };
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Renders an AI message body: pulls any Notion page URLs out of the markdown
+// text and shows them as compact "↗ Notion" chips below, instead of raw URLs.
+function AiText({ text }: { text: string }) {
+  const urls = text.match(NOTION_URL_RE) ?? [];
+  const cleaned = urls.length
+    ? text.replace(NOTION_URL_RE, "").replace(/[ \t]+$/gm, "").replace(/\n{2,}/g, "\n").trim()
+    : text;
+  return (
+    <>
+      <div className="prose-dark leading-relaxed whitespace-pre-wrap" style={{ fontSize: "inherit" }}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{formatAiText(cleaned)}</ReactMarkdown>
+      </div>
+      {urls.length > 0 && (
+        <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+          {urls.map((url, i) => (
+            <button
+              key={i}
+              onClick={() => window.open(url, "_blank")}
+              data-testid="notion-chip"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "4px",
+                padding: "4px 10px", borderRadius: "6px",
+                background: "#3dd6b01f", border: "1px solid #3dd6b045",
+                color: "#3dd6b0", fontSize: "0.78em", lineHeight: 1, cursor: "pointer",
+              }}
+            >
+              <ExternalLink size={11} /> Notion
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function MainChat() {
   const [, navigate] = useLocation();
@@ -1499,11 +1537,7 @@ export default function MainChat() {
             >
               {msg.role === "ai" ? (
                 <>
-                  <div className="prose-dark leading-relaxed whitespace-pre-wrap" style={{ fontSize: "inherit" }}>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {formatAiText(msg.text)}
-                    </ReactMarkdown>
-                  </div>
+                  <AiText text={msg.text} />
                   {msg.pages && msg.pages.length > 0 && (
                     <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "5px" }}>
                       {msg.pages.map((page, i) =>
