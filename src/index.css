@@ -114,7 +114,7 @@ html.light-mode {
 
 /* Light mode: Tailwind utility class overrides (inline styles override CSS, but
    Tailwind classes can be overridden here because CSS has enough specificity) */
-html.light-mode body { background: #e0e0dd; }
+html.light-mode body { background: radial-gradient(ellipse 90% 75% at 50% 28%, #ededea 0%, #d8d8d4 58%, #c9c9c5 100%); }
 html.light-mode #root { background: var(--t-bg); box-shadow: 0 0 0 1px rgba(0,0,0,0.06), 0 0 40px rgba(0,0,0,0.15); }
 
 html.light-mode .text-white   { color: var(--t-text); }
@@ -272,8 +272,10 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
     width: 100%;
     overflow: hidden;
     overscroll-behavior: none;
-    /* Desktop: dark letterbox sides, phone centered */
-    background: #111111;
+    /* Wide screens: a soft vignette "stage" behind the centered panel so the
+       gutters read as a deliberate backdrop, not dead margins. Only visible when
+       the viewport is wider than the panel (>430px); phones never see it. */
+    background: radial-gradient(ellipse 90% 75% at 50% 28%, #1c1c1c 0%, #0d0d0d 58%, #060606 100%);
     display: flex;
     justify-content: center;
     align-items: stretch;
@@ -486,31 +488,32 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
   html { font-size: 19px; }  /* desktop bump: was 17px (~+12%) so the 768px breakpoint stays >= mobile */
 
   body {
-    background: #0a0a0a;
+    /* Backdrop is the base vignette (cascades) — here we only handle layout. */
     display: flex;
     justify-content: center;
     min-height: 100dvh;
   }
 
-  html.light-mode body { background: #d0d0cc; }
-
   #root {
-    max-width: 640px;
+    /* Wider panel on large screens so it reads as a deliberate stage, not a thin
+       strip in a sea of dead margin. Crisp hairline edge + soft ambient glow lift
+       it off the vignette backdrop so the centering looks intentional. */
+    max-width: 760px;
     width: 100%;
     min-height: 100dvh;
-    box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 0 80px rgba(0,0,0,0.6);
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.07), 0 12px 64px rgba(0,0,0,0.5);
   }
 
   html.light-mode #root {
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.08), 0 0 80px rgba(0,0,0,0.22);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.10), 0 12px 64px rgba(0,0,0,0.18);
   }
 
-  /* Re-anchor MainChat's fixed input bar to the centered 640px panel */
+  /* Keep MainChat's fixed input bar aligned to the widened centered panel */
   .remi-chat-input-bar {
     left: 50% !important;
     right: auto !important;
     transform: translateX(-50%);
-    width: 640px;
+    width: 760px;
     max-width: 100vw;
   }
 }
