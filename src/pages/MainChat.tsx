@@ -491,7 +491,10 @@ export default function MainChat() {
   const [, navigate] = useLocation();
   // Chat history is server-owned (see the sync effect below) — never persisted
   // to localStorage, which caused per-device divergence. React state only.
-  const [messages, setMessages] = useState<ChatMessage[]>(SEED_MESSAGES);
+  // Starts empty (NOT SEED_MESSAGES) so a failed/empty mount fetch can never
+  // leave stale seed messages on screen; a skeleton covers the initial load.
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [mixNotes, setMixNotes] = useLocalStorage<MixNote[]>(
     STORAGE_KEYS.MIX_NOTES,
     [],
@@ -644,7 +647,20 @@ export default function MainChat() {
         .catch(() => {});
     };
 
-    sync(false); // initial load
+    // Initial load — distinct from the background sync: SEED must never show, so
+    // an empty or failed history resolves to [] (not seeds), and the loading
+    // skeleton is always cleared once the request settles.
+    fetch(`${JARVIS_URL}/remi/history?t=${Date.now()}`, {
+      headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+      cache: "no-store",
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const msgs = data?.messages;
+        setMessages(Array.isArray(msgs) && msgs.length ? (msgs as ChatMessage[]) : []);
+      })
+      .catch(() => { setMessages([]); })
+      .finally(() => { setHistoryLoading(false); });
 
     const onVisible = () => { if (document.visibilityState === "visible") sync(false); };
     document.addEventListener("visibilitychange", onVisible);
@@ -1439,7 +1455,23 @@ export default function MainChat() {
         }}
       >
         <div className="space-y-3">
-        {messages.map((msg) => (
+        {historyLoading && messages.length === 0 ? (
+          <div className="space-y-3 pt-2" data-testid="chat-skeleton">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className={`flex ${i % 2 ? "justify-end" : "justify-start"}`}>
+                <div
+                  className="animate-pulse rounded-2xl"
+                  style={{
+                    width: i % 2 ? "55%" : "70%",
+                    height: 44,
+                    background: "var(--t-card)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        ) : messages.map((msg) => (
           <div
             key={msg.id}
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} bubble-in`}
