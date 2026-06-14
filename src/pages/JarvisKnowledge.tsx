@@ -248,11 +248,13 @@ export default function JarvisKnowledge() {
       {toastEntry && <UndoToast message="Archived" onUndo={undo} onExpire={() => { /* commit handled by timer */ }} />}
       {errMsg && <ErrorToast message={errMsg} />}
 
+      {/* Approve keeps the sheet OPEN so its primary button can swap to Mark Active
+          in place (the sheet tracks its own status). Mark Active is the terminus → close. */}
       {sheet && (
         <KnowledgeSheet
           entry={sheet}
           onClose={() => setSheet(null)}
-          onApprove={(extra) => { setStatus(sheet, "Approved", extra); setSheet(null); }}
+          onApprove={(extra) => { setStatus(sheet, "Approved", extra); }}
           onActive={(extra) => { setStatus(sheet, "Active", extra); setSheet(null); }}
           onArchive={(extra) => {
             if (extra && Object.keys(extra).length) memoryPatch("jarvis_knowledge", sheet.id, extra);
@@ -277,6 +279,11 @@ function KnowledgeSheet({ entry, onClose, onApprove, onActive, onArchive }: {
 }) {
   const [title, setTitle] = useState(entry.title);
   const [canon, setCanon] = useState(entry.canonical_statement);
+  // Local status drives the primary-button swap. Tapping Approve flips this to
+  // "Approved" while the sheet stays open, so Mark Active appears in place
+  // without a reopen. Seeded from the entry so an already-Approved entry opens
+  // straight to Mark Active, and an Active entry shows the "In context" state.
+  const [sheetStatus, setSheetStatus] = useState(entry.status);
 
   function extra(): Record<string, string> {
     const e: Record<string, string> = {};
@@ -330,15 +337,17 @@ function KnowledgeSheet({ entry, onClose, onApprove, onActive, onArchive }: {
         <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>Captured {relativeDate(entry.created_time)}</p>
 
         <div className="flex gap-2">
-          <button
-            className="flex-1 flex items-center justify-center gap-2 py-3 text-base font-semibold active:scale-95"
-            style={{ background: TEAL, color: "var(--surface-base)", borderRadius: "var(--radius-md)" }}
-            onClick={() => onApprove(extra())}
-            data-testid="sheet-approve"
-          >
-            <Check size={16} /> Approve
-          </button>
-          {entry.status === "Approved" && (
+          {/* Primary slot swaps in place by status: review → Approve;
+              Approved → Mark Active; Active → non-interactive "In context". */}
+          {sheetStatus === "Active" ? (
+            <div
+              className="flex-1 flex items-center justify-center gap-2 py-3 text-base font-semibold"
+              style={{ background: "color-mix(in srgb, var(--color-done) 16%, transparent)", color: "var(--color-done)", borderRadius: "var(--radius-md)" }}
+              data-testid="sheet-incontext"
+            >
+              <Check size={16} /> In context
+            </div>
+          ) : sheetStatus === "Approved" ? (
             <button
               className="flex-1 flex items-center justify-center gap-2 py-3 text-base font-semibold active:scale-95"
               style={{ background: "var(--color-done)", color: "var(--surface-base)", borderRadius: "var(--radius-md)" }}
@@ -346,6 +355,15 @@ function KnowledgeSheet({ entry, onClose, onApprove, onActive, onArchive }: {
               data-testid="sheet-active"
             >
               Mark Active
+            </button>
+          ) : (
+            <button
+              className="flex-1 flex items-center justify-center gap-2 py-3 text-base font-semibold active:scale-95"
+              style={{ background: TEAL, color: "var(--surface-base)", borderRadius: "var(--radius-md)" }}
+              onClick={() => { onApprove(extra()); setSheetStatus("Approved"); }}
+              data-testid="sheet-approve"
+            >
+              <Check size={16} /> Approve
             </button>
           )}
           <button
