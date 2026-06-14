@@ -122,8 +122,9 @@ export default function PersonalMemory() {
   // Apply edited title/body locally so the card reflects the change immediately.
   function parseExtra(extra: Record<string, string>): Partial<MemEntry> {
     const out: Partial<MemEntry> = {};
-    if (extra.title !== undefined) out.title = extra.title;
-    if (extra.body !== undefined)  out.body = extra.body;
+    if (extra.title !== undefined)    out.title = extra.title;
+    if (extra.body !== undefined)     out.body = extra.body;
+    if (extra.category !== undefined) out.category = extra.category;
     return out;
   }
 
@@ -254,11 +255,14 @@ function PersonalSheet({ entry, onClose, onApprove, onArchive }: {
 }) {
   const [title, setTitle] = useState(entry.title);
   const [body, setBody]   = useState(entry.body);
+  // Pre-select current category; default to "Memory" when null/missing.
+  const [cat, setCat]     = useState(entry.category || "Memory");
 
   function extra(): Record<string, string> {
     const e: Record<string, string> = {};
     if (title !== entry.title) e.title = title;
     if (body !== entry.body)   e.body = body;
+    if (cat !== entry.category) e.category = cat;   // only send when changed
     return e;
   }
   const inputStyle: React.CSSProperties = {
@@ -288,6 +292,30 @@ function PersonalSheet({ entry, onClose, onApprove, onArchive }: {
 
         <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>Body</label>
         <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={4} className="px-3 py-2.5 text-sm mb-3 resize-none" style={inputStyle} data-testid="sheet-body" />
+
+        <label className="block text-xs mb-1" style={{ color: "var(--text-muted)" }}>Category</label>
+        <div className="flex gap-2 mb-4">
+          {(["Memory", "Insight", "Gratitude"] as const).map((c) => {
+            const active = cat === c;
+            const col = categoryColor(c);
+            return (
+              <button
+                key={c}
+                onClick={() => setCat(c)}
+                className="flex-1 py-2 text-sm font-semibold active:scale-95"
+                style={{
+                  background: active ? `color-mix(in srgb, ${col} 18%, transparent)` : "transparent",
+                  color: active ? col : "var(--text-secondary)",
+                  border: `1.5px solid ${active ? `color-mix(in srgb, ${col} 55%, transparent)` : "var(--border-default)"}`,
+                  borderRadius: "var(--radius-md)",
+                }}
+                data-testid={`sheet-cat-${c.toLowerCase()}`}
+              >
+                {c}
+              </button>
+            );
+          })}
+        </div>
 
         <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>Captured {relativeDate(entry.created_time)}</p>
 
