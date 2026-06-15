@@ -11,8 +11,10 @@ const LONG_PRESS_MS    = 500; // identical to Tasks.tsx
 
 // Design-system context colors (mirror design-system.css; hex so the `color + "33"`
 // alpha-concat glow pattern works — mode-independent, safe in light + dark).
-// Triage's identity is personal pink; swipe targets map to the context palette.
-const PINK   = "#d4537e";  // --color-personal — screen identity / cards / Bio
+// Triage's identity is purple (the capture/ambient color); swipe targets map to
+// the context palette. NB: the const is named PINK for history but now holds the
+// purple identity value — every PINK reference renders purple.
+const PINK   = "#9b8de8";  // --color-tonight (purple) — screen identity / cards / Bio
 const AMBER  = "#f5a623";  // --color-tasks    — Today / Key Insight
 const TEAL   = "#3dd6b0";  // --color-studio   — Tomorrow
 const PURPLE = "#9b8de8";  // --color-tonight  — Queue
@@ -251,10 +253,13 @@ function TriageInputRow({ onAdd }: { onAdd: (text: string) => void }) {
       style={{
         background: "var(--surface-elevated)",
         borderRadius: "var(--radius-lg)",
-        // Pink border at 0.4, brightening + glowing when the textarea is focused.
-        border: focused ? `1.5px solid ${PINK}` : `1.5px solid ${PINK}66`,
-        boxShadow: focused ? `0 0 18px ${PINK}40, inset 0 0 10px ${PINK}1f` : "none",
-        transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+        // Solid purple border + a constant neon glow (the capture zone is the
+        // energy source for the ambient field). Focus intensifies the glow.
+        border: `1.5px solid ${PINK}`,
+        boxShadow: focused
+          ? `0 0 16px ${PINK}80, 0 0 30px ${PINK}3a, inset 0 0 10px ${PINK}1f`
+          : `0 0 12px ${PINK}66, 0 0 24px ${PINK}26`,
+        transition: "border-color 0.15s ease, box-shadow 0.2s ease",
       }}
     >
       {/* Lock bar */}
@@ -982,8 +987,19 @@ export default function Triage() {
     <div className="flex flex-col h-[100dvh]" style={{ background: "var(--surface-base)" }}>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <Header label="Triage" accent={PINK} count={pass1Queue.length > 0 ? pass1Queue.length : undefined} onMenu={() => setMenuOpen(true)} />
-      {/* Scrollable card area — input row is NOT here */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+      {/* Scrollable card area — input row is NOT here. Deep-purple ambient field:
+          the glow is strongest at the bottom (the capture zone) and fades upward. */}
+      <div
+        className="flex-1 overflow-y-auto px-4 py-4 mx-2 flex flex-col gap-4"
+        style={{
+          borderRadius: "var(--radius-lg)",
+          background:
+            "radial-gradient(ellipse at 50% 100%, rgba(155,141,232,0.12) 0%, rgba(155,141,232,0.06) 40%, transparent 70%)",
+          border: "1px solid rgba(155,141,232,0.2)",
+          boxShadow:
+            "inset 0 0 60px rgba(155,141,232,0.08), 0 0 30px rgba(155,141,232,0.1)",
+        }}
+      >
         {pass1Queue.length === 0 && decomposing ? (
           <div className="flex flex-col gap-3">
             <SkeletonCard />
@@ -999,7 +1015,7 @@ export default function Triage() {
               <Mic size={26} style={{ color: PINK }} />
             </div>
             <p className="text-sm text-center" style={{ color: "var(--text-secondary)" }}>
-              Nothing here yet
+              ready when you are
             </p>
             <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
               speak or type to capture
@@ -1021,8 +1037,9 @@ export default function Triage() {
           </>
         )}
       </div>
-      {/* Input row pinned to bottom — matches Session.tsx pattern */}
-      <div className="shrink-0 px-4 pt-2" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}>
+      {/* Input row pinned to bottom — matches Session.tsx pattern. mx-2 aligns it
+          with the ambient container above and lets the input's neon glow breathe. */}
+      <div className="shrink-0 px-4 pt-2 mx-2" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}>
         <TriageInputRow onAdd={addItem} />
       </div>
     </div>

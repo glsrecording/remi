@@ -5,7 +5,7 @@ import {
   RefreshCw, Loader2, ChevronDown, ChevronRight,
   Plus, Mic, MicOff, Check, X, GripVertical, Star,
   Square, CheckSquare, Calendar, Circle,
-  Music, MessageSquare, Briefcase, PenLine, Film, Hash, Layers,
+  Music, MessageSquare, Briefcase, PenLine, Film, Hash, Layers, Heart,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -44,14 +44,14 @@ interface Task {
 // Category filter chips (cards view only). "All" is the default/no-filter state.
 // Values must match the Master Tasks "Category" select options exactly.
 const CATEGORY_FILTERS = [
-  "All", "Communication", "Filming", "Admin", "Writing", "Studio", "General",
+  "All", "Communication", "Filming", "Admin", "Writing", "Family", "Studio", "General",
 ] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
 
 // Assignable work-mode categories (no "All"). Must match the backend
 // _ALLOWED_TASK_CATEGORIES set exactly.
 const CATEGORY_OPTIONS = [
-  "Communication", "Filming", "Admin", "Writing", "Studio", "General",
+  "Communication", "Filming", "Admin", "Writing", "Family", "Studio", "General",
 ] as const;
 
 // Per-category colors — color-by-context identity from the redesign. Hex values
@@ -63,6 +63,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Communication: "#9b8de8",  // --color-tonight  (purple)
   Admin:         "#378add",  // --color-calls    (blue)
   Writing:       "#d4537e",  // --color-personal (pink)
+  Family:        "#9b8de8",  // --color-tonight  (purple)
   Filming:       "#e8831a",  // orange (no token)
   General:       "#888890",  // --text-secondary (gray, readable)
 };
@@ -74,6 +75,7 @@ const CATEGORY_BG: Record<string, string> = {
   Communication: "var(--color-tonight-bg)",
   Admin:         "var(--color-calls-bg)",
   Writing:       "var(--color-personal-bg)",
+  Family:        "var(--color-tonight-bg)",
   Filming:       "var(--color-filming-bg)",  // dark orange / light pastel via token
   General:       "var(--surface-elevated)",
 };
@@ -83,6 +85,7 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Communication: MessageSquare,
   Admin:         Briefcase,
   Writing:       PenLine,
+  Family:        Heart,
   Filming:       Film,
   General:       Hash,
 };
@@ -936,8 +939,9 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
           borderTop: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
           borderRight: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
           borderBottom: `1px solid ${isFocused ? "rgba(245,166,35,0.25)" : "var(--border-subtle)"}`,
-          // Starred (focused) tasks get a brighter amber glow on the left accent bar.
-          boxShadow: isFocused ? "inset 4px 0 16px rgba(245,166,35,0.5)" : "none",
+          // Starred (focused) tasks keep the brighter amber inset glow; everything
+          // else gets a subtle category-tinted lift (~8%) for depth without weight.
+          boxShadow: isFocused ? "inset 4px 0 16px rgba(245,166,35,0.5)" : `0 2px 12px ${catColor}14`,
           transform: `translate(${offset.x}px, ${offset.y}px)`,
           transition: dragging.current ? "none" : "transform 0.35s cubic-bezier(0.34,1.3,0.64,1), background 0.2s",
           willChange: "transform",
@@ -988,7 +992,9 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
               <p
                 className="leading-snug min-w-0 w-full md:w-auto md:flex-1 break-words mt-1 text-[13px] md:text-[14px]"
                 style={{
-                  color: titleError ? "#ef4444" : "var(--text-primary)",
+                  // Very subtle tint of the title toward its category color (~85% of
+                  // the theme text + 15% category) — stays fully readable in both modes.
+                  color: titleError ? "#ef4444" : `color-mix(in srgb, var(--text-primary) 85%, ${catColor})`,
                   fontWeight: 500,
                 }}
                 onClick={enterEditMode}
@@ -1353,6 +1359,7 @@ interface ListTask {
   id: string;
   title: string;
   dateLabel: string;
+  category?: string;
 }
 
 const LIST_FILTERS: Array<{ key: ListFilter; label: string }> = [
@@ -1377,8 +1384,8 @@ async function listFetchTodayTonight(): Promise<ListTask[]> {
   const data = await res.json();
   const b = (data.tasks ?? {}) as { today?: Task[]; tonight?: Task[] };
   return [
-    ...(b.today   ?? []).map((t) => ({ id: t.id, title: t.title, dateLabel: "Today" })),
-    ...(b.tonight ?? []).map((t) => ({ id: t.id, title: t.title, dateLabel: "Tonight" })),
+    ...(b.today   ?? []).map((t) => ({ id: t.id, title: t.title, dateLabel: "Today",   category: t.category })),
+    ...(b.tonight ?? []).map((t) => ({ id: t.id, title: t.title, dateLabel: "Tonight", category: t.category })),
   ];
 }
 
@@ -1560,19 +1567,38 @@ function ListMode() {
         ) : (
           tasks.map((t) => {
             const isChk = checked.has(t.id);
+            // Color-by-context: list rows get a 3px left border + a category label
+            // in the category color (uncategorized → muted gray). The checkbox border
+            // picks up the category color on hover/focus via the --cat CSS var.
+            const catColor = t.category ? (CATEGORY_COLORS[t.category] ?? "#9b8de8") : "#444450";
             return (
               <button
                 key={t.id}
                 onClick={() => toggle(t.id)}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all active:scale-[0.99]"
-                style={{ background: "var(--t-card)", border: `1px solid ${isChk ? ACCENT + "66" : "var(--t-border)"}` }}
+                className="group w-full flex items-center gap-3 px-3 py-3 rounded-xl text-left transition-all active:scale-[0.99]"
+                style={{
+                  background: "var(--t-card)",
+                  borderLeft: `3px solid ${catColor}`,
+                  borderTop: `1px solid ${isChk ? ACCENT + "66" : "var(--t-border)"}`,
+                  borderRight: `1px solid ${isChk ? ACCENT + "66" : "var(--t-border)"}`,
+                  borderBottom: `1px solid ${isChk ? ACCENT + "66" : "var(--t-border)"}`,
+                  ["--cat" as string]: catColor,
+                } as React.CSSProperties}
               >
                 {isChk
                   ? <CheckSquare size={18} style={{ color: ACCENT, flexShrink: 0 }} />
-                  : <Square size={18} style={{ color: "var(--t-text6)", flexShrink: 0 }} />}
+                  : <Square size={18} className="shrink-0 transition-colors [color:var(--t-text6)] group-hover:[color:var(--cat)] group-focus-visible:[color:var(--cat)]" />}
                 <span className="flex-1 min-w-0 text-sm leading-snug whitespace-normal break-words" style={{ color: "var(--t-text2)" }}>
                   {t.title}
                 </span>
+                {t.category && (
+                  <span
+                    className="shrink-0 text-[10px] font-medium uppercase tracking-wide"
+                    style={{ color: catColor, fontFamily: "'Space Mono', monospace" }}
+                  >
+                    {t.category}
+                  </span>
+                )}
                 <span className="shrink-0 text-xs" style={{ color: "var(--t-text6)" }}>{t.dateLabel}</span>
               </button>
             );
