@@ -1025,13 +1025,10 @@ export default function Session() {
                 Active Session
               </p>
               <p className="text-xl font-bold leading-tight truncate" style={{ color: "var(--text-primary)" }}>
-                {session.song || session.artist || "Session active"}
+                {session.artist && session.song
+                  ? `${session.artist}: ${session.song}`
+                  : session.song || session.artist || "Session active"}
               </p>
-              {session.artist && session.song && (
-                <p className="text-sm mt-0.5 truncate" style={{ color: "var(--text-secondary)" }}>
-                  {session.artist}
-                </p>
-              )}
             </div>
           </div>
 
