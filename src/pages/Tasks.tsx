@@ -1394,8 +1394,8 @@ async function listFetchTodayTonight(): Promise<ListTask[]> {
 async function listFetchOverdue(): Promise<ListTask[]> {
   const res = await fetch(`${JARVIS_URL}/weekly-review/overdue`, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } });
   if (!res.ok) throw new Error(`${res.status}`);
-  const data = (await res.json()) as Array<{ id: string; title: string; scheduled_date: string }>;
-  return data.map((t) => ({ id: t.id, title: t.title, dateLabel: fmtDate(t.scheduled_date) }));
+  const data = (await res.json()) as Array<{ id: string; title: string; scheduled_date: string; category?: string }>;
+  return data.map((t) => ({ id: t.id, title: t.title, dateLabel: fmtDate(t.scheduled_date), category: t.category }));
 }
 
 // Unscheduled = existing /scheduler endpoint (Active + Priority=Today +
@@ -1403,8 +1403,8 @@ async function listFetchOverdue(): Promise<ListTask[]> {
 async function listFetchUnscheduled(): Promise<ListTask[]> {
   const res = await fetch(`${JARVIS_URL}/scheduler`, { headers: { Authorization: `Bearer ${REMI_API_KEY}` } });
   if (!res.ok) throw new Error(`${res.status}`);
-  const data = (await res.json()) as Array<{ id: string; title: string }>;
-  return data.map((t) => ({ id: t.id, title: t.title, dateLabel: "" }));
+  const data = (await res.json()) as Array<{ id: string; title: string; category?: string }>;
+  return data.map((t) => ({ id: t.id, title: t.title, dateLabel: "", category: t.category }));
 }
 
 async function listFetch(filter: ListFilter): Promise<ListTask[]> {
