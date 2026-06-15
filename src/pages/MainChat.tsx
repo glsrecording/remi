@@ -492,11 +492,20 @@ function _resolveMixArtist(rest: string): { artist: string; song: string } {
 
 // Renders an AI message body: pulls any Notion page URLs out of the markdown
 // text and shows them as compact "↗ Notion" chips below, instead of raw URLs.
+// Long-response continuation signal the backend appends when it finishes a
+// section cleanly with more to say. Mirrors telegram_bot.py _CONTINUATION_SIGNAL
+// ("→ There's more — tap **More** to continue.") — keep in sync. The
+// "More" pill replaces this raw line in the UI.
+const CONTINUATION_RE =
+  /\n*\s*→?\s*there'?s more\s*[—–-]\s*tap\s*\*{0,2}more\*{0,2}\s*to continue\.?\s*$/i;
+
 function AiText({ text }: { text: string }) {
   const urls = text.match(NOTION_URL_RE) ?? [];
-  const cleaned = urls.length
+  const base = urls.length
     ? text.replace(NOTION_URL_RE, "").replace(/[ \t]+$/gm, "").replace(/\n{2,}/g, "\n").trim()
     : text;
+  // Strip the continuation signal — the "More" pill below is the UI for it.
+  const cleaned = base.replace(CONTINUATION_RE, "").trimEnd();
   return (
     <>
       <div className="prose-dark leading-relaxed whitespace-pre-wrap" style={{ fontSize: "inherit" }}>
@@ -1621,6 +1630,24 @@ export default function MainChat() {
                         )}
                       </div>
                     </div>
+                  )}
+                  {CONTINUATION_RE.test(msg.text) && (
+                    <button
+                      onClick={() => sendMessage("more")}
+                      className="suggest-in"
+                      data-testid="more-pill"
+                      style={{
+                        marginTop: "8px",
+                        display: "inline-flex", alignItems: "center", gap: "5px",
+                        padding: "5px 12px", borderRadius: "9999px",
+                        background: "#9b8de81a", border: "1px solid #9b8de840",
+                        boxShadow: "0 0 10px #9b8de824",
+                        color: "var(--t-text3)", fontSize: "0.8em", lineHeight: 1,
+                        cursor: "pointer", fontFamily: "'Space Mono', monospace",
+                      }}
+                    >
+                      More &rarr;
+                    </button>
                   )}
                 </>
               ) : (
