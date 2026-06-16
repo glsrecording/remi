@@ -407,6 +407,32 @@ export default function CallNotes() {
         </button>
       </div>
 
+      {/* ── Rate compass — quiet, persistent reminder. Display only, sits above
+            the form so it's seen before anything is typed. ─────────────────── */}
+      <div className="px-4 pt-3">
+        <div
+          className="rounded-lg px-3.5 py-2.5"
+          style={{
+            background: "var(--t-surface)",
+            borderLeft: "3px solid var(--color-done)",
+            borderTop: "1px solid var(--t-border)",
+            borderRight: "1px solid var(--t-border)",
+            borderBottom: "1px solid var(--t-border)",
+          }}
+        >
+          <p
+            style={{
+              fontFamily: "'DM Sans', 'Inter', sans-serif",
+              fontSize: "13.5px",
+              lineHeight: 1.45,
+              color: "var(--t-text3)",
+            }}
+          >
+            $100/hr · $1,800/song · One number. No math. No apology.
+          </p>
+        </div>
+      </div>
+
       {/* ── IDLE: contact search ─────────────────────────────────────────────── */}
       {!callActive && (
         <div
