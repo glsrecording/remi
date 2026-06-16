@@ -402,7 +402,7 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
           )}
         </div>
         {/* Right: category buttons */}
-        <div style={{ width: 68, display: "flex", flexDirection: "column", borderLeft: "1px solid var(--t-border)", padding: "12px 0 12px 6px" }}>
+        <div style={{ width: 104, display: "flex", flexDirection: "column", borderLeft: "1px solid var(--t-border)", padding: "12px 6px 12px 6px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", justifyContent: "center", height: "100%" }}>
             {CATEGORY_OPTIONS.map(category => {
               const color = CATEGORY_COLORS[category] ?? remiColor;

@@ -249,18 +249,23 @@ export default function Scheduler() {
                           >
                             {/* Card main row */}
                             <div className="flex items-start gap-2 px-3 py-3">
-                              <p
-                                className="flex-1 min-w-0 text-sm leading-snug"
-                                style={{
-                                  color: "var(--t-text2)",
-                                  display: "-webkit-box",
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: "vertical",
-                                  overflow: "hidden",
-                                }}
-                              >
-                                {task.title}
-                              </p>
+                              {/* flex-1 min-w-0 lives on this plain wrapper: a
+                                  -webkit-box flex item ignores min-width:0 and
+                                  won't shrink, so the clamp goes on the inner p. */}
+                              <div className="flex-1 min-w-0">
+                                <p
+                                  className="text-sm leading-snug"
+                                  style={{
+                                    color: "var(--t-text2)",
+                                    display: "-webkit-box",
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: "vertical",
+                                    overflow: "hidden",
+                                  }}
+                                >
+                                  {task.title}
+                                </p>
+                              </div>
                               {task.category && (
                                 <span
                                   className="shrink-0 rounded px-1.5 py-0.5"
@@ -348,7 +353,7 @@ export default function Scheduler() {
         <div
           className="shrink-0 flex flex-col border-l overflow-y-auto"
           style={{
-            width: "88px",
+            width: "112px",
             borderColor: "var(--t-border)",
             paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
           }}
