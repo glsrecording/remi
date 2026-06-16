@@ -151,6 +151,10 @@ export default function Scheduler() {
 
   const today    = todayISO();
   const tomorrow = tomorrowISO();
+  // Category of the currently-selected card — drives the persistent "selected"
+  // highlight on the right-panel button. State-driven so it shows identically on
+  // mouse and touch (the transient :active press scale was the only desktop cue).
+  const selectedCategory = tasks.find((t) => t.id === selectedId)?.category ?? null;
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
@@ -246,7 +250,7 @@ export default function Scheduler() {
                             {/* Card main row */}
                             <div className="flex items-start gap-2 px-3 py-3">
                               <p
-                                className="flex-1 text-sm leading-snug"
+                                className="flex-1 min-w-0 text-sm leading-snug"
                                 style={{
                                   color: "var(--t-text2)",
                                   display: "-webkit-box",
@@ -351,16 +355,17 @@ export default function Scheduler() {
         >
           <div className="flex flex-col gap-1.5 px-1.5 py-4 h-full justify-center">
             {CATEGORY_OPTIONS.map((category) => {
-              const color    = CATEGORY_COLORS[category] ?? remiColor;
-              const isArmed  = selectedId !== null;
+              const color      = CATEGORY_COLORS[category] ?? remiColor;
+              const isArmed    = selectedId !== null;
+              const isSelected = isArmed && selectedCategory === category;
               return (
                 <button
                   key={category}
                   className="w-full rounded-xl font-bold tracking-wide transition-all active:scale-95"
                   style={{
                     minHeight: "44px",
-                    background: isArmed ? color + "18" : "var(--t-el-low)",
-                    border: `1px solid ${isArmed ? color + "50" : "var(--t-border)"}`,
+                    background: isSelected ? color + "33" : isArmed ? color + "18" : "var(--t-el-low)",
+                    border: `1px solid ${isSelected ? color : isArmed ? color + "50" : "var(--t-border)"}`,
                     color: isArmed ? color : "var(--t-text5)",
                     fontFamily: "'Space Mono', monospace",
                     fontSize: "10px",

@@ -300,6 +300,9 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
 
   const today    = todayISO();
   const tomorrow = tomorrowISO();
+  // Category of the selected card — drives the persistent right-panel "selected"
+  // highlight (state-driven, so it shows on mouse + touch alike).
+  const selectedCategory = tasks.find(t => t.id === selectedId)?.category ?? null;
 
   async function handleCategory(category: string) {
     if (!selectedId) return;
@@ -358,7 +361,7 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
                             transition: "border-color 0.15s",
                           }} onClick={e => { e.stopPropagation(); setSelectedId(p => p === task.id ? null : task.id); setPickDateId(null); }}>
                             <div className="flex items-start gap-2 px-3 py-2.5">
-                              <p className="flex-1 text-xs leading-snug" style={{ color: "var(--t-text2)" }}>{task.title}</p>
+                              <p className="flex-1 min-w-0 break-words text-xs leading-snug" style={{ color: "var(--t-text2)" }}>{task.title}</p>
                               {task.category && (
                                 <span className="shrink-0 rounded px-1.5 py-0.5" style={{
                                   background: (ac ?? remiColor) + "18", color: ac ?? remiColor,
@@ -404,14 +407,15 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
             {CATEGORY_OPTIONS.map(category => {
               const color = CATEGORY_COLORS[category] ?? remiColor;
               const armed = selectedId !== null;
+              const isSelected = armed && selectedCategory === category;
               return (
                 <button key={category} onClick={() => handleCategory(category)}
                   className="w-full rounded-xl font-bold tracking-wide transition-all active:scale-95"
                   data-testid={`category-btn-${category.toLowerCase()}`}
                   style={{
                     minHeight: "38px", fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.04em",
-                    background: armed ? color + "18" : "var(--t-el-low)",
-                    border: `1px solid ${armed ? color + "50" : "var(--t-border)"}`,
+                    background: isSelected ? color + "33" : armed ? color + "18" : "var(--t-el-low)",
+                    border: `1px solid ${isSelected ? color : armed ? color + "50" : "var(--t-border)"}`,
                     color: armed ? color : "var(--t-text5)",
                     transition: "background 0.15s, border-color 0.15s, color 0.15s",
                   }}>{category}</button>
