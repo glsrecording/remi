@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
-import { CATEGORY_OPTIONS, CATEGORY_COLORS, CATEGORY_EMPTY } from "@/lib/categories";
+import { CATEGORY_OPTIONS, CATEGORY_COLORS, CATEGORY_EMPTY, categoryTextColor } from "@/lib/categories";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
@@ -364,9 +364,9 @@ export default function Scheduler() {
                   className="w-full rounded-xl font-bold tracking-wide transition-all active:scale-95"
                   style={{
                     minHeight: "44px",
-                    background: isSelected ? color + "33" : isArmed ? color + "18" : "var(--t-el-low)",
+                    background: isSelected ? color : isArmed ? color + "18" : "var(--t-el-low)",
                     border: `1px solid ${isSelected ? color : isArmed ? color + "50" : "var(--t-border)"}`,
-                    color: isArmed ? color : "var(--t-text5)",
+                    color: isSelected ? categoryTextColor(color) : isArmed ? color : "var(--t-text5)",
                     fontFamily: "'Space Mono', monospace",
                     fontSize: "10px",
                     letterSpacing: "0.04em",

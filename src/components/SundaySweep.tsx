@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { X, ChevronRight, Check, Loader2, RefreshCw } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
-import { CATEGORY_OPTIONS, CATEGORY_COLORS, CATEGORY_EMPTY } from "@/lib/categories";
+import { CATEGORY_OPTIONS, CATEGORY_COLORS, CATEGORY_EMPTY, categoryTextColor } from "@/lib/categories";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
@@ -414,9 +414,9 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
                   data-testid={`category-btn-${category.toLowerCase()}`}
                   style={{
                     minHeight: "38px", fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.04em",
-                    background: isSelected ? color + "33" : armed ? color + "18" : "var(--t-el-low)",
+                    background: isSelected ? color : armed ? color + "18" : "var(--t-el-low)",
                     border: `1px solid ${isSelected ? color : armed ? color + "50" : "var(--t-border)"}`,
-                    color: armed ? color : "var(--t-text5)",
+                    color: isSelected ? categoryTextColor(color) : armed ? color : "var(--t-text5)",
                     transition: "background 0.15s, border-color 0.15s, color 0.15s",
                   }}>{category}</button>
               );

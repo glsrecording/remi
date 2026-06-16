@@ -24,3 +24,15 @@ export const CATEGORY_COLORS: Record<string, string> = {
 
 // Muted gray for the "uncategorized" affordance and the Unsorted group.
 export const CATEGORY_EMPTY = "#888890";  // --text-secondary
+
+// Readable text color (near-black or white) for a SOLID fill of `hex`, chosen by
+// the YIQ luminance threshold. Used when a category button is selected and filled
+// with its full color.
+export function categoryTextColor(hex: string): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 128 ? "#111111" : "#ffffff";
+}
