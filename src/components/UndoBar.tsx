@@ -43,7 +43,7 @@ export default function UndoBar({
 
   return (
     <div
-      className="fixed left-3 right-3 z-40 rounded-2xl overflow-hidden shadow-xl bubble-in"
+      className="fixed left-3 right-3 z-40 rounded-2xl overflow-hidden shadow-xl bubble-in remi-panel-bar"
       style={{
         bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)",
         background: "var(--t-card)",

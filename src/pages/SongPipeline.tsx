@@ -145,7 +145,7 @@ function AddSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => vo
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+    <div className="fixed inset-0 z-50 flex flex-col justify-end remi-panel-bar">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
         className="relative z-10 rounded-t-2xl px-5 pt-5 overflow-y-auto"
@@ -340,7 +340,7 @@ function EditSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+    <div className="fixed inset-0 z-50 flex flex-col justify-end remi-panel-bar">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
         className="relative z-10 rounded-t-2xl px-5 pt-5 overflow-y-auto"

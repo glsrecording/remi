@@ -1701,7 +1701,7 @@ export default function MainChat() {
           type="button"
           onClick={scrollToBottom}
           aria-label="Scroll to bottom"
-          className="active:scale-90 transition-transform"
+          className="active:scale-90 transition-transform remi-panel-fab"
           style={{
             position: "fixed",
             bottom: 110,

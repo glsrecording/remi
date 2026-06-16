@@ -307,7 +307,7 @@ export default function MixRevisionPanel({ pageId, songLabel, onClose }: Props) 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col"
+      className="fixed inset-0 z-50 flex flex-col remi-panel-overlay"
       style={{ background: "var(--t-bg)", color: "var(--t-text)" }}
     >
       {/* Header */}

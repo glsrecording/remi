@@ -578,7 +578,7 @@ export default function SundaySweep({ onClose }: SundaySweepProps) {
   const isStage2 = stage === 2;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center"
+    <div className="fixed inset-0 z-50 flex items-center justify-center remi-panel-overlay"
       style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}>
       <div className="relative flex flex-col w-full mx-4"
         style={{

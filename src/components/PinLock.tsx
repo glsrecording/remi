@@ -66,7 +66,7 @@ export default function PinLock({ onUnlock }: { onUnlock: () => void }) {
 
   return (
     <div
-      className="fixed inset-0 flex flex-col items-center justify-center select-none"
+      className="fixed inset-0 flex flex-col items-center justify-center select-none remi-panel-overlay"
       style={{ background: "var(--t-bg)" }}
     >
       {/* Logo */}

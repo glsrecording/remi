@@ -689,7 +689,7 @@ interface CategoryPickerProps {
 function CategoryPicker({ current, onSelect, onClose }: CategoryPickerProps) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end"
+      className="fixed inset-0 z-50 flex items-end remi-panel-bar"
       style={{ background: "rgba(0,0,0,0.5)" }}
       onPointerDown={(e) => { e.stopPropagation(); onClose(); }}
       onClick={(e) => { e.stopPropagation(); onClose(); }}

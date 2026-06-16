@@ -621,6 +621,7 @@ export default function Journal() {
       {/* ── Entries overlay ─────────────────────────────────────────────────── */}
       {showEntries && (
         <div
+          className="remi-panel-overlay"
           style={{
             position: "fixed", inset: 0, zIndex: 40,
             background: "var(--t-bg)", display: "flex", flexDirection: "column",
@@ -730,7 +731,7 @@ export default function Journal() {
       {/* ── Analysis overlay — slides up from bottom ─────────────────────────── */}
       {analysis !== null && (
         <div
-          className="fixed inset-0 z-50 flex flex-col justify-end"
+          className="fixed inset-0 z-50 flex flex-col justify-end remi-panel-bar"
           style={{ background: "rgba(0,0,0,0.72)" }}
           onClick={() => setAnalysis(null)}
         >

@@ -552,7 +552,7 @@ export default function CallNotes() {
       {/* ── NEW LEAD SHEET ───────────────────────────────────────────────────── */}
       {showNewLeadSheet && (
         <div
-          className="fixed inset-0 z-50 flex flex-col justify-end"
+          className="fixed inset-0 z-50 flex flex-col justify-end remi-panel-bar"
           style={{ background: "rgba(0,0,0,0.6)" }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowNewLeadSheet(false); }}
         >
@@ -760,6 +760,7 @@ export default function CallNotes() {
 
           {/* Mic bar — fixed to bottom */}
           <div
+            className="remi-panel-bar"
             style={{
               position: "fixed",
               bottom: 0,

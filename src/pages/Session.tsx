@@ -1395,6 +1395,7 @@ export default function Session() {
 
           {/* Mic input bar — fixed to bottom */}
           <div
+            className="remi-panel-bar"
             style={{
               position: "fixed",
               bottom: 0,
@@ -1497,7 +1498,7 @@ export default function Session() {
       {/* Switch Song picker — opens over the active session */}
       {switching && session.active && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-6"
+          className="fixed inset-0 z-50 flex items-center justify-center px-6 remi-panel-overlay"
           style={{ background: "rgba(0,0,0,0.6)" }}
           onClick={() => setSwitching(false)}
         >

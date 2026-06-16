@@ -452,7 +452,7 @@ export default function MixNotes() {
           </div>
 
           {/* Fixed bottom mic bar */}
-          <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--surface-base)", zIndex: 10, padding: "12px 16px 48px" }}>
+          <div className="remi-panel-bar" style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--surface-base)", zIndex: 10, padding: "12px 16px 48px" }}>
             {recordingError && (
               <p className="text-xs mb-1.5 text-center" style={{ color: ALERT }}>{recordingError}</p>
             )}

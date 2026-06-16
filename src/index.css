@@ -516,6 +516,24 @@ html.light-mode .prose-dark em { color: rgba(0,0,0,0.65); }
     width: 760px;
     max-width: 100vw;
   }
+
+  /* Panel-anchored overlays — keep fixed bottom bars / sheets and full-screen /
+     centered overlays inside the 760px centered panel instead of spanning the
+     whole viewport. These elements already set both left:0 and right:0 (via
+     `inset-0`, inline left/right:0, or `left-3 right-3`), so absolute-centering
+     with `margin-inline: auto` re-centers them at 760px WITHOUT a transform —
+     safe alongside the slide/bubble-in animations some of them run. */
+  .remi-panel-bar,
+  .remi-panel-overlay {
+    max-width: 760px;
+    margin-inline: auto;
+  }
+
+  /* Scroll-to-bottom FAB — pin its right edge ~20px inside the panel's right
+     edge (panel half-width 380px − 20px = 360px). */
+  .remi-panel-fab {
+    right: calc(50% - 360px) !important;
+  }
 }
 
 /* Recording zone — input field pulse while mic is held */

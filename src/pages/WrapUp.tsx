@@ -367,6 +367,7 @@ export default function WrapUp() {
 
       {/* ── Fixed bottom: closing note + end session button ────────────────── */}
       <div
+        className="remi-panel-bar"
         style={{
           position: "fixed",
           bottom: 0,
