@@ -14,7 +14,7 @@ const LONG_PRESS_MS    = 500; // identical to Tasks.tsx
 // Triage's identity is purple (the capture/ambient color); swipe targets map to
 // the context palette. NB: the const is named PINK for history but now holds the
 // purple identity value — every PINK reference renders purple.
-const PINK   = "#9b8de8";  // --color-tonight (purple) — screen identity / cards / Bio
+const PINK   = "#9b8de8";  // --color-tonight (purple) — screen identity / cards
 const AMBER  = "#f5a623";  // --color-tasks    — Today / Key Insight
 const TEAL   = "#3dd6b0";  // --color-studio   — Tomorrow
 const PURPLE = "#9b8de8";  // --color-tonight  — Queue
@@ -27,12 +27,12 @@ const ALERT  = "#ef4444";  // recording / delete (semantic, mode-independent)
 
 type Phase       = "capture" | "pass2" | "done";
 type Pass1Action = "today" | "tomorrow" | "queue" | "memory" | "someday";
-type Pass2Action = "insight" | "memory" | "gratitude" | "bio";
+type Pass2Action = "insight" | "memory" | "gratitude" | "jarvis";
 
 interface TriageItem { id: string; text: string }
 interface Counts {
   today: number; tomorrow: number; queue: number; someday: number;
-  insight: number; memory: number; gratitude: number; bio: number;
+  insight: number; memory: number; gratitude: number; jarvis: number;
 }
 
 // ── Swipe targets ─────────────────────────────────────────────────────────────
@@ -47,10 +47,10 @@ const P1_TARGETS = [
 ];
 
 const P2_TARGETS = [
-  { action: "insight"   as Pass2Action, label: "Key Insight", color: AMBER, arrow: "→" },
-  { action: "memory"    as Pass2Action, label: "Memory",      color: BLUE,  arrow: "←" },
-  { action: "gratitude" as Pass2Action, label: "Gratitude",   color: GREEN, arrow: "↑" },
-  { action: "bio"       as Pass2Action, label: "Bio Note",    color: PINK,  arrow: "↓" },
+  { action: "insight"   as Pass2Action, label: "Key Insight",      color: AMBER,  arrow: "→" },
+  { action: "memory"    as Pass2Action, label: "Memory",           color: BLUE,   arrow: "←" },
+  { action: "gratitude" as Pass2Action, label: "Gratitude",        color: GREEN,  arrow: "↑" },
+  { action: "jarvis"    as Pass2Action, label: "Jarvis Knowledge", color: PURPLE, arrow: "↓" },
 ];
 
 const SOMEDAY_COLOR = BLUE;  // long-press → Someday (was gray)
@@ -72,7 +72,7 @@ function saveMemory(text: string, type: Pass2Action): void {
     insight:   "Key insight:",
     memory:    "Memory:",
     gratitude: "Gratitude:",
-    bio:       "Bio note:",
+    jarvis:    "Add to my Jarvis Knowledge:",
   };
   const message = `${prefixes[type]} ${text}`;
   fetch(`${JARVIS_URL}/remi`, {
@@ -131,7 +131,7 @@ function getP1Dominant(x: number, y: number) {
 function getP2Dominant(x: number, y: number) {
   const ax = Math.abs(x), ay = Math.abs(y);
   if (ax > ay) return x > 0 ? P2_TARGETS[0] : P2_TARGETS[1]; // right=insight, left=memory
-  return y < 0 ? P2_TARGETS[2] : P2_TARGETS[3];              // up=gratitude, down=bio
+  return y < 0 ? P2_TARGETS[2] : P2_TARGETS[3];              // up=gratitude, down=jarvis
 }
 
 // ── Input row — Journal mic pattern (getUserMedia at mount, pointer events, lock mode) ─
@@ -581,7 +581,7 @@ function Pass1Card({ item, onSwiped, onDismissed }: P1CardProps) {
 }
 
 // ── Pass 2 card — 4-direction swipe + dismiss X ───────────────────────────────
-// ↑Gratitude ↓Bio →Key Insight ←Memory — all routed via /remi with prefix.
+// ↑Gratitude ↓Jarvis Knowledge →Key Insight ←Memory — all routed via /remi with prefix.
 
 interface P2CardProps {
   item: TriageItem;
@@ -759,7 +759,7 @@ function HintStrip({ pass }: { pass: 1 | 2 }) {
           <span style={{ color: GREEN }}>↑ Gratitude</span>
           <span style={{ color: BLUE }}>← Memory</span>
           <span style={{ color: AMBER }}>→ Insight</span>
-          <span style={{ color: PINK }}>↓ Bio</span>
+          <span style={{ color: PURPLE }}>↓ Jarvis</span>
         </>
       )}
     </div>
@@ -785,7 +785,7 @@ function Header({ label, accent, count, onMenu }: { label: string; accent: strin
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const ZERO_COUNTS: Counts = { today: 0, tomorrow: 0, queue: 0, someday: 0, insight: 0, memory: 0, gratitude: 0, bio: 0 };
+const ZERO_COUNTS: Counts = { today: 0, tomorrow: 0, queue: 0, someday: 0, insight: 0, memory: 0, gratitude: 0, jarvis: 0 };
 
 export default function Triage() {
   const [, navigate] = useLocation();
@@ -863,7 +863,7 @@ export default function Triage() {
     if (action === "insight")   setCounts((c) => ({ ...c, insight:   c.insight   + 1 }));
     else if (action === "memory")    setCounts((c) => ({ ...c, memory:    c.memory    + 1 }));
     else if (action === "gratitude") setCounts((c) => ({ ...c, gratitude: c.gratitude + 1 }));
-    else if (action === "bio")       setCounts((c) => ({ ...c, bio:       c.bio       + 1 }));
+    else if (action === "jarvis")    setCounts((c) => ({ ...c, jarvis:    c.jarvis    + 1 }));
     setPass2Queue((prev) => prev.filter((i) => i.id !== item.id));
   }
 
@@ -881,7 +881,7 @@ export default function Triage() {
   // ── Done screen ─────────────────────────────────────────────────────────────
   if (phase === "done") {
     const total = counts.today + counts.queue + counts.tomorrow + counts.someday
-                + counts.insight + counts.memory + counts.gratitude + counts.bio;
+                + counts.insight + counts.memory + counts.gratitude + counts.jarvis;
     return (
       <div className="flex flex-col h-[100dvh]" style={{ background: "var(--surface-base)" }}>
         <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
@@ -929,9 +929,9 @@ export default function Triage() {
                 {counts.gratitude} gratitude{counts.gratitude !== 1 ? "s" : ""}
               </p>
             )}
-            {counts.bio > 0 && (
-              <p className="text-lg" style={{ color: PINK }}>
-                {counts.bio} bio note{counts.bio !== 1 ? "s" : ""}
+            {counts.jarvis > 0 && (
+              <p className="text-lg" style={{ color: PURPLE }}>
+                {counts.jarvis} to Jarvis Knowledge
               </p>
             )}
             {total === 0 && (
