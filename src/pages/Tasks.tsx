@@ -692,6 +692,67 @@ interface SwipeableCardProps {
   onToggleFocus?: () => void;
 }
 
+interface CategoryPickerProps {
+  current?: string | null;            // currently-assigned category → highlighted chip
+  onSelect: (cat: string) => void;
+  onClose: () => void;
+}
+
+// Shared category bottom-sheet — used by both the Cards view (SwipeableCard) and
+// the List view (ListMode). `fixed inset-0` so it escapes any ancestor's
+// overflow:hidden; stopPropagation keeps taps off the surface underneath. The
+// caller owns open/close state and the optimistic Notion write.
+function CategoryPicker({ current, onSelect, onClose }: CategoryPickerProps) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end"
+      style={{ background: "rgba(0,0,0,0.5)" }}
+      onPointerDown={(e) => { e.stopPropagation(); onClose(); }}
+      onClick={(e) => { e.stopPropagation(); onClose(); }}
+    >
+      <div
+        className="w-full rounded-t-2xl p-4"
+        style={{
+          background: "var(--t-card)",
+          borderTop: "1px solid var(--t-border)",
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p
+          className="text-xs uppercase tracking-widest mb-3 px-1"
+          style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
+        >
+          Category
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {CATEGORY_OPTIONS.map((cat) => {
+            const active = current === cat;
+            const optColor = CATEGORY_COLORS[cat] ?? ACCENT;
+            return (
+              <button
+                key={cat}
+                type="button"
+                className="px-3 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95"
+                style={{
+                  background: active ? optColor + "33" : optColor + "1a",
+                  border: `1px solid ${active ? optColor : optColor + "66"}`,
+                  color: optColor,
+                }}
+                onClick={() => onSelect(cat)}
+                data-testid={`category-opt-${cat.toLowerCase()}`}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategoryChanged, focusedTaskId, onToggleFocus }: SwipeableCardProps) {
   const isFocused = focusedTaskId === task.id;
   const isMobile = useIsMobile();
@@ -1057,55 +1118,14 @@ function SwipeableCard({ task, sourceBucket, onMoved, onTitleChanged, onCategory
         )}
       </div>
 
-      {/* Category picker — fixed bottom sheet (fixed escapes the card's
+      {/* Category picker — shared bottom sheet (fixed escapes the card's
           overflow:hidden). stopPropagation keeps taps off the swipe surface. */}
       {pickerOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end"
-          style={{ background: "rgba(0,0,0,0.5)" }}
-          onPointerDown={(e) => { e.stopPropagation(); setPickerOpen(false); }}
-          onClick={(e) => { e.stopPropagation(); setPickerOpen(false); }}
-        >
-          <div
-            className="w-full rounded-t-2xl p-4"
-            style={{
-              background: "var(--t-card)",
-              borderTop: "1px solid var(--t-border)",
-              paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)",
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p
-              className="text-xs uppercase tracking-widest mb-3 px-1"
-              style={{ color: "var(--t-text6)", fontFamily: "'Space Mono', monospace" }}
-            >
-              Category
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {CATEGORY_OPTIONS.map((cat) => {
-                const active = localCategory === cat;
-                const optColor = CATEGORY_COLORS[cat] ?? ACCENT;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    className="px-3 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95"
-                    style={{
-                      background: active ? optColor + "33" : optColor + "1a",
-                      border: `1px solid ${active ? optColor : optColor + "66"}`,
-                      color: optColor,
-                    }}
-                    onClick={() => assignCategory(cat)}
-                    data-testid={`task-category-opt-${cat.toLowerCase()}-${task.id}`}
-                  >
-                    {cat}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <CategoryPicker
+          current={localCategory}
+          onSelect={assignCategory}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
     </div>
   );
@@ -1451,6 +1471,8 @@ function ListMode() {
   const [busy, setBusy]       = useState(false);
   const [picking, setPicking] = useState(false);
   const [status, setStatus]   = useState<{ ok: boolean; text: string } | null>(null);
+  // Category bottom-sheet: id of the row whose + CAT was tapped (null = closed)
+  const [pickerTaskId, setPickerTaskId] = useState<string | null>(null);
 
   const load = useCallback(async (f: ListFilter) => {
     setLoading(true); setError(null); setStatus(null); setChecked(new Set()); setPicking(false);
@@ -1502,6 +1524,20 @@ function ListMode() {
         ? { ok: false, text: `${okIds.size} ${done} · ${failed.length} failed: ${failed.map((t) => t.title).join(", ")}` }
         : { ok: true, text: `${okIds.size} ${noun} ${done}` }
     );
+  }
+
+  // Assign a category to one row: optimistically recolor it (label + left border)
+  // in local state, write to Notion, then close the sheet. Reverts on failure —
+  // mirrors SwipeableCard.assignCategory.
+  async function assignCategory(id: string, category: string) {
+    setPickerTaskId(null);
+    const prevCat = tasks.find((t) => t.id === id)?.category;
+    setTasks((cur) => cur.map((t) => (t.id === id ? { ...t, category } : t)));
+    try {
+      await patchTaskCategory(id, category);
+    } catch {
+      setTasks((cur) => cur.map((t) => (t.id === id ? { ...t, category: prevCat } : t)));
+    }
   }
 
   const selectedCount = checked.size;
@@ -1591,14 +1627,30 @@ function ListMode() {
                 <span className="flex-1 min-w-0 text-sm leading-snug whitespace-normal break-words" style={{ color: "var(--t-text2)" }}>
                   {t.title}
                 </span>
-                {t.category && (
-                  <span
-                    className="shrink-0 text-[10px] font-medium uppercase tracking-wide"
-                    style={{ color: catColor, fontFamily: "'Space Mono', monospace" }}
-                  >
-                    {t.category}
-                  </span>
-                )}
+                {/* Category chip — tappable to (re)assign. Rendered as a span, not
+                    a button, so it doesn't nest an interactive button inside the
+                    row button; stopPropagation keeps the tap off the row's
+                    toggle(t.id) selection. Set → colored label; empty → dashed
+                    + CAT affordance (matches the Cards view). */}
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  className="shrink-0 rounded px-2 py-0.5 transition-all active:scale-95"
+                  style={{
+                    background: t.category ? catColor + "26" : CATEGORY_EMPTY + "1f",
+                    color: t.category ? catColor : CATEGORY_EMPTY,
+                    border: t.category ? `1px solid ${catColor}66` : `1px dashed ${CATEGORY_EMPTY}80`,
+                    fontFamily: "'Space Mono', monospace",
+                    fontSize: "10px",
+                    letterSpacing: "0.05em",
+                    textTransform: "uppercase",
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setPickerTaskId(t.id); }}
+                  data-testid={`list-task-category-${t.id}`}
+                >
+                  {t.category ? t.category : "+ Cat"}
+                </span>
                 <span className="shrink-0 text-xs" style={{ color: "var(--t-text6)" }}>{t.dateLabel}</span>
               </button>
             );
@@ -1662,6 +1714,15 @@ function ListMode() {
           Reschedule{selectedCount > 0 ? ` (${selectedCount})` : ""}
         </button>
       </div>
+
+      {/* Category bottom-sheet for the row whose + CAT was tapped */}
+      {pickerTaskId && (
+        <CategoryPicker
+          current={tasks.find((t) => t.id === pickerTaskId)?.category ?? null}
+          onSelect={(cat) => assignCategory(pickerTaskId, cat)}
+          onClose={() => setPickerTaskId(null)}
+        />
+      )}
     </div>
   );
 }
