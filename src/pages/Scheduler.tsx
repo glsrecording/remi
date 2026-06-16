@@ -243,7 +243,13 @@ export default function Scheduler() {
                               border: isSelected
                                 ? `1.5px solid ${remiColor}`
                                 : "1px solid var(--t-border)",
-                              transition: "border-color 0.15s",
+                              // Neon-green ring + glow on select — state-driven so it
+                              // reads identically on desktop click and touch tap. A bare
+                              // 1.5px border was too subtle to notice on a large screen.
+                              boxShadow: isSelected
+                                ? `0 0 0 1.5px ${remiColor}, 0 0 16px ${remiColor}80`
+                                : "none",
+                              transition: "border-color 0.15s, box-shadow 0.15s",
                             }}
                             onClick={(e) => { e.stopPropagation(); handleCardTap(task.id); }}
                           >
