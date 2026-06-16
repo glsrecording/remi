@@ -363,19 +363,27 @@ export default function Scheduler() {
               const color      = CATEGORY_COLORS[category] ?? remiColor;
               const isArmed    = selectedId !== null;
               const isSelected = isArmed && selectedCategory === category;
+              // When ANOTHER category is the selected one, dim this button so the
+              // solid-fill selected button clearly dominates the column.
+              const isDimmed   = isArmed && selectedCategory != null && !isSelected;
               return (
                 <button
                   key={category}
                   className="w-full rounded-xl font-bold tracking-wide transition-all active:scale-95"
                   style={{
                     minHeight: "44px",
-                    background: isSelected ? color : isArmed ? color + "18" : "var(--t-el-low)",
-                    border: `1px solid ${isSelected ? color : isArmed ? color + "50" : "var(--t-border)"}`,
-                    color: isSelected ? categoryTextColor(color) : isArmed ? color : "var(--t-text5)",
+                    background: isSelected ? color : isDimmed ? color + "0d" : isArmed ? color + "18" : "var(--t-el-low)",
+                    border: `1px solid ${isSelected ? color : isDimmed ? color + "2a" : isArmed ? color + "50" : "var(--t-border)"}`,
+                    color: isSelected ? categoryTextColor(color) : isDimmed ? color + "80" : isArmed ? color : "var(--t-text5)",
+                    outline: isSelected ? `2px solid ${color}` : undefined,
+                    outlineOffset: isSelected ? "2px" : undefined,
+                    boxShadow: isSelected ? `0 0 12px ${color}aa` : undefined,
+                    position: "relative",
+                    zIndex: isSelected ? 1 : undefined,
                     fontFamily: "'Space Mono', monospace",
                     fontSize: "10px",
                     letterSpacing: "0.04em",
-                    transition: "background 0.15s, border-color 0.15s, color 0.15s",
+                    transition: "background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, outline-color 0.15s",
                   }}
                   onClick={() => handleCategoryTap(category)}
                   data-testid={`category-btn-${category.toLowerCase()}`}

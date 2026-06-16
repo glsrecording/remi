@@ -408,16 +408,22 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
               const color = CATEGORY_COLORS[category] ?? remiColor;
               const armed = selectedId !== null;
               const isSelected = armed && selectedCategory === category;
+              const isDimmed   = armed && selectedCategory != null && !isSelected;
               return (
                 <button key={category} onClick={() => handleCategory(category)}
                   className="w-full rounded-xl font-bold tracking-wide transition-all active:scale-95"
                   data-testid={`category-btn-${category.toLowerCase()}`}
                   style={{
                     minHeight: "38px", fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.04em",
-                    background: isSelected ? color : armed ? color + "18" : "var(--t-el-low)",
-                    border: `1px solid ${isSelected ? color : armed ? color + "50" : "var(--t-border)"}`,
-                    color: isSelected ? categoryTextColor(color) : armed ? color : "var(--t-text5)",
-                    transition: "background 0.15s, border-color 0.15s, color 0.15s",
+                    background: isSelected ? color : isDimmed ? color + "0d" : armed ? color + "18" : "var(--t-el-low)",
+                    border: `1px solid ${isSelected ? color : isDimmed ? color + "2a" : armed ? color + "50" : "var(--t-border)"}`,
+                    color: isSelected ? categoryTextColor(color) : isDimmed ? color + "80" : armed ? color : "var(--t-text5)",
+                    outline: isSelected ? `2px solid ${color}` : undefined,
+                    outlineOffset: isSelected ? "2px" : undefined,
+                    boxShadow: isSelected ? `0 0 12px ${color}aa` : undefined,
+                    position: "relative",
+                    zIndex: isSelected ? 1 : undefined,
+                    transition: "background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, outline-color 0.15s",
                   }}>{category}</button>
               );
             })}
