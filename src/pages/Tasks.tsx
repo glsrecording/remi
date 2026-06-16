@@ -10,6 +10,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
+import { CATEGORY_OPTIONS, CATEGORY_COLORS, CATEGORY_EMPTY } from "@/lib/categories";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
@@ -48,25 +49,9 @@ const CATEGORY_FILTERS = [
 ] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
 
-// Assignable work-mode categories (no "All"). Must match the backend
-// _ALLOWED_TASK_CATEGORIES set exactly.
-const CATEGORY_OPTIONS = [
-  "Communication", "Filming", "Admin", "Writing", "Family", "Studio", "General",
-] as const;
+// CATEGORY_OPTIONS + CATEGORY_COLORS are imported from "@/lib/categories" (shared
+// with Scheduler.tsx and SundaySweep.tsx). The maps below are Tasks-view-only.
 
-// Per-category colors — color-by-context identity from the redesign. Hex values
-// mirror the design-system.css context tokens (--color-studio etc.); kept as hex
-// so the existing `color + "33"` alpha-concat pattern works. Drives the card's
-// left accent bar, icon square, and category chip + the bottom-sheet picker.
-const CATEGORY_COLORS: Record<string, string> = {
-  Studio:        "#3dd6b0",  // --color-studio   (teal)
-  Communication: "#9b8de8",  // --color-tonight  (purple)
-  Admin:         "#378add",  // --color-calls    (blue)
-  Writing:       "#d4537e",  // --color-personal (pink)
-  Family:        "#9b8de8",  // --color-tonight  (purple)
-  Filming:       "#e8831a",  // orange (no token)
-  General:       "#888890",  // --text-secondary (gray, readable)
-};
 // Per-category fill behind the icon square. Uses the design-system tokens so
 // General (a surface token) flips in light mode; the context -bg tints stay dark
 // in both modes by design (accent context colors don't change between themes).
@@ -89,7 +74,6 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Filming:       Film,
   General:       Hash,
 };
-const CATEGORY_EMPTY = "#888890";  // --text-secondary — visible "add a category" affordance
 
 interface TaskBuckets {
   today: Task[];

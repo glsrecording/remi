@@ -4,28 +4,17 @@ import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { CATEGORY_OPTIONS, CATEGORY_COLORS, CATEGORY_EMPTY } from "@/lib/categories";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
 
-const LIFE_AREAS = ["Studio", "Personal", "Family", "Dad", "Business", "Content"] as const;
-type LifeArea = typeof LIFE_AREAS[number];
-
-const AREA_COLORS: Record<LifeArea, string> = {
-  Studio:   "#f59e0b",
-  Personal: "#60a5fa",
-  Family:   "#22c55e",
-  Dad:      "#f97316",
-  Business: "#a855f7",
-  Content:  "#ec4899",
-};
-
-const GROUP_ORDER = ["Unsorted", ...LIFE_AREAS] as const;
+const GROUP_ORDER = ["Unsorted", ...CATEGORY_OPTIONS] as const;
 
 interface SchedulerTask {
   id: string;
   title: string;
-  life_area: string | null;
+  category: string | null;
 }
 
 async function apiFetchTasks(): Promise<SchedulerTask[]> {
@@ -36,7 +25,9 @@ async function apiFetchTasks(): Promise<SchedulerTask[]> {
   return (await r.json()) as SchedulerTask[];
 }
 
-async function apiPatch(id: string, patch: { life_area?: string; scheduled_date?: string }): Promise<void> {
+// Date assignment → /scheduler/update (unchanged). Category assignment goes via
+// patchTaskCategory below — /scheduler/update does not write Category.
+async function apiPatch(id: string, patch: { scheduled_date?: string }): Promise<void> {
   const r = await fetch(`${JARVIS_URL}/scheduler/update`, {
     method: "PATCH",
     headers: {
@@ -44,6 +35,19 @@ async function apiPatch(id: string, patch: { life_area?: string; scheduled_date?
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ id, ...patch }),
+  });
+  if (!r.ok) throw new Error(`${r.status}`);
+}
+
+// Category write — same endpoint Tasks.tsx's patchTaskCategory uses.
+async function patchTaskCategory(id: string, category: string): Promise<void> {
+  const r = await fetch(`${JARVIS_URL}/task/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${REMI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ category }),
   });
   if (!r.ok) throw new Error(`${r.status}`);
 }
@@ -98,14 +102,14 @@ export default function Scheduler() {
     setPickDateId(null);
   }
 
-  async function handleAreaTap(area: LifeArea) {
+  async function handleCategoryTap(category: string) {
     if (!selectedId) return;
     const id = selectedId;
     // Optimistic update — move to group, reveal date row
-    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, life_area: area } : t));
+    setTasks((prev) => prev.map((t) => t.id === id ? { ...t, category } : t));
     setShowDateSet((prev) => new Set([...prev, id]));
     try {
-      await apiPatch(id, { life_area: area });
+      await patchTaskCategory(id, category);
     } catch {
       load();
     }
@@ -141,7 +145,7 @@ export default function Scheduler() {
   const groups = (GROUP_ORDER as readonly string[]).map((group) => ({
     label: group,
     tasks: tasks.filter((t) =>
-      group === "Unsorted" ? !t.life_area : t.life_area === group
+      group === "Unsorted" ? !t.category : t.category === group
     ),
   })).filter((g) => g.tasks.length > 0);
 
@@ -205,8 +209,8 @@ export default function Scheduler() {
             <div className="space-y-5">
               {groups.map((group) => {
                 const groupColor = group.label === "Unsorted"
-                  ? "var(--t-text5)"
-                  : (AREA_COLORS[group.label as LifeArea] ?? remiColor);
+                  ? CATEGORY_EMPTY
+                  : (CATEGORY_COLORS[group.label] ?? remiColor);
                 return (
                   <div key={group.label}>
                     {/* Group header */}
@@ -222,8 +226,8 @@ export default function Scheduler() {
                         const isSelected  = selectedId === task.id;
                         const hasDateRow  = showDateSet.has(task.id);
                         const isPickDate  = pickDateId === task.id;
-                        const areaColor   = task.life_area
-                          ? (AREA_COLORS[task.life_area as LifeArea] ?? remiColor)
+                        const areaColor   = task.category
+                          ? (CATEGORY_COLORS[task.category] ?? remiColor)
                           : null;
 
                         return (
@@ -253,7 +257,7 @@ export default function Scheduler() {
                               >
                                 {task.title}
                               </p>
-                              {task.life_area && (
+                              {task.category && (
                                 <span
                                   className="shrink-0 rounded px-1.5 py-0.5"
                                   style={{
@@ -265,7 +269,7 @@ export default function Scheduler() {
                                     textTransform: "uppercase",
                                   }}
                                 >
-                                  {task.life_area}
+                                  {task.category}
                                 </span>
                               )}
                               <button
@@ -277,7 +281,7 @@ export default function Scheduler() {
                               </button>
                             </div>
 
-                            {/* Date assignment row — visible when life area assigned */}
+                            {/* Date assignment row — visible when category assigned */}
                             {isSelected && hasDateRow && (
                               <div
                                 className="flex items-center gap-1.5 px-3 pt-2 pb-3"
@@ -336,7 +340,7 @@ export default function Scheduler() {
           )}
         </div>
 
-        {/* ── Right panel — life area buttons ───────────────────────────── */}
+        {/* ── Right panel — category buttons ────────────────────────────── */}
         <div
           className="shrink-0 flex flex-col border-l overflow-y-auto"
           style={{
@@ -346,12 +350,12 @@ export default function Scheduler() {
           }}
         >
           <div className="flex flex-col gap-1.5 px-1.5 py-4 h-full justify-center">
-            {LIFE_AREAS.map((area) => {
-              const color    = AREA_COLORS[area];
+            {CATEGORY_OPTIONS.map((category) => {
+              const color    = CATEGORY_COLORS[category] ?? remiColor;
               const isArmed  = selectedId !== null;
               return (
                 <button
-                  key={area}
+                  key={category}
                   className="w-full rounded-xl font-bold tracking-wide transition-all active:scale-95"
                   style={{
                     minHeight: "44px",
@@ -363,10 +367,10 @@ export default function Scheduler() {
                     letterSpacing: "0.04em",
                     transition: "background 0.15s, border-color 0.15s, color 0.15s",
                   }}
-                  onClick={() => handleAreaTap(area)}
-                  data-testid={`area-btn-${area.toLowerCase()}`}
+                  onClick={() => handleCategoryTap(category)}
+                  data-testid={`category-btn-${category.toLowerCase()}`}
                 >
-                  {area}
+                  {category}
                 </button>
               );
             })}

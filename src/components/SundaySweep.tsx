@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { X, ChevronRight, Check, Loader2, RefreshCw } from "lucide-react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
+import { CATEGORY_OPTIONS, CATEGORY_COLORS, CATEGORY_EMPTY } from "@/lib/categories";
 
 const JARVIS_URL = "https://jarvis.joshhollandgls.com";
 const REMI_API_KEY = import.meta.env.VITE_REMI_API_KEY as string;
@@ -11,15 +12,9 @@ const AUTH_HDR = { Authorization: `Bearer ${REMI_API_KEY}` };
 
 interface OverdueTask  { id: string; title: string; scheduled_date: string; }
 interface SomedayTask  { id: string; title: string; }
-interface QueueTask    { id: string; title: string; life_area: string | null; }
+interface QueueTask    { id: string; title: string; category: string | null; }
 
-const LIFE_AREAS = ["Studio", "Personal", "Family", "Dad", "Business", "Content"] as const;
-type LifeArea = typeof LIFE_AREAS[number];
-const AREA_COLORS: Record<LifeArea, string> = {
-  Studio: "#f59e0b", Personal: "#60a5fa", Family: "#22c55e",
-  Dad: "#f97316",   Business: "#a855f7", Content: "#ec4899",
-};
-const GROUP_ORDER = ["Unsorted", ...LIFE_AREAS] as const;
+const GROUP_ORDER = ["Unsorted", ...CATEGORY_OPTIONS] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,11 +73,21 @@ async function fetchQueue(): Promise<QueueTask[]> {
   if (!r.ok) throw new Error(String(r.status));
   return r.json();
 }
-async function patchQueue(id: string, patch: { life_area?: string; scheduled_date?: string }): Promise<void> {
+// Date assignment → /scheduler/update (unchanged). Category assignment goes via
+// patchTaskCategory below — /scheduler/update does not write Category.
+async function patchQueue(id: string, patch: { scheduled_date?: string }): Promise<void> {
   await fetch(`${JARVIS_URL}/scheduler/update`, {
     method: "PATCH",
     headers: { ...AUTH_HDR, "Content-Type": "application/json" },
     body: JSON.stringify({ id, ...patch }),
+  });
+}
+// Category write — same endpoint Tasks.tsx's patchTaskCategory uses.
+async function patchTaskCategory(id: string, category: string): Promise<void> {
+  await fetch(`${JARVIS_URL}/task/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { ...AUTH_HDR, "Content-Type": "application/json" },
+    body: JSON.stringify({ category }),
   });
 }
 
@@ -296,12 +301,12 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
   const today    = todayISO();
   const tomorrow = tomorrowISO();
 
-  async function handleArea(area: LifeArea) {
+  async function handleCategory(category: string) {
     if (!selectedId) return;
     const id = selectedId;
-    setTasks(p => p.map(t => t.id === id ? { ...t, life_area: area } : t));
+    setTasks(p => p.map(t => t.id === id ? { ...t, category } : t));
     setShowDate(p => new Set([...p, id]));
-    patchQueue(id, { life_area: area }).catch(load);
+    patchTaskCategory(id, category).catch(load);
   }
   async function handleDate(id: string, iso: string) {
     setTasks(p => p.filter(t => t.id !== id));
@@ -313,7 +318,7 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
 
   const groups = (GROUP_ORDER as readonly string[]).map(g => ({
     label: g,
-    tasks: tasks.filter(t => g === "Unsorted" ? !t.life_area : t.life_area === g),
+    tasks: tasks.filter(t => g === "Unsorted" ? !t.category : t.category === g),
   })).filter(g => g.tasks.length > 0);
 
   return (
@@ -336,7 +341,7 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
           ) : (
             <div className="space-y-4">
               {groups.map(group => {
-                const gc = group.label === "Unsorted" ? "var(--t-text5)" : (AREA_COLORS[group.label as LifeArea] ?? remiColor);
+                const gc = group.label === "Unsorted" ? CATEGORY_EMPTY : (CATEGORY_COLORS[group.label] ?? remiColor);
                 return (
                   <div key={group.label}>
                     <p className="text-xs font-bold uppercase tracking-widest mb-1.5 px-1"
@@ -345,7 +350,7 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
                       {group.tasks.map(task => {
                         const sel = selectedId === task.id;
                         const hdr = showDate.has(task.id);
-                        const ac  = task.life_area ? (AREA_COLORS[task.life_area as LifeArea] ?? remiColor) : null;
+                        const ac  = task.category ? (CATEGORY_COLORS[task.category] ?? remiColor) : null;
                         return (
                           <div key={task.id} className="rounded-xl overflow-hidden" style={{
                             background: "var(--t-card)",
@@ -354,11 +359,11 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
                           }} onClick={e => { e.stopPropagation(); setSelectedId(p => p === task.id ? null : task.id); setPickDateId(null); }}>
                             <div className="flex items-start gap-2 px-3 py-2.5">
                               <p className="flex-1 text-xs leading-snug" style={{ color: "var(--t-text2)" }}>{task.title}</p>
-                              {task.life_area && (
+                              {task.category && (
                                 <span className="shrink-0 rounded px-1.5 py-0.5" style={{
                                   background: (ac ?? remiColor) + "18", color: ac ?? remiColor,
                                   fontFamily: "'Space Mono', monospace", fontSize: "8px", letterSpacing: "0.05em", textTransform: "uppercase",
-                                }}>{task.life_area}</span>
+                                }}>{task.category}</span>
                               )}
                             </div>
                             {sel && hdr && (
@@ -393,22 +398,23 @@ function StageScheduler({ onNext }: { onNext: () => void }) {
             </div>
           )}
         </div>
-        {/* Right: area buttons */}
+        {/* Right: category buttons */}
         <div style={{ width: 68, display: "flex", flexDirection: "column", borderLeft: "1px solid var(--t-border)", padding: "12px 0 12px 6px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px", justifyContent: "center", height: "100%" }}>
-            {LIFE_AREAS.map(area => {
-              const color = AREA_COLORS[area];
+            {CATEGORY_OPTIONS.map(category => {
+              const color = CATEGORY_COLORS[category] ?? remiColor;
               const armed = selectedId !== null;
               return (
-                <button key={area} onClick={() => handleArea(area)}
+                <button key={category} onClick={() => handleCategory(category)}
                   className="w-full rounded-xl font-bold tracking-wide transition-all active:scale-95"
+                  data-testid={`category-btn-${category.toLowerCase()}`}
                   style={{
                     minHeight: "38px", fontFamily: "'Space Mono', monospace", fontSize: "9px", letterSpacing: "0.04em",
                     background: armed ? color + "18" : "var(--t-el-low)",
                     border: `1px solid ${armed ? color + "50" : "var(--t-border)"}`,
                     color: armed ? color : "var(--t-text5)",
                     transition: "background 0.15s, border-color 0.15s, color 0.15s",
-                  }}>{area}</button>
+                  }}>{category}</button>
               );
             })}
           </div>
@@ -542,7 +548,7 @@ function StageSomeday({ onDone }: { onDone: () => void }) {
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
 const STAGE_LABELS = ["Overdue Sweep",                  "Scheduler",                              "Someday / Maybe"          ];
-const STAGE_SUB    = ["Clear the backlog — one card at a time", "Assign dates or life areas to your Queue", "Keep it or let it go"];
+const STAGE_SUB    = ["Clear the backlog — one card at a time", "Assign dates or categories to your Queue", "Keep it or let it go"];
 
 interface SundaySweepProps { onClose: () => void; }
 
