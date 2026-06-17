@@ -1844,6 +1844,14 @@ export default function MainChat() {
             <input
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={(e) => {
+                // Plain Enter submits (same as the Send button); Shift+Enter does not.
+                // preventDefault stops the implicit <form> submit so sendMessage fires once.
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage(inputText);
+                }
+              }}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder='Try "Mix note for [song] — [note]"'

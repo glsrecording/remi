@@ -1272,7 +1272,8 @@ export default function Session() {
                   value={taskInput}
                   onChange={(e) => setTaskInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    // Plain Enter submits (same as the Add button); Shift+Enter does not.
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       addTask();
                     }
