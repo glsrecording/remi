@@ -1852,6 +1852,15 @@ export default function MainChat() {
                   sendMessage(inputText);
                 }
               }}
+              onKeyPress={(e) => {
+                // Tablet soft keyboards may fire keypress (not keydown) for Enter.
+                // Mirrors onKeyDown; a canceled keydown suppresses keypress on PC,
+                // so this only fires when keydown didn't — no double-send.
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage(inputText);
+                }
+              }}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               placeholder='Try "Mix note for [song] — [note]"'

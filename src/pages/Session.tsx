@@ -1278,6 +1278,15 @@ export default function Session() {
                       addTask();
                     }
                   }}
+                  onKeyPress={(e) => {
+                    // Tablet soft keyboards may fire keypress (not keydown) for Enter.
+                    // Mirrors onKeyDown; a canceled keydown suppresses keypress on PC,
+                    // so this only fires when keydown didn't — no double-submit.
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      addTask();
+                    }
+                  }}
                   placeholder="Add session task..."
                   className="flex-1 px-3 py-2 text-sm outline-none"
                   style={{
