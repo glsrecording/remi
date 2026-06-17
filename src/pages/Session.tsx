@@ -281,25 +281,35 @@ export default function Session() {
     });
   }, [historyLoaded, historyLoading, loadHistory]);
 
-  // Add a session sub-task by typing — reuses the voice handler path (/remi
-  // trigger phrase), then refreshes the list. UI-only; no backend changes.
+  // Add a session sub-task by typing. Hits the direct /session-tasks/add
+  // endpoint (one Notion write, no /remi classification) so it lands fast.
+  // Clears the input and shows the task IMMEDIATELY (optimistic) so rapid
+  // note-after-note entry never waits on the round trip — and a second Enter
+  // can't resend the same text while the request is in flight.
   const addTask = useCallback(async () => {
     const text = taskInput.trim();
     const song = session.song;
     if (!text || !song) return;
+    setTaskInput("");                       // clear now → no double-submit, instant feel
+    const tempId = `temp-${Date.now()}`;
+    setSessionTasks((prev) => [...prev, { block_id: tempId, text, checked: false }]);
     try {
-      await fetch(`${JARVIS_URL}/remi`, {
+      const res = await fetch(`${JARVIS_URL}/session-tasks/add`, {
         method: "POST",
         headers: { ...AUTH_HEADERS, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: `add session task for ${song}: ${text}`,
-          user_id: "remi-session",
-        }),
+        body: JSON.stringify({ song, text }),
       });
-      setTaskInput("");
-      refetchSessionTasks();
+      const data = await res.json().catch(() => ({} as { tasks?: SessionTask[] }));
+      if (res.ok && Array.isArray(data.tasks)) {
+        setSessionTasks(data.tasks);        // authoritative list (real block_ids)
+      } else {
+        refetchSessionTasks();              // unexpected shape — fall back to a fetch
+      }
     } catch {
-      // non-fatal — leave the text so the user can retry
+      // Network failure — drop the optimistic row and restore the text ONLY if
+      // the user hasn't already started typing the next note.
+      setSessionTasks((prev) => prev.filter((t) => t.block_id !== tempId));
+      setTaskInput((cur) => cur || text);
     }
   }, [taskInput, session.song, refetchSessionTasks]);
 
