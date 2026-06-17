@@ -1926,6 +1926,7 @@ export default function MainChat() {
               touchAction: "none",
             }}
             onPointerDown={(e) => {
+              navigator.vibrate?.(30); // haptic on TAP — first line, before any async work
               e.currentTarget.setPointerCapture(e.pointerId);
               e.preventDefault();
               pointerStartYRef.current = e.clientY;
