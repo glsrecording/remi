@@ -1271,9 +1271,13 @@ export default function Session() {
                   type="text"
                   value={taskInput}
                   onChange={(e) => setTaskInput(e.target.value)}
+                  enterKeyHint="done"
                   onKeyDown={(e) => {
                     // Plain Enter submits (same as the Add button); Shift+Enter does not.
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    // Catch numeric keyCode/which too — some tablet soft keyboards send
+                    // those instead of the "Enter" key name.
+                    const isEnter = e.key === "Enter" || e.keyCode === 13 || e.which === 13;
+                    if (isEnter && !e.shiftKey && taskInput.trim()) {
                       e.preventDefault();
                       addTask();
                     }
@@ -1282,7 +1286,8 @@ export default function Session() {
                     // Tablet soft keyboards may fire keypress (not keydown) for Enter.
                     // Mirrors onKeyDown; a canceled keydown suppresses keypress on PC,
                     // so this only fires when keydown didn't — no double-submit.
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    const isEnter = e.key === "Enter" || e.keyCode === 13 || e.which === 13;
+                    if (isEnter && !e.shiftKey && taskInput.trim()) {
                       e.preventDefault();
                       addTask();
                     }
