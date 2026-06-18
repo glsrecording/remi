@@ -1416,7 +1416,7 @@ export default function MainChat() {
               )}
             </div>
           </div>
-          {hasReplay && !isSpeaking && (
+          {hasReplay && (
             <button
               className="p-1.5 rounded-lg transition-colors"
               style={{ color: remiColor }}
