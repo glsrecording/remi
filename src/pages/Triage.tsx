@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Fragment } from "react";
 import { useLocation } from "wouter";
 import { Mic, MicOff, Loader2, Check, X, Lock } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -29,7 +29,9 @@ type Phase       = "capture" | "pass2" | "done";
 type Pass1Action = "today" | "tomorrow" | "queue" | "memory" | "someday";
 type Pass2Action = "insight" | "memory" | "gratitude" | "jarvis";
 
-interface TriageItem { id: string; text: string }
+// `backlog` items are EXISTING Notion tasks (id = real page id) surfaced by the
+// "what am I behind on" sweep — they reschedule via /tasks/move, never create.
+interface TriageItem { id: string; text: string; backlog?: boolean }
 interface Counts {
   today: number; tomorrow: number; queue: number; someday: number;
   insight: number; memory: number; gratitude: number; jarvis: number;
@@ -65,6 +67,41 @@ function createTask(title: string, bucket: "today" | "tomorrow" | "queue" | "som
   })
     .then((r) => { if (!r.ok) console.error("[Triage] /tasks/create failed:", r.status, bucket, title); })
     .catch((err) => console.error("[Triage] /tasks/create network error:", err));
+}
+
+// Reschedule an EXISTING task (backlog sweep) — moves the Notion page, never
+// creates a duplicate. /tasks/move accepts today | tomorrow | someday here.
+function moveTask(pageId: string, bucket: "today" | "tomorrow" | "someday"): void {
+  fetch(`${JARVIS_URL}/tasks/move`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${REMI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ page_id: pageId, bucket }),
+  })
+    .then((r) => { if (!r.ok) console.error("[Triage] /tasks/move failed:", r.status, bucket, pageId); })
+    .catch((err) => console.error("[Triage] /tasks/move network error:", err));
+}
+
+interface BacklogTask { id: string; text: string }
+async function fetchBacklog(excludeIds: string[]): Promise<BacklogTask[]> {
+  const qs = excludeIds.length ? `?exclude=${encodeURIComponent(excludeIds.join(","))}` : "";
+  const r = await fetch(`${JARVIS_URL}/triage-backlog${qs}`, {
+    headers: { Authorization: `Bearer ${REMI_API_KEY}` },
+  });
+  if (!r.ok) throw new Error(`triage-backlog ${r.status}`);
+  const data = await r.json();
+  return Array.isArray(data.tasks) ? (data.tasks as BacklogTask[]) : [];
+}
+
+// "what am I behind on" and close variants → surface the backlog sweep.
+function isBacklogPhrase(text: string): boolean {
+  const s = text.trim().toLowerCase().replace(/[.?!]+$/, "");
+  return (
+    /\bbehind on\b/.test(s) ||
+    /what'?s?\s+overdue\b/.test(s) ||
+    /\bshow\s+(?:me\s+)?overdue\b/.test(s) ||
+    /\bwhat did i miss\b/.test(s) ||
+    s === "overdue"
+  );
 }
 
 function saveMemory(text: string, type: Pass2Action): void {
@@ -795,7 +832,15 @@ export default function Triage() {
   const [phase, setPhase]           = useState<Phase>("capture");
   const [counts, setCounts]         = useState<Counts>(ZERO_COUNTS);
   const [decomposing, setDecomposing] = useState(false);
+  const [backlogMsg, setBacklogMsg] = useState<string | null>(null); // sweep banner
   const hasStarted = useRef(false); // true once any item enters pass1Queue
+
+  // Clear the "Found N overdue" banner once the last backlog card leaves the queue.
+  useEffect(() => {
+    if (backlogMsg?.startsWith("Found") && !pass1Queue.some((i) => i.backlog)) {
+      setBacklogMsg(null);
+    }
+  }, [pass1Queue, backlogMsg]);
 
   // On mount: load pre-decomposed items from a Remi brain dump redirect
   useEffect(() => {
@@ -826,6 +871,8 @@ export default function Triage() {
   }, [pass2Queue.length, phase]);
 
   function addItem(text: string): void {
+    // "what am I behind on" surfaces the backlog instead of capturing a new item.
+    if (isBacklogPhrase(text)) { loadBacklog(); return; }
     hasStarted.current = true;
     setDecomposing(true);
     decomposeText(text)
@@ -835,7 +882,44 @@ export default function Triage() {
       .finally(() => setDecomposing(false));
   }
 
+  // Pull overdue + unscheduled tasks and APPEND them after the current queue as
+  // swipeable backlog cards. Excludes backlog items already shown so a repeat
+  // "what am I behind on" doesn't duplicate.
+  function loadBacklog(): void {
+    const excludeIds = pass1Queue.filter((i) => i.backlog).map((i) => i.id);
+    fetchBacklog(excludeIds)
+      .then((tasks) => {
+        if (tasks.length === 0) {
+          setBacklogMsg("You're caught up — nothing overdue");
+          setTimeout(() => setBacklogMsg(null), 2000);
+          return;
+        }
+        hasStarted.current = true;
+        setBacklogMsg(`Found ${tasks.length} overdue task${tasks.length !== 1 ? "s" : ""} — swipe to schedule or dismiss.`);
+        setPass1Queue((prev) => [
+          ...prev,
+          ...tasks.map((t) => ({ id: t.id, text: t.text, backlog: true })),
+        ]);
+      })
+      .catch(() => {
+        setBacklogMsg("Couldn't load backlog — try again.");
+        setTimeout(() => setBacklogMsg(null), 2500);
+      });
+  }
+
   function handlePass1Swipe(item: TriageItem, action: Pass1Action) {
+    // Backlog items are EXISTING tasks: reschedule via /tasks/move (never create
+    // a duplicate). today/tomorrow/someday move the Notion page; queue/memory
+    // leave it as-is and just drop it from the sweep view. Dismiss (X) likewise
+    // removes without deleting.
+    if (item.backlog) {
+      if (action === "today")         { moveTask(item.id, "today");    setCounts((c) => ({ ...c, today:    c.today    + 1 })); }
+      else if (action === "tomorrow") { moveTask(item.id, "tomorrow"); setCounts((c) => ({ ...c, tomorrow: c.tomorrow + 1 })); }
+      else if (action === "someday")  { moveTask(item.id, "someday");  setCounts((c) => ({ ...c, someday:  c.someday  + 1 })); }
+      // queue / memory → no Notion change; the task stays as it was, just leaves the sweep.
+      setPass1Queue((prev) => prev.filter((i) => i.id !== item.id));
+      return;
+    }
     if (action === "today") {
       createTask(item.text, "today");
       setCounts((c) => ({ ...c, today: c.today + 1 }));
@@ -1000,6 +1084,14 @@ export default function Triage() {
             "inset 0 0 60px rgba(155,141,232,0.08), 0 0 30px rgba(155,141,232,0.1)",
         }}
       >
+        {backlogMsg && (
+          <div
+            className="px-4 py-3 rounded-lg text-sm text-center"
+            style={{ background: `${PINK}14`, border: `1px solid ${PINK}33`, color: "var(--text-secondary)", fontFamily: "'Space Mono', monospace" }}
+          >
+            {backlogMsg}
+          </div>
+        )}
         {pass1Queue.length === 0 && decomposing ? (
           <div className="flex flex-col gap-3">
             <SkeletonCard />
@@ -1025,14 +1117,31 @@ export default function Triage() {
           <>
             <HintStrip pass={1} />
             <div className="flex flex-col gap-3" style={{ touchAction: "none" }}>
-              {pass1Queue.map((item) => (
-                <Pass1Card
-                  key={item.id}
-                  item={item}
-                  onSwiped={handlePass1Swipe}
-                  onDismissed={handlePass1Dismiss}
-                />
-              ))}
+              {pass1Queue.map((item, idx) => {
+                // One divider at the capture→backlog boundary (backlog items are
+                // always appended, so they're contiguous at the end).
+                const prev = pass1Queue[idx - 1];
+                const showDivider = !!item.backlog && !!prev && !prev.backlog;
+                return (
+                  <Fragment key={item.id}>
+                    {showDivider && (
+                      <div
+                        className="flex items-center gap-2 py-1 px-1 select-none"
+                        style={{ fontFamily: "'Space Mono', monospace", fontSize: "10px", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" }}
+                      >
+                        <span className="flex-1" style={{ height: 1, background: "var(--border-default)" }} />
+                        <span>Overdue &amp; Unscheduled</span>
+                        <span className="flex-1" style={{ height: 1, background: "var(--border-default)" }} />
+                      </div>
+                    )}
+                    <Pass1Card
+                      item={item}
+                      onSwiped={handlePass1Swipe}
+                      onDismissed={handlePass1Dismiss}
+                    />
+                  </Fragment>
+                );
+              })}
             </div>
           </>
         )}
