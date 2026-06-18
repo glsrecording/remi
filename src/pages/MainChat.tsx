@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
   ChevronDown,
+  RotateCcw,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -595,6 +596,9 @@ export default function MainChat() {
   const [voiceEnabled, setVoiceEnabled] = useLocalStorage<boolean>("remi_voice_enabled", false);
   const voiceEnabledRef = useRef(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  // Drives the replay button's visibility (refs don't trigger re-renders). True
+  // once a decoded buffer is stored in finalizeAndPlay; reset at speakResponse start.
+  const [hasReplay, setHasReplay] = useState(false);
   const audioRef = useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   // WebSocket TTS streaming refs
@@ -603,6 +607,9 @@ export default function MainChat() {
   const wsStreamDoneRef = useRef<boolean>(false);
   // Accumulates raw PCM (header-stripped) across all stream frames; decoded once at end.
   const wsRawPcmRef = useRef<Uint8Array[]>([]);
+  // Retains the last fully-decoded AudioBuffer so the replay button can re-play it
+  // with a fresh source node — no new server call, no re-decode. Set in finalizeAndPlay.
+  const wsLastReplayBufferRef = useRef<AudioBuffer | null>(null);
 
   // Font size toggle: 0=Normal(16px), 1=Large(20px), 2=Larger(24px)
   const FONT_SIZES = [16, 20, 24] as const;
@@ -808,6 +815,7 @@ export default function MainChat() {
     wsActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch {} });
     wsActiveSourcesRef.current = [];
     wsStreamDoneRef.current = false;
+    setHasReplay(false);
     wsRawPcmRef.current = [];
 
     if (!audioContextRef.current) audioContextRef.current = new AudioContext();
@@ -898,6 +906,9 @@ export default function MainChat() {
       // Single decode → single AudioBuffer → single scheduled source. No seams.
       actx.decodeAudioData(wav)
         .then((audioBuffer) => {
+          // Retain the decoded buffer for replay before scheduling playback.
+          wsLastReplayBufferRef.current = audioBuffer;
+          setHasReplay(true);
           const source = actx.createBufferSource();
           source.buffer = audioBuffer;
           source.connect(actx.destination);
@@ -973,6 +984,24 @@ export default function MainChat() {
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Replay the last decoded TTS response from the retained AudioBuffer — a fresh
+  // source node, no server call, no re-decode. Reuses the existing AudioContext
+  // (audioContextRef) and the same wsActiveSourcesRef cleanup path as live playback.
+  const handleTtsReplay = useCallback(() => {
+    if (!wsLastReplayBufferRef.current || isSpeaking) return;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContext();
+    const actx = audioContextRef.current;
+    try { if (actx.state === "suspended") actx.resume(); } catch { /* ignore */ }
+    const source = actx.createBufferSource();
+    source.buffer = wsLastReplayBufferRef.current;
+    source.connect(actx.destination);
+    wsActiveSourcesRef.current.push(source);
+    source.onended = () => {
+      wsActiveSourcesRef.current = wsActiveSourcesRef.current.filter((s) => s !== source);
+    };
+    source.start();
+  }, [isSpeaking]);
 
   const sendMessage = useCallback(
     (text: string, isVoice = false) => {
@@ -1387,6 +1416,17 @@ export default function MainChat() {
               )}
             </div>
           </div>
+          {hasReplay && !isSpeaking && (
+            <button
+              className="p-1.5 rounded-lg transition-colors"
+              style={{ color: remiColor }}
+              onClick={handleTtsReplay}
+              data-testid="button-tts-replay"
+              title="Replay last response"
+            >
+              <RotateCcw size={16} />
+            </button>
+          )}
           <button
             className="p-1.5 rounded-lg transition-colors"
             style={{ color: voiceEnabled ? remiColor : "rgba(255,255,255,0.25)" }}
