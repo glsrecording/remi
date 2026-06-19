@@ -10,6 +10,7 @@ import Tasks from "@/pages/Tasks";
 import ProjectDetail from "@/pages/ProjectDetail";
 import Commands from "@/pages/Commands";
 import MixNotes from "@/pages/MixNotes";
+import ComposingTools from "@/pages/ComposingTools";
 import TimeTrack from "@/pages/TimeTrack";
 import Scorecard from "@/pages/Scorecard";
 import MorningBriefing from "@/pages/MorningBriefing";
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/projects/:id" component={ProjectDetail} />
       <Route path="/commands" component={Commands} />
       <Route path="/mix-notes" component={MixNotes} />
+      <Route path="/composing-tools" component={ComposingTools} />
       <Route path="/time-track" component={TimeTrack} />
       <Route path="/scorecard" component={Scorecard} />
       <Route path="/morning-briefing" component={MorningBriefing} />

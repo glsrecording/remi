@@ -3,6 +3,7 @@ import {
   X, Sun, Moon, Brain, Music, Clock, BarChart2, MessageCircle, MessageSquare,
   Terminal, Shuffle, Radio, BookOpen, RefreshCw, ClipboardCheck, ShoppingCart,
   Layers, Phone, Film, Link2, Bell, Archive, Users, CalendarClock, Dumbbell, Database,
+  Music2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -69,8 +70,9 @@ const SECTIONS: MenuSection[] = [
   {
     name: "Creative", accent: "#d4537e", bg: "var(--color-personal-bg)",  // --color-personal
     items: [
-      { label: "Journal", icon: BookOpen, path: "/journal" },
-      { label: "Content", icon: Film,     path: "/content" },
+      { label: "Composing Tools", icon: Music2,   path: "/composing-tools" },
+      { label: "Journal",         icon: BookOpen, path: "/journal" },
+      { label: "Content",         icon: Film,     path: "/content" },
     ],
   },
   {
