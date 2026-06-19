@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { PageHeader } from "@/components/PageHeader";
@@ -575,6 +575,372 @@ function ChordExplorer({ accent, tuning }: { accent: string; tuning: GuitarTunin
   );
 }
 
+// ── TAB 3: CHORD DRAW (Session 3) ─────────────────────────────────────────────
+// Interactive fretboard: tap fret positions → identify the chord in the current
+// tuning → show variations. Pure math, no backend. Identification is musically
+// correct (the actual notes under the fingers), not forced to a "nice" name.
+
+interface ChordTemplate { name: string; intervals: number[] } // intervals from root, excluding 0
+const CHORD_TEMPLATES: ChordTemplate[] = [
+  { name: "5",     intervals: [7] },            // power chord (simplest → checked early via size sort)
+  { name: "",      intervals: [4, 7] },         // major
+  { name: "m",     intervals: [3, 7] },         // minor
+  { name: "dim",   intervals: [3, 6] },         // diminished
+  { name: "aug",   intervals: [4, 8] },         // augmented
+  { name: "sus2",  intervals: [2, 7] },
+  { name: "sus4",  intervals: [5, 7] },
+  { name: "7",     intervals: [4, 7, 10] },     // dominant 7
+  { name: "maj7",  intervals: [4, 7, 11] },
+  { name: "m7",    intervals: [3, 7, 10] },
+  { name: "dim7",  intervals: [3, 6, 9] },
+  { name: "mmaj7", intervals: [3, 7, 11] },
+  { name: "7sus4", intervals: [5, 7, 10] },
+  { name: "6",     intervals: [4, 7, 9] },
+  { name: "m6",    intervals: [3, 7, 9] },
+  { name: "add9",  intervals: [4, 7, 2] },      // 2 == 14 mod 12
+  { name: "madd9", intervals: [3, 7, 2] },
+  { name: "9",     intervals: [4, 7, 10, 2] },
+  { name: "maj9",  intervals: [4, 7, 11, 2] },
+  { name: "m9",    intervals: [3, 7, 10, 2] },
+];
+
+// Identify a chord from a set of pitch classes; prefers the bass (lowest string)
+// as root, strong (exact) over partial, and simpler templates over complex.
+function identifyChord(pcs: number[], bassPc: number | null): { name: string; confidence: string; root: number } | null {
+  const uniq = Array.from(new Set(pcs.map((p) => ((p % 12) + 12) % 12)));
+  if (uniq.length < 2) return null;
+  const roots = bassPc != null ? [bassPc, ...uniq.filter((p) => p !== bassPc)] : uniq;
+  type Cand = { root: number; name: string; strong: boolean; size: number; bassRoot: boolean };
+  const cands: Cand[] = [];
+  for (const root of roots) {
+    const rel = new Set(uniq.map((p) => (p - root + 12) % 12)); // includes 0
+    const nonRoot = Array.from(rel).filter((x) => x !== 0);
+    for (const t of CHORD_TEMPLATES) {
+      const tset = Array.from(new Set(t.intervals.map((i) => ((i % 12) + 12) % 12))).filter((x) => x !== 0);
+      const allPresent = tset.every((i) => rel.has(i));
+      if (!allPresent) continue;
+      const noExtra = nonRoot.every((i) => tset.includes(i));
+      // A power chord (1 interval) is defined by having ONLY root+fifth — never
+      // report it as a partial match when other notes are present (would mislabel
+      // any set containing a fifth). Partials are for triad-or-larger templates.
+      if (!noExtra && tset.length < 2) continue;
+      cands.push({ root, name: NOTE_NAMES[root] + t.name, strong: noExtra, size: tset.length, bassRoot: root === bassPc });
+    }
+  }
+  if (!cands.length) return null;
+  cands.sort((a, b) =>
+    (Number(b.strong) - Number(a.strong)) ||
+    (a.size - b.size) ||
+    (Number(b.bassRoot) - Number(a.bassRoot)),
+  );
+  const best = cands[0];
+  return { name: best.name, confidence: best.strong ? "Strong match" : "Possible match", root: best.root };
+}
+
+function chordNotesFromSuffix(rootName: string, suffix: string): string[] {
+  const t = CHORD_TEMPLATES.find((x) => x.name === suffix);
+  const r = NOTE_INDEX[rootName] ?? 0;
+  const ivals = t ? [0, ...t.intervals] : [0];
+  const seen = new Set<string>(); const out: string[] = [];
+  for (const i of ivals) { const nm = NOTE_NAMES[(r + i) % 12]; if (!seen.has(nm)) { seen.add(nm); out.push(nm); } }
+  return out;
+}
+
+function buildVariations(rootName: string, identifiedName: string, minorFamily: boolean): { name: string; suffix: string }[] {
+  const major = ["", "maj7", "7", "add9", "sus2", "sus4"];
+  const minor = ["m", "m7", "m9", "madd9", "sus2"];
+  const fam = minorFamily ? minor : major;
+  const list = fam.map((suffix) => ({ suffix, name: rootName + suffix }));
+  list.push({ suffix: "5", name: rootName + "5" }); // always offer the power chord
+  return list.filter((v) => v.name !== identifiedName).slice(0, 5);
+}
+
+const STANDARD_STRINGS = [4, 9, 2, 7, 11, 4];
+type DrawString = { kind: "fretted"; fret: number } | { kind: "open" } | { kind: "muted" };
+
+function soundingList(st: Record<number, DrawString>, tStrings: number[]): { s: number; pc: number }[] {
+  const out: { s: number; pc: number }[] = [];
+  for (let s = 0; s < 6; s++) {
+    const v = st[s];
+    if (!v || v.kind === "muted") continue;
+    const pc = v.kind === "open" ? tStrings[s] % 12 : (tStrings[s] + v.fret) % 12;
+    out.push({ s, pc });
+  }
+  return out; // already low-string → high-string order
+}
+
+interface DrawResult { chordName: string; confidence: string; notes: string[]; root: number | null; standardName: string | null; variations: { name: string; suffix: string }[]; }
+
+function computeDrawResult(st: Record<number, DrawString>, tuning: GuitarTuning): DrawResult | null {
+  const list = soundingList(st, tuning.strings);
+  if (!list.length) return null;
+  const pcs = list.map((x) => x.pc);
+  const bass = list[0].pc;
+  const seen = new Set<string>(); const notes: string[] = [];
+  for (const pc of pcs) { const nm = noteName(pc); if (!seen.has(nm)) { seen.add(nm); notes.push(nm); } }
+  const id = identifyChord(pcs, bass);
+  const stdList = soundingList(st, STANDARD_STRINGS);
+  const stdId = stdList.length ? identifyChord(stdList.map((x) => x.pc), stdList[0].pc) : null;
+  let variations: { name: string; suffix: string }[] = [];
+  if (id) {
+    const rootName = NOTE_NAMES[id.root];
+    const suffix = id.name.slice(rootName.length);
+    const minorFam = suffix.startsWith("m") && !suffix.startsWith("maj");
+    variations = buildVariations(rootName, id.name, minorFam);
+  }
+  return {
+    chordName: id ? id.name : "Unknown chord",
+    confidence: id ? id.confidence : "Unknown",
+    notes,
+    root: id ? id.root : null,
+    standardName: stdId ? stdId.name : null,
+    variations,
+  };
+}
+
+function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning }) {
+  const [strings, setStrings] = useState<Record<number, DrawString>>({});
+  const [windowStart, setWindowStart] = useState(1);
+  const [result, setResult] = useState<DrawResult | null>(null);
+  const [autoIdentify, setAutoIdentify] = useState(false);
+  const [muteMode, setMuteMode] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const frets = [0, 1, 2, 3, 4].map((i) => windowStart + i);
+
+  // Auto-identify reruns whenever the shape or tuning changes (when enabled).
+  useEffect(() => {
+    if (autoIdentify) setResult(computeDrawResult(strings, tuning));
+  }, [strings, tuning, autoIdentify]);
+
+  const toggleFret = (s: number, f: number) => {
+    setStrings((prev) => {
+      const cur = prev[s];
+      const next = { ...prev };
+      if (cur && cur.kind === "fretted" && cur.fret === f) delete next[s];
+      else next[s] = { kind: "fretted", fret: f };
+      return next;
+    });
+  };
+  const tapLabel = (s: number) => {
+    setStrings((prev) => {
+      const cur = prev[s];
+      const next = { ...prev };
+      if (muteMode) {
+        if (cur && cur.kind === "muted") delete next[s]; else next[s] = { kind: "muted" };
+      } else {
+        if (cur && cur.kind === "open") delete next[s]; else next[s] = { kind: "open" };
+      }
+      return next;
+    });
+  };
+  const longPressLabel = (s: number) => {
+    setStrings((prev) => {
+      const cur = prev[s];
+      const next = { ...prev };
+      if (cur && cur.kind === "muted") delete next[s]; else next[s] = { kind: "muted" };
+      return next;
+    });
+  };
+
+  const clearAll = () => { setStrings({}); setResult(null); setExpanded(null); };
+  const identify = () => setResult(computeDrawResult(strings, tuning));
+
+  const cell = 44;
+  const labelW = 60;
+
+  // Row order: high string (5) on top, low string (0) on bottom.
+  const rows = [5, 4, 3, 2, 1, 0];
+
+  return (
+    <div className="px-4 py-5 flex flex-col gap-4">
+      <style>{`.cd-cell{background:transparent;} .cd-cell:hover{background:var(--t-el-low);}`}</style>
+
+      {/* A) Tuning reminder */}
+      <div className="text-xs" style={{ color: "var(--t-text5)", fontFamily: MONO }} data-testid="chorddraw-tuning">
+        Tuning: {tuning.name}
+      </div>
+
+      {/* B) Interactive fretboard grid */}
+      <div style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}>
+        {/* fret number header */}
+        <div className="flex">
+          <div style={{ width: labelW }} />
+          {frets.map((f) => (
+            <div key={`hf-${f}`} className="flex items-center justify-center"
+              style={{ flex: 1, minWidth: cell, height: 22, color: "var(--t-text6)", fontFamily: MONO, fontSize: 10 }}>
+              {f}
+            </div>
+          ))}
+        </div>
+
+        {rows.map((s) => {
+          const st = strings[s];
+          const openNote = noteName(tuning.strings[s]);
+          return (
+            <div key={`row-${s}`} className="flex" style={{ alignItems: "stretch" }}>
+              {/* label / open / mute area */}
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  longPress.current = setTimeout(() => { longPressLabel(s); longPress.current = null; }, 480);
+                }}
+                onPointerUp={() => { if (longPress.current) { clearTimeout(longPress.current); longPress.current = null; tapLabel(s); } }}
+                onPointerLeave={() => { if (longPress.current) { clearTimeout(longPress.current); longPress.current = null; } }}
+                className="flex items-center justify-center gap-1"
+                style={{ width: labelW, height: cell, borderRight: windowStart === 1 ? "3px solid var(--t-text)" : "1px solid var(--t-border-md)" }}
+                data-testid={`cd-label-${s}`}
+              >
+                <span style={{ fontFamily: MONO, fontSize: 12, color: "var(--t-text4)" }}>{openNote}</span>
+                {st?.kind === "open" && <span style={{ color: accent, fontSize: 13 }}>○</span>}
+                {st?.kind === "muted" && <span style={{ color: "var(--t-text6)", fontSize: 13 }}>×</span>}
+              </button>
+
+              {/* fret cells */}
+              {frets.map((f) => {
+                const fretted = st?.kind === "fretted" && st.fret === f;
+                const pc = (tuning.strings[s] + f) % 12;
+                const isRoot = fretted && result?.root != null && pc === result.root;
+                return (
+                  <div
+                    key={`c-${s}-${f}`}
+                    onPointerDown={(e) => { e.preventDefault(); toggleFret(s, f); }}
+                    className={fretted ? "" : "cd-cell"}
+                    style={{
+                      flex: 1, minWidth: cell, height: cell,
+                      borderBottom: "1px solid var(--t-border)",
+                      borderRight: "1px solid var(--t-border)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: "pointer",
+                    }}
+                    data-testid={`cd-cell-${s}-${f}`}
+                  >
+                    {fretted && (
+                      <div className="flex items-center justify-center" style={{
+                        width: 32, height: 32, borderRadius: 99,
+                        background: accent,
+                        border: isRoot ? "2px solid var(--t-text)" : "none",
+                        boxShadow: isRoot ? `0 0 0 2px ${accent}` : "none",
+                      }}>
+                        <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: "#111" }}>{noteName(pc)}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* C) Position selector */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold" style={{ color: "var(--t-text3)", fontFamily: MONO }}>
+          Position: Frets {windowStart}–{windowStart + 4}
+        </span>
+        <div className="flex gap-1.5">
+          <button type="button" onClick={() => setWindowStart((w) => Math.max(1, w - 1))}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95"
+            style={{ fontFamily: MONO, background: "var(--t-el-low)", color: "var(--t-text3)", border: "1px solid var(--t-border-md)" }}
+            data-testid="cd-down">▼ Down</button>
+          <button type="button" onClick={() => setWindowStart((w) => Math.min(17, w + 1))}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95"
+            style={{ fontFamily: MONO, background: "var(--t-el-low)", color: "var(--t-text3)", border: "1px solid var(--t-border-md)" }}
+            data-testid="cd-up">▲ Up</button>
+        </div>
+      </div>
+
+      {/* D) Action row */}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={identify}
+          className="px-4 py-2 rounded-xl text-sm font-bold active:scale-95"
+          style={{ fontFamily: MONO, background: accent, color: "#111" }}
+          data-testid="cd-identify">Identify chord</button>
+        <button type="button" onClick={clearAll}
+          className="px-4 py-2 rounded-xl text-sm font-medium active:scale-95"
+          style={{ fontFamily: MONO, background: "var(--t-el-low)", color: "var(--t-text4)", border: "1px solid var(--t-border-md)" }}
+          data-testid="cd-clear">Clear</button>
+        <button type="button" onClick={() => setMuteMode((m) => !m)}
+          className="px-4 py-2 rounded-xl text-sm font-medium active:scale-95"
+          style={{ fontFamily: MONO, background: muteMode ? accent : "var(--t-el-low)", color: muteMode ? "#111" : "var(--t-text4)", border: `1px solid ${muteMode ? accent : "var(--t-border-md)"}` }}
+          data-testid="cd-mute">Mute string</button>
+      </div>
+
+      <label className="flex items-center gap-2 text-xs" style={{ color: "var(--t-text4)" }}>
+        <input type="checkbox" checked={autoIdentify} onChange={(e) => setAutoIdentify(e.target.checked)} data-testid="cd-auto" />
+        Auto-identify as I draw
+      </label>
+
+      {/* E) Result panel */}
+      {result && (
+        <div className="rounded-2xl px-4 py-4 flex flex-col gap-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }} data-testid="cd-result">
+          <div className="flex items-baseline gap-3">
+            <span className="text-2xl font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>{result.chordName}</span>
+            <span className="text-xs" style={{ color: result.confidence === "Strong match" ? accent : "var(--t-text5)", fontFamily: MONO }}>{result.confidence}</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {result.notes.map((n, i) => (
+              <span key={`${n}-${i}`} className="px-3 py-1.5 rounded-lg text-sm font-bold"
+                style={{ fontFamily: MONO, background: "var(--t-el-med)", color: "var(--t-text2)", border: "1px solid var(--t-border)" }}>{n}</span>
+            ))}
+          </div>
+          {result.chordName !== "Unknown chord" && (
+            <div className="text-xs" style={{ color: "var(--t-text4)" }}>
+              This shape in <b>{tuning.name}</b>: <b style={{ color: accent }}>{result.chordName}</b>
+            </div>
+          )}
+          {tuning.name !== "Standard" && result.standardName && (
+            <div className="text-xs" style={{ color: "var(--t-text5)" }}>
+              In Standard tuning this shape would be: <b>{result.standardName}</b>
+            </div>
+          )}
+
+          {/* F) Variations */}
+          {result.variations.length > 0 && (
+            <div className="flex flex-col gap-2 mt-1">
+              <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: MONO }}>Variations &amp; related chords</div>
+              <div className="grid grid-cols-2 gap-2">
+                {result.variations.map((v) => {
+                  const notes = chordNotesFromSuffix(NOTE_NAMES[result.root ?? 0], v.suffix);
+                  const open = expanded === v.name;
+                  const voicing = VOICINGS[v.name]?.[0];
+                  return (
+                    <div key={v.name} className="rounded-xl px-3 py-2 flex flex-col gap-1.5"
+                      style={{ background: "var(--t-bg)", border: `1px solid ${open ? accent : "var(--t-border)"}` }}>
+                      <button type="button" onClick={() => setExpanded(open ? null : v.name)}
+                        className="flex items-center justify-between" data-testid={`cd-var-${v.name.replace(/[^a-z0-9]/gi, "-")}`}>
+                        <span className="text-sm font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>{v.name}</span>
+                        <span style={{ color: "var(--t-text6)", fontSize: 11 }}>{open ? "▲" : "▼"}</span>
+                      </button>
+                      <div className="flex flex-wrap gap-1">
+                        {notes.map((n, i) => (
+                          <span key={`${n}-${i}`} className="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                            style={{ fontFamily: MONO, background: "var(--t-el-med)", color: "var(--t-text3)" }}>{n}</span>
+                        ))}
+                      </div>
+                      {open && (
+                        voicing ? (
+                          <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={accent}
+                            chordDots={voicing.dots} startFret={voicing.startFret}
+                            openStrings={voicing.openStrings} mutedStrings={voicing.mutedStrings} />
+                        ) : (
+                          <div className="text-[10px]" style={{ color: "var(--t-text6)" }}>Diagram coming soon for this voicing</div>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 export default function ComposingTools() {
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
@@ -589,7 +955,7 @@ export default function ComposingTools() {
   const currentTuning: GuitarTuning = tuningName === "Custom"
     ? { name: "Custom", strings: customStrings }
     : (TUNINGS.find((t) => t.name === tuningName) || TUNINGS[0]);
-  const showTuning = tab === "chord-explorer" || tab === "scales";
+  const showTuning = tab === "chord-explorer" || tab === "scales" || tab === "chord-draw";
 
   useEffect(() => {
     if (!toast) return;
@@ -653,8 +1019,7 @@ export default function ComposingTools() {
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 40px)" }}>
         {tab === "key-finder"     && <KeyFinder accent={remiColor} />}
         {tab === "chord-explorer" && <ChordExplorer accent={remiColor} tuning={currentTuning} />}
-        {tab === "chord-draw"     && <Placeholder icon="✏️" title="Chord Draw"
-          subtitle="Coming soon — draw your finger positions on a fretboard to find out what chord you're playing, then explore variations." />}
+        {tab === "chord-draw"     && <ChordDraw accent={remiColor} tuning={currentTuning} />}
         {tab === "progressions"   && <Progressions accent={remiColor} />}
         {tab === "scales"         && <ScalesModes accent={remiColor} tuning={currentTuning} />}
         {tab === "delay"          && <DelayCalc accent={remiColor} onCopy={(ms) => { copyText(ms); setToast("Copied!"); }} />}
