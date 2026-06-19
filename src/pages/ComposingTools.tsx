@@ -3,6 +3,10 @@ import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
+import {
+  FretboardDiagram, getScalePositions, recognizeChordName, noteName,
+  type GuitarTuning, type ChordDot,
+} from "@/components/FretboardDiagram";
 
 /* ──────────────────────────────────────────────────────────────────────────
    Composing Tools — Session 1 of 3
@@ -252,6 +256,325 @@ const SUBDIVISIONS: { name: string; mult: number }[] = [
   { name: "Thirty-second note",    mult: 0.125 },
 ];
 
+// ── TUNINGS (Session 2) ──────────────────────────────────────────────────────
+// strings: 6 semitone values (C=0), low string → high string. ALL neck math
+// reads these — never hardcoded E-A-D-G-B-E.
+const TUNINGS: GuitarTuning[] = [
+  { name: "Standard",          strings: [4, 9, 2, 7, 11, 4] }, // E A D G B E
+  { name: "Drop D",            strings: [2, 9, 2, 7, 11, 4] }, // D A D G B E
+  { name: "Step & half down",  strings: [1, 6, 11, 4, 8, 1] }, // C# F# B E G# C# (all -3)
+  { name: "DADGAD",            strings: [2, 9, 2, 7, 9, 2] },  // D A D G A D
+  { name: "Custom",            strings: [4, 9, 2, 7, 11, 4] }, // starts as Standard
+];
+
+// ── DIATONIC CHORDS ──────────────────────────────────────────────────────────
+type ChordQuality = "major" | "minor" | "diminished";
+interface DiatonicChord { name: string; roman: string; quality: ChordQuality; notes: string[]; }
+
+const MAJOR_DEGREES: { roman: string; q: ChordQuality }[] = [
+  { roman: "I", q: "major" }, { roman: "ii", q: "minor" }, { roman: "iii", q: "minor" },
+  { roman: "IV", q: "major" }, { roman: "V", q: "major" }, { roman: "vi", q: "minor" },
+  { roman: "vii°", q: "diminished" },
+];
+const MINOR_DEGREES: { roman: string; q: ChordQuality }[] = [
+  { roman: "i", q: "minor" }, { roman: "ii°", q: "diminished" }, { roman: "III", q: "major" },
+  { roman: "iv", q: "minor" }, { roman: "v", q: "minor" }, { roman: "VI", q: "major" },
+  { roman: "VII", q: "major" },
+];
+
+function triadNotes(rootName: string, quality: ChordQuality): string[] {
+  const r = NOTE_INDEX[rootName] ?? 0;
+  const iv = quality === "minor" ? [0, 3, 7] : quality === "diminished" ? [0, 3, 6] : [0, 4, 7];
+  return iv.map((x) => NOTE_NAMES[(r + x) % 12]);
+}
+
+function diatonicChords(root: string, mode: "major" | "minor"): DiatonicChord[] {
+  const scale = mode === "major" ? [0, 2, 4, 5, 7, 9, 11] : [0, 2, 3, 5, 7, 8, 10];
+  const degs = mode === "major" ? MAJOR_DEGREES : MINOR_DEGREES;
+  const r = NOTE_INDEX[root] ?? 0;
+  return degs.map((d, i) => {
+    const chordRoot = NOTE_NAMES[(r + scale[i]) % 12];
+    const suffix = d.q === "minor" ? "m" : d.q === "diminished" ? "°" : "";
+    return { name: chordRoot + suffix, roman: d.roman, quality: d.q, notes: triadNotes(chordRoot, d.q) };
+  });
+}
+
+// ── CHORD VOICINGS (standard-tuning fingerings) ───────────────────────────────
+// string 0 = low E … 5 = high E in standard tuning. These are real, correct
+// open/barre shapes — the diagram must agree with the theory pills.
+interface ChordVoicing { name: string; dots: ChordDot[]; startFret: number; openStrings: number[]; mutedStrings: number[]; }
+const D = (string: number, fret: number, isRoot?: boolean): ChordDot => ({ string, fret, isRoot });
+
+const VOICINGS: Record<string, ChordVoicing[]> = {
+  // Majors
+  C: [
+    { name: "C", dots: [D(1, 3, true), D(2, 2), D(4, 1, true)], startFret: 1, openStrings: [3, 5], mutedStrings: [0] },
+    { name: "C (A-shape)", dots: [D(1, 3, true), D(2, 5), D(3, 5, true), D(4, 5), D(5, 3)], startFret: 3, openStrings: [], mutedStrings: [0] },
+  ],
+  D: [
+    { name: "D", dots: [D(3, 2), D(4, 3, true), D(5, 2)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
+    { name: "D (A-shape)", dots: [D(1, 5, true), D(2, 7), D(3, 7, true), D(4, 7), D(5, 5)], startFret: 5, openStrings: [], mutedStrings: [0] },
+  ],
+  E: [
+    { name: "E", dots: [D(1, 2), D(2, 2, true), D(3, 1)], startFret: 1, openStrings: [0, 4, 5], mutedStrings: [] },
+    { name: "E (A-shape)", dots: [D(1, 7, true), D(2, 9), D(3, 9, true), D(4, 9), D(5, 7)], startFret: 7, openStrings: [], mutedStrings: [0] },
+  ],
+  F: [
+    { name: "F (barre)", dots: [D(0, 1, true), D(1, 3), D(2, 3, true), D(3, 2), D(4, 1), D(5, 1)], startFret: 1, openStrings: [], mutedStrings: [] },
+    { name: "F (partial)", dots: [D(2, 3, true), D(3, 2), D(4, 1), D(5, 1)], startFret: 1, openStrings: [], mutedStrings: [0, 1] },
+  ],
+  G: [
+    { name: "G", dots: [D(0, 3, true), D(1, 2), D(5, 3, true)], startFret: 1, openStrings: [2, 3, 4], mutedStrings: [] },
+    { name: "G (E-shape)", dots: [D(0, 3, true), D(1, 5), D(2, 5, true), D(3, 4), D(4, 3), D(5, 3, true)], startFret: 3, openStrings: [], mutedStrings: [] },
+  ],
+  A: [
+    { name: "A", dots: [D(2, 2), D(3, 2, true), D(4, 2)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] },
+    { name: "A (E-shape)", dots: [D(0, 5, true), D(1, 7), D(2, 7, true), D(3, 6), D(4, 5), D(5, 5)], startFret: 5, openStrings: [], mutedStrings: [] },
+  ],
+  B: [{ name: "B (barre)", dots: [D(1, 2, true), D(2, 4), D(3, 4, true), D(4, 4), D(5, 2)], startFret: 2, openStrings: [], mutedStrings: [0] }],
+  // Minors
+  Cm: [{ name: "Cm (barre)", dots: [D(1, 3, true), D(2, 5), D(3, 5, true), D(4, 4), D(5, 3)], startFret: 3, openStrings: [], mutedStrings: [0] }],
+  Dm: [
+    { name: "Dm", dots: [D(3, 2), D(4, 3, true), D(5, 1)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
+    { name: "Dm (A-shape)", dots: [D(1, 5, true), D(2, 7), D(3, 7, true), D(4, 6), D(5, 5)], startFret: 5, openStrings: [], mutedStrings: [0] },
+  ],
+  Em: [
+    { name: "Em", dots: [D(1, 2), D(2, 2, true)], startFret: 1, openStrings: [0, 3, 4, 5], mutedStrings: [] },
+    { name: "Em (A-shape)", dots: [D(1, 7, true), D(2, 9), D(3, 9, true), D(4, 8), D(5, 7)], startFret: 7, openStrings: [], mutedStrings: [0] },
+  ],
+  Fm: [{ name: "Fm (barre)", dots: [D(0, 1, true), D(1, 3), D(2, 3, true), D(3, 1), D(4, 1), D(5, 1)], startFret: 1, openStrings: [], mutedStrings: [] }],
+  Gm: [{ name: "Gm (barre)", dots: [D(0, 3, true), D(1, 5), D(2, 5, true), D(3, 3), D(4, 3), D(5, 3)], startFret: 3, openStrings: [], mutedStrings: [] }],
+  Am: [
+    { name: "Am", dots: [D(2, 2), D(3, 2, true), D(4, 1)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] },
+    { name: "Am (E-shape)", dots: [D(0, 5, true), D(1, 7), D(2, 7, true), D(3, 5), D(4, 5), D(5, 5)], startFret: 5, openStrings: [], mutedStrings: [] },
+  ],
+  Bm: [{ name: "Bm (barre)", dots: [D(1, 2, true), D(2, 4), D(3, 4, true), D(4, 3), D(5, 2)], startFret: 2, openStrings: [], mutedStrings: [0] }],
+  // 7ths
+  Am7: [{ name: "Am7", dots: [D(2, 2), D(4, 1)], startFret: 1, openStrings: [1, 3, 5], mutedStrings: [0] }],
+  Dm7: [{ name: "Dm7", dots: [D(3, 2), D(4, 1), D(5, 1)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] }],
+  Em7: [{ name: "Em7", dots: [D(1, 2), D(2, 2, true), D(4, 3)], startFret: 1, openStrings: [0, 3, 5], mutedStrings: [] }],
+  G7: [{ name: "G7", dots: [D(0, 3, true), D(1, 2), D(5, 1)], startFret: 1, openStrings: [2, 3, 4], mutedStrings: [] }],
+  D7: [{ name: "D7", dots: [D(3, 2), D(4, 1), D(5, 2)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] }],
+  A7: [{ name: "A7", dots: [D(2, 2), D(4, 2)], startFret: 1, openStrings: [1, 3, 5], mutedStrings: [0] }],
+  E7: [{ name: "E7", dots: [D(1, 2), D(3, 1)], startFret: 1, openStrings: [0, 2, 4, 5], mutedStrings: [] }],
+  // maj7
+  Cmaj7: [{ name: "Cmaj7", dots: [D(1, 3, true), D(2, 2)], startFret: 1, openStrings: [3, 4, 5], mutedStrings: [0] }],
+  Gmaj7: [{ name: "Gmaj7", dots: [D(0, 3, true), D(1, 2), D(5, 2)], startFret: 1, openStrings: [2, 3, 4], mutedStrings: [] }],
+  Fmaj7: [{ name: "Fmaj7", dots: [D(2, 3, true), D(3, 2), D(4, 1)], startFret: 1, openStrings: [5], mutedStrings: [0, 1] }],
+  Dmaj7: [{ name: "Dmaj7", dots: [D(3, 2), D(4, 2), D(5, 2)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] }],
+  Amaj7: [{ name: "Amaj7", dots: [D(2, 2), D(3, 1), D(4, 2)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] }],
+  // add9 / sus
+  Cadd9: [{ name: "Cadd9", dots: [D(1, 3, true), D(2, 2), D(4, 3)], startFret: 1, openStrings: [3, 5], mutedStrings: [0] }],
+  Gadd9: [{ name: "Gadd9", dots: [D(0, 3, true), D(3, 2), D(5, 3, true)], startFret: 1, openStrings: [1, 2, 4], mutedStrings: [] }],
+  Dsus2: [{ name: "Dsus2", dots: [D(3, 2), D(4, 3, true)], startFret: 1, openStrings: [2, 5], mutedStrings: [0, 1] }],
+  Asus2: [{ name: "Asus2", dots: [D(2, 2), D(3, 2, true)], startFret: 1, openStrings: [1, 4, 5], mutedStrings: [0] }],
+  Esus4: [{ name: "Esus4", dots: [D(1, 2), D(2, 2, true), D(3, 2)], startFret: 1, openStrings: [0, 4, 5], mutedStrings: [] }],
+  Dsus4: [{ name: "Dsus4", dots: [D(3, 2), D(4, 3, true), D(5, 3)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] }],
+  Asus4: [{ name: "Asus4", dots: [D(2, 2), D(3, 2, true), D(4, 3)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] }],
+};
+
+// Strings that actually sound in a voicing (open + fretted), sorted low → high.
+function soundingStrings(v: ChordVoicing): { s: number; fret: number }[] {
+  const arr = [
+    ...v.openStrings.map((s) => ({ s, fret: 0 })),
+    ...v.dots.map((d) => ({ s: d.string, fret: d.fret })),
+  ];
+  return arr.sort((a, b) => a.s - b.s);
+}
+
+// ── TUNING SELECTOR (page level) ──────────────────────────────────────────────
+function TuningSelector({
+  accent, tuningName, onPickPreset, customStrings, onCustomChange,
+}: {
+  accent: string;
+  tuningName: string;
+  onPickPreset: (name: string) => void;
+  customStrings: number[];
+  onCustomChange: (index: number, semitone: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--t-border)", background: "var(--t-surface)" }}>
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <span className="text-xs shrink-0" style={{ color: "var(--t-text4)", fontFamily: MONO }}>Tuning:</span>
+        {TUNINGS.map((t) => {
+          const on = tuningName === t.name;
+          return (
+            <button
+              key={t.name}
+              onClick={() => onPickPreset(t.name)}
+              className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+              style={{
+                fontFamily: MONO,
+                background: on ? accent : "var(--t-el-low)",
+                color: on ? "#111" : "var(--t-text4)",
+                border: `1px solid ${on ? accent : "var(--t-border-md)"}`,
+              }}
+              data-testid={`tuning-${t.name.replace(/[^a-z0-9]/gi, "-")}`}
+            >
+              {t.name}
+            </button>
+          );
+        })}
+      </div>
+
+      {tuningName === "Custom" && (
+        <div className="grid grid-cols-3 gap-2 mt-1">
+          {customStrings.map((semi, i) => (
+            <label key={i} className="flex flex-col gap-1">
+              <span className="text-[10px]" style={{ color: "var(--t-text5)", fontFamily: MONO }}>
+                String {i + 1} {i === 0 ? "(low)" : i === 5 ? "(high)" : ""}
+              </span>
+              <select
+                value={semi}
+                onChange={(e) => onCustomChange(i, parseInt(e.target.value))}
+                className="rounded-lg px-2 py-1.5 text-sm focus:outline-none"
+                style={{ fontFamily: MONO, background: "var(--t-card)", color: "var(--t-text2)", border: "1px solid var(--t-border-md)" }}
+                data-testid={`custom-string-${i}`}
+              >
+                {NOTE_NAMES.map((n, pc) => <option key={n} value={pc}>{n}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TAB 2: CHORD EXPLORER ──────────────────────────────────────────────────────
+function ChordExplorer({ accent, tuning }: { accent: string; tuning: GuitarTuning }) {
+  const [root, setRoot] = useState("C");
+  const [mode, setMode] = useState<"major" | "minor">("major");
+  const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [voicingIdx, setVoicingIdx] = useState(0);
+
+  const chords = useMemo(() => diatonicChords(root, mode), [root, mode]);
+
+  // Reset the open panel + voicing when the key changes (chords list changes).
+  useEffect(() => { setSelectedIdx(null); setVoicingIdx(0); }, [root, mode]);
+  useEffect(() => { setVoicingIdx(0); }, [selectedIdx]);
+
+  const selected = selectedIdx != null ? chords[selectedIdx] : null;
+  const voicings = selected ? (VOICINGS[selected.name] || []) : [];
+  const activeVoicing = voicings.length ? voicings[Math.min(voicingIdx, voicings.length - 1)] : null;
+
+  const qualityLabel = (q: ChordQuality) => (q === "major" ? "Major" : q === "minor" ? "Minor" : "Diminished");
+  const isStandard = tuning.name === "Standard";
+
+  // What the standard-tuning shape actually produces in the current tuning.
+  let tuningNotice: { name: string | null; notes: string[]; bass: string } | null = null;
+  if (activeVoicing && !isStandard) {
+    const sounding = soundingStrings(activeVoicing);
+    const pcs = sounding.map((x) => (tuning.strings[x.s] + x.fret) % 12);
+    const bassPc = sounding.length ? (tuning.strings[sounding[0].s] + sounding[0].fret) % 12 : 0;
+    const seen = new Set<string>();
+    const notes: string[] = [];
+    for (const pc of pcs) { const nm = noteName(pc); if (!seen.has(nm)) { seen.add(nm); notes.push(nm); } }
+    tuningNotice = { name: recognizeChordName(pcs, bassPc), notes, bass: noteName(bassPc) };
+  }
+
+  return (
+    <div className="px-4 py-5 flex flex-col gap-5">
+      {/* Key selector */}
+      <div className="flex flex-col gap-3">
+        <RootPills root={root} onPick={setRoot} accent={accent} />
+        <div className="flex gap-1.5">
+          {(["major", "minor"] as const).map((m) => {
+            const on = mode === m;
+            return (
+              <button key={m} onClick={() => setMode(m)}
+                className="px-4 py-1.5 rounded-xl text-sm font-bold capitalize transition-all active:scale-95"
+                style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-low)", color: on ? "#111" : "var(--t-text4)", border: `1px solid ${on ? accent : "var(--t-border-md)"}` }}
+                data-testid={`ce-mode-${m}`}>{m}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Instrument toggle */}
+      <div className="flex gap-1.5">
+        {(["guitar", "piano"] as const).map((ins) => {
+          const on = instrument === ins;
+          return (
+            <button key={ins} onClick={() => setInstrument(ins)}
+              className="px-4 py-1.5 rounded-xl text-sm font-bold capitalize transition-all active:scale-95"
+              style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-low)", color: on ? "#111" : "var(--t-text4)", border: `1px solid ${on ? accent : "var(--t-border-md)"}` }}
+              data-testid={`instrument-${ins}`}>{ins}</button>
+          );
+        })}
+      </div>
+
+      {/* Diatonic chord grid */}
+      <div className="grid grid-cols-4 gap-2">
+        {chords.map((c, i) => {
+          const on = selectedIdx === i;
+          return (
+            <button key={c.roman} onClick={() => setSelectedIdx(i)}
+              className="rounded-xl px-2 py-2 flex flex-col items-center gap-0.5 transition-all active:scale-95"
+              style={{ background: "var(--t-card)", border: `1.5px solid ${on ? accent : "var(--t-border)"}` }}
+              data-testid={`chord-card-${c.name.replace(/[^a-z0-9]/gi, "-")}`}>
+              <span className="text-sm font-bold" style={{ color: on ? accent : "var(--t-text)", fontFamily: MONO }}>{c.name}</span>
+              <span className="text-[10px]" style={{ color: "var(--t-text5)", fontFamily: MONO }}>{c.roman}</span>
+              <span className="text-[9px]" style={{ color: "var(--t-text6)" }}>{qualityLabel(c.quality)}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Detail panel */}
+      {selected && (
+        <div className="rounded-2xl px-4 py-4 flex flex-col gap-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}>
+          <div className="text-xl font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>{selected.name}</div>
+
+          <div className="flex flex-wrap gap-2">
+            {selected.notes.map((n, i) => (
+              <span key={`${n}-${i}`} className="px-3 py-1.5 rounded-lg text-sm font-bold"
+                style={{ fontFamily: MONO, background: i === 0 ? accent + "26" : "var(--t-el-med)", color: i === 0 ? accent : "var(--t-text2)", border: i === 0 ? `1.5px solid ${accent}` : "1px solid var(--t-border)" }}>
+                {n}
+              </span>
+            ))}
+          </div>
+
+          {instrument === "guitar" ? (
+            activeVoicing ? (
+              <>
+                <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={accent}
+                  chordDots={activeVoicing.dots} startFret={activeVoicing.startFret}
+                  openStrings={activeVoicing.openStrings} mutedStrings={activeVoicing.mutedStrings} />
+                {voicings.length > 1 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs" style={{ color: "var(--t-text5)", fontFamily: MONO }}>
+                      Voicing {Math.min(voicingIdx, voicings.length - 1) + 1} of {voicings.length}
+                    </span>
+                    <button onClick={() => setVoicingIdx((voicingIdx + 1) % voicings.length)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95"
+                      style={{ fontFamily: MONO, background: "var(--t-el-low)", color: "var(--t-text3)", border: "1px solid var(--t-border-md)" }}
+                      data-testid="next-voicing">Next voicing →</button>
+                  </div>
+                )}
+                {tuningNotice && (
+                  <div className="rounded-xl px-3 py-2 text-xs leading-relaxed" style={{ background: "var(--t-el-low)", color: "var(--t-text3)", border: "1px solid var(--t-border)" }} data-testid="tuning-notice">
+                    Shapes shown are standard tuning fingerings. In <b>{tuning.name}</b>, this shape produces:{" "}
+                    <b style={{ color: accent }}>{tuningNotice.name || "an ambiguous voicing"}</b>
+                    <div className="mt-1" style={{ color: "var(--t-text4)" }}>
+                      Actual notes in this tuning: {tuningNotice.notes.join(", ")} (bass {tuningNotice.bass})
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-xs" style={{ color: "var(--t-text5)" }}>Diagram coming soon for this voicing</div>
+            )
+          ) : (
+            <FretboardDiagram mode="chord" instrument="piano" tuning={tuning} accent={accent} chordNotes={selected.notes} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 export default function ComposingTools() {
   const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
@@ -259,6 +582,14 @@ export default function ComposingTools() {
   // Always opens to Key Finder on fresh navigation — tab is NOT persisted.
   const [tab, setTab] = useState<TabId>("key-finder");
   const [toast, setToast] = useState<string | null>(null);
+
+  // Tuning lives at the page level so it persists across Chord Explorer / Scales tabs.
+  const [tuningName, setTuningName] = useState("Standard");
+  const [customStrings, setCustomStrings] = useState<number[]>([4, 9, 2, 7, 11, 4]);
+  const currentTuning: GuitarTuning = tuningName === "Custom"
+    ? { name: "Custom", strings: customStrings }
+    : (TUNINGS.find((t) => t.name === tuningName) || TUNINGS[0]);
+  const showTuning = tab === "chord-explorer" || tab === "scales";
 
   useEffect(() => {
     if (!toast) return;
@@ -296,15 +627,28 @@ export default function ComposingTools() {
         })}
       </div>
 
+      {/* Tuning selector — page level, only on guitar-relevant tabs */}
+      {showTuning && (
+        <TuningSelector
+          accent={remiColor}
+          tuningName={tuningName}
+          onPickPreset={(name) => {
+            if (name === "Custom") setCustomStrings([4, 9, 2, 7, 11, 4]);
+            setTuningName(name);
+          }}
+          customStrings={customStrings}
+          onCustomChange={(i, semi) => setCustomStrings((prev) => prev.map((v, j) => (j === i ? semi : v)))}
+        />
+      )}
+
       {/* Body */}
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 40px)" }}>
         {tab === "key-finder"     && <KeyFinder accent={remiColor} />}
-        {tab === "chord-explorer" && <Placeholder icon="🎸" title="Chord Explorer"
-          subtitle="Coming soon — pick a key and see every chord that lives in it, with guitar and piano diagrams." />}
+        {tab === "chord-explorer" && <ChordExplorer accent={remiColor} tuning={currentTuning} />}
         {tab === "chord-draw"     && <Placeholder icon="✏️" title="Chord Draw"
           subtitle="Coming soon — draw your finger positions on a fretboard to find out what chord you're playing, then explore variations." />}
         {tab === "progressions"   && <Progressions accent={remiColor} />}
-        {tab === "scales"         && <ScalesModes accent={remiColor} />}
+        {tab === "scales"         && <ScalesModes accent={remiColor} tuning={currentTuning} />}
         {tab === "delay"          && <DelayCalc accent={remiColor} onCopy={(ms) => { copyText(ms); setToast("Copied!"); }} />}
       </div>
 
@@ -566,9 +910,11 @@ function Progressions({ accent }: { accent: string }) {
 }
 
 // ── TAB 5: SCALES & MODES ────────────────────────────────────────────────────
-function ScalesModes({ accent }: { accent: string }) {
+function ScalesModes({ accent, tuning }: { accent: string; tuning: GuitarTuning }) {
   const [root, setRoot] = useState("C");
   const [scaleName, setScaleName] = useState("Major (Ionian)");
+  const [view, setView] = useState<"full" | "position">("full");
+  const [posIdx, setPosIdx] = useState(0);
 
   const scale = useMemo(() => {
     for (const g of SCALE_GROUPS) {
@@ -579,6 +925,10 @@ function ScalesModes({ accent }: { accent: string }) {
   }, [scaleName]);
 
   const notes = useMemo(() => getScaleNotes(root, scale.intervals), [root, scale]);
+  const positions = useMemo(() => getScalePositions(notes, tuning), [notes, tuning]);
+
+  // Keep the position index valid when scale/root/tuning change the position list.
+  useEffect(() => { setPosIdx((p) => (p >= positions.length ? 0 : p)); }, [positions.length]);
 
   return (
     <div className="px-4 py-5 flex flex-col gap-5">
@@ -646,6 +996,52 @@ function ScalesModes({ accent }: { accent: string }) {
           <span style={{ color: "var(--t-text5)", fontFamily: MONO }}>Sounds like: </span>{scale.examples}
         </div>
         <div className="text-xs" style={{ color: "var(--t-text6)", fontFamily: MONO }}>{scale.formula}</div>
+      </div>
+
+      {/* ── On the guitar (Session 2) ── */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: MONO }}>On the guitar</div>
+          <div className="flex-1" style={{ height: 1, background: "var(--t-border)" }} />
+        </div>
+
+        {tuning.name !== "Standard" && (
+          <div className="text-xs" style={{ color: accent, fontFamily: MONO }} data-testid="scales-tuning-label">
+            Tuning: {tuning.name} — string labels updated
+          </div>
+        )}
+
+        {/* View toggle */}
+        <div className="flex gap-1.5">
+          {([["full", "Full neck"], ["position", "Position view"]] as const).map(([v, label]) => {
+            const on = view === v;
+            return (
+              <button key={v} onClick={() => setView(v)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+                style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-low)", color: on ? "#111" : "var(--t-text4)", border: `1px solid ${on ? accent : "var(--t-border-md)"}` }}
+                data-testid={`scale-view-${v}`}>{label}</button>
+            );
+          })}
+        </div>
+
+        <div className="rounded-2xl px-3 py-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}>
+          <FretboardDiagram
+            mode="scale" tuning={tuning} accent={accent}
+            scaleNotes={notes} rootNote={root}
+            viewType={view} positionIndex={posIdx} onPositionChange={setPosIdx}
+          />
+        </div>
+
+        {view === "position" && (
+          <div className="flex flex-col gap-1">
+            <div className="text-xs text-center font-bold" style={{ color: "var(--t-text3)", fontFamily: MONO }}>
+              Position {Math.min(posIdx, Math.max(positions.length - 1, 0)) + 1} of {positions.length}
+            </div>
+            <div className="text-xs text-center" style={{ color: "var(--t-text5)" }}>
+              Each position is one hand position on the neck
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
