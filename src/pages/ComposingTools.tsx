@@ -377,10 +377,12 @@ function KeyFinder({ accent }: { accent: string }) {
     if (total === 0) return { exact: exactArr, near: nearArr };
     for (const key of KEYS) {
       const match = selected.filter((n) => key.notes.includes(n)).length;
-      if (match === total) exactArr.push({ name: key.name, match: key.notes.length, total: key.notes.length });
+      // X/Y where X = selected notes that fit, Y = total selected. Exact = all fit (N/N);
+      // near = all but one fits (N-1/N).
+      if (match === total) exactArr.push({ name: key.name, match, total });
       else if (match === total - 1) nearArr.push({ name: key.name, match, total });
     }
-    // Exact: more notes in scale first (here all 7-note scales tie, kept stable by data order).
+    // Exact matches first; ties (all N/N here) keep stable data order (majors before minors).
     exactArr.sort((a, b) => b.match - a.match);
     return { exact: exactArr, near: nearArr };
   }, [selected]);
