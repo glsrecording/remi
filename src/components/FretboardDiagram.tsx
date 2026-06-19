@@ -114,14 +114,14 @@ function ScaleBoard(props: FretboardDiagramProps) {
 
   const frets: number[] = [];
   if (viewType === "full") {
-    for (let f = 0; f <= 12; f++) frets.push(f);
+    for (let f = 0; f <= 24; f++) frets.push(f); // full 24-fret neck
   } else {
     for (let f = start; f <= start + 4; f++) frets.push(f);
   }
 
   const big = viewType === "position";
   const labelW = 22;
-  const colW = big ? 46 : 30;
+  const colW = big ? 46 : 26; // full neck compressed to fit all 24 frets
   const rowH = big ? 24 : 20;
   const topPad = 18;
   const dotR = big ? 10 : 8;
@@ -144,27 +144,36 @@ function ScaleBoard(props: FretboardDiagramProps) {
     }
   }
 
-  const INLAYS = [3, 5, 7, 9];
+  // Standard guitar inlays across a 24-fret neck (13–24 mirror 1–12).
+  const SINGLE_INLAYS = [3, 5, 7, 9, 15, 17, 19, 21];
+  const DOUBLE_INLAYS = [12, 24];
+  // At compressed full-neck spacing, only label inlay frets to avoid crowding.
+  const FRET_LABELS = [3, 5, 7, 9, 12, 15, 17, 19, 21, 24];
 
   return (
     <div className="flex flex-col gap-2">
-      <svg viewBox={`0 0 ${vbW} ${vbH}`} width="100%" style={{ display: "block", height: "auto" }}>
+      <div className="overflow-x-auto no-scrollbar" style={{ width: "100%" }}>
+        {/* width:100% fills the container; minWidth keeps a 1:1 floor so note dots
+            never shrink below ~13px — all 24 frets show at once on wide screens,
+            and the neck scrolls horizontally on narrow phones (Option A→B fallback). */}
+        <svg viewBox={`0 0 ${vbW} ${vbH}`} width="100%"
+          style={{ display: "block", height: "auto", minWidth: viewType === "full" ? vbW : undefined }}>
         {/* fret numbers */}
         {frets.map((f) =>
-          f >= 1 ? (
+          f >= 1 && (viewType !== "full" || FRET_LABELS.includes(f)) ? (
             <text key={`fn-${f}`} x={cx(f)} y={topPad - 6} textAnchor="middle"
               fontFamily={MONO} fontSize="8" fill="var(--t-text6)">{f}</text>
           ) : null,
         )}
         {/* inlay dots */}
         {frets.map((f) =>
-          INLAYS.includes(f) ? (
-            <circle key={`in-${f}`} cx={cx(f)} cy={boardTop + 2.5 * rowH} r="2.5" fill="var(--t-border-lg)" />
-          ) : f === 12 ? (
-            <g key="in-12">
+          DOUBLE_INLAYS.includes(f) ? (
+            <g key={`in-${f}`}>
               <circle cx={cx(f)} cy={boardTop + 1.5 * rowH} r="2.5" fill="var(--t-border-lg)" />
               <circle cx={cx(f)} cy={boardTop + 3.5 * rowH} r="2.5" fill="var(--t-border-lg)" />
             </g>
+          ) : SINGLE_INLAYS.includes(f) ? (
+            <circle key={`in-${f}`} cx={cx(f)} cy={boardTop + 2.5 * rowH} r="2.5" fill="var(--t-border-lg)" />
           ) : null,
         )}
         {/* strings */}
@@ -199,7 +208,8 @@ function ScaleBoard(props: FretboardDiagramProps) {
               fontSize="9" fontWeight="700" fill="#111">{d.name}</text>
           </g>
         ))}
-      </svg>
+        </svg>
+      </div>
 
       {viewType === "position" && (
         <div className="flex items-center justify-between">
