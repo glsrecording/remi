@@ -598,7 +598,15 @@ export default function ComposingTools() {
   }, [toast]);
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
+    <div className="composing-tools flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
+      {/* Cross-input hardening (Session 2 fix): every control responds cleanly to
+          mouse + touch. touch-action: manipulation removes the touch tap-delay;
+          cursor: pointer makes the desktop affordance explicit. Selection logic
+          is unchanged — buttons already use onClick + state-driven inline styles. */}
+      <style>{`
+        .composing-tools button { touch-action: manipulation; cursor: pointer; }
+        .composing-tools select { touch-action: manipulation; cursor: pointer; }
+      `}</style>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <PageHeader title="Composing Tools" color={remiColor} onMenu={() => setMenuOpen(true)} />
 
