@@ -3,6 +3,8 @@ import { useLocalStorage } from "@/hooks/use-local-storage";
 import { STORAGE_KEYS } from "@/lib/storage";
 import { PageHeader } from "@/components/PageHeader";
 import HamburgerMenu from "@/components/HamburgerMenu";
+import { Search, LayoutGrid, PenLine, Repeat, Activity, Timer } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   FretboardDiagram, getScalePositions, recognizeChordName, noteName,
   type GuitarTuning, type ChordDot,
@@ -26,14 +28,18 @@ const NOTE_INDEX: Record<string, number> = NOTE_NAMES.reduce(
 
 type TabId = "key-finder" | "chord-explorer" | "chord-draw" | "progressions" | "scales" | "delay";
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: "key-finder",     label: "Key Finder" },
-  { id: "chord-explorer", label: "Chord Explorer" },
-  { id: "chord-draw",     label: "Chord Draw" },
-  { id: "progressions",   label: "Progressions" },
-  { id: "scales",         label: "Scales & Modes" },
-  { id: "delay",          label: "Delay Calc" },
+const TABS: { id: TabId; label: string; short: string; icon: LucideIcon }[] = [
+  { id: "key-finder",     label: "Key Finder",     short: "Find Key",     icon: Search },
+  { id: "chord-explorer", label: "Chord Explorer", short: "Chords",       icon: LayoutGrid },
+  { id: "chord-draw",     label: "Chord Draw",     short: "Draw",         icon: PenLine },
+  { id: "progressions",   label: "Progressions",   short: "Progressions", icon: Repeat },
+  { id: "scales",         label: "Scales & Modes", short: "Scales",       icon: Activity },
+  { id: "delay",          label: "Delay Calc",     short: "Delay",        icon: Timer },
 ];
+
+const MOODS = ["Hopeful", "Dark", "Cinematic", "Tense", "Dreamy", "Heavy", "Uplifting", "Neutral"];
+const PROSE = "system-ui, -apple-system, sans-serif"; // prose type role (human language)
+const CARD_SHADOW = "0 2px 8px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2)";
 
 // ── KEY FINDER DATA ─────────────────────────────────────────────────────────
 // 12 note buttons — display label (with enharmonics) → canonical sharp name.
@@ -632,9 +638,9 @@ function ColorPanel({ rootName, minorFamily, accent, userColor, instrument, tuni
       {open && COLOR_CATEGORIES.map((cat) => {
         const suffixes = minorFamily ? cat.minor : cat.major;
         return (
-          <div key={cat.name} className="flex flex-col gap-1.5 rounded-xl px-3 py-2" style={{ background: "var(--t-bg)", border: "1px solid var(--t-border)" }}>
-            <div className="text-xs font-bold uppercase tracking-wider" style={{ color: accent, fontFamily: MONO }}>{cat.name}</div>
-            <div className="text-xs italic" style={{ color: "var(--t-text4)" }}>{cat.teaser}</div>
+          <div key={cat.name} className="flex flex-col gap-1.5 rounded-xl px-3 py-2" style={{ background: "var(--t-bg)", border: "1px solid var(--t-border)", boxShadow: CARD_SHADOW, marginTop: 8 }}>
+            <div className="text-xs font-bold uppercase tracking-wider" style={{ color: accent, fontFamily: PROSE, borderLeft: "2px solid var(--t-border)", paddingLeft: 8 }}>{cat.name}</div>
+            <div className="text-xs italic" style={{ color: "var(--t-text4)", fontFamily: PROSE }}>{cat.teaser}</div>
             <div className="flex flex-wrap gap-1.5">
               {suffixes.map((suffix) => {
                 const name = rootName + suffix;
@@ -676,13 +682,13 @@ function ColorPanel({ rootName, minorFamily, accent, userColor, instrument, tuni
                   )}
                   {desc && (
                     <div className="flex flex-col gap-1.5">
-                      <div className="text-xs leading-relaxed" style={{ color: "var(--t-text2)" }}>
+                      <div className="text-xs leading-relaxed" style={{ color: "var(--t-text2)", fontFamily: PROSE }}>
                         <span style={{ color: accent, fontFamily: MONO }}>Feel — </span>{desc.musicianLayer}
                       </div>
-                      <div className="text-xs leading-relaxed" style={{ color: "var(--t-text3)" }}>
+                      <div className="text-xs leading-relaxed" style={{ color: "var(--t-text3)", fontFamily: PROSE }}>
                         <span style={{ color: "var(--t-text5)", fontFamily: MONO }}>Theory — </span>{desc.theoryLayer}
                       </div>
-                      <div className="text-[10px]" style={{ color: "var(--t-text5)" }}>
+                      <div className="text-[10px]" style={{ color: "var(--t-text5)", fontFamily: PROSE }}>
                         e.g. {desc.famousExamples.join(" · ")}
                       </div>
                     </div>
@@ -830,10 +836,12 @@ function DadgadView({ accent, userColor, tuning }: { accent: string; userColor: 
   );
 }
 
-function ChordExplorer({ accent, userColor, tuning }: { accent: string; userColor: string; tuning: GuitarTuning }) {
-  const [root, setRoot] = useState("C");
-  const [mode, setMode] = useState<"major" | "minor">("major");
-  const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
+function ChordExplorer({ accent, userColor, tuning, root, setRoot, mode, setMode, instrument, setInstrument }: {
+  accent: string; userColor: string; tuning: GuitarTuning;
+  root: string; setRoot: (r: string) => void;
+  mode: "major" | "minor"; setMode: (m: "major" | "minor") => void;
+  instrument: "guitar" | "piano"; setInstrument: (i: "guitar" | "piano") => void;
+}) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [voicingIdx, setVoicingIdx] = useState(0);
 
@@ -906,11 +914,11 @@ function ChordExplorer({ accent, userColor, tuning }: { accent: string; userColo
           return (
             <button key={c.roman} onClick={() => setSelectedIdx(i)}
               className="rounded-xl px-2 py-2 flex flex-col items-center gap-0.5 transition-all active:scale-95"
-              style={{ background: "var(--t-card)", border: `1.5px solid ${on ? accent : "var(--t-border)"}` }}
+              style={{ background: "var(--t-card)", border: `1.5px solid ${on ? accent : "var(--t-border)"}`, boxShadow: CARD_SHADOW }}
               data-testid={`chord-card-${c.name.replace(/[^a-z0-9]/gi, "-")}`}>
-              <span className="text-sm font-bold" style={{ color: on ? accent : "var(--t-text)", fontFamily: MONO }}>{c.name}</span>
-              <span className="text-[10px]" style={{ color: "var(--t-text5)", fontFamily: MONO }}>{c.roman}</span>
-              <span className="text-[9px]" style={{ color: "var(--t-text6)" }}>{qualityLabel(c.quality)}</span>
+              <span className="font-bold" style={{ fontSize: "1.1em", color: on ? accent : "var(--t-text)", fontFamily: MONO }}>{c.name}</span>
+              <span className="text-[10px]" style={{ color: "var(--t-text6)", fontFamily: MONO }}>{c.roman}</span>
+              <span className="text-[9px]" style={{ color: "var(--t-text6)", fontFamily: PROSE }}>{qualityLabel(c.quality)}</span>
             </button>
           );
         })}
@@ -918,7 +926,7 @@ function ChordExplorer({ accent, userColor, tuning }: { accent: string; userColo
 
       {/* Detail panel */}
       {selected && (
-        <div className="rounded-2xl px-4 py-4 flex flex-col gap-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}>
+        <div className="rounded-2xl px-4 py-4 flex flex-col gap-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)", boxShadow: CARD_SHADOW }}>
           <div className="text-xl font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>{selected.name}</div>
 
           <div className="flex flex-wrap gap-2">
@@ -1134,8 +1142,10 @@ function computePianoResult(keys: Set<number>): DrawResult | null {
 // Piano key layout for C3-B4 (24 semitones).
 const PIANO_WHITE_PC = new Set([0, 2, 4, 5, 7, 9, 11]);
 
-function ChordDraw({ accent, userColor, tuning }: { accent: string; userColor: string; tuning: GuitarTuning }) {
-  const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
+function ChordDraw({ accent, userColor, tuning, instrument, setInstrument }: {
+  accent: string; userColor: string; tuning: GuitarTuning;
+  instrument: "guitar" | "piano"; setInstrument: (i: "guitar" | "piano") => void;
+}) {
   const [strings, setStrings] = useState<Record<number, DrawString>>({});
   const [pianoKeys, setPianoKeys] = useState<Set<number>>(new Set());
   const [windowStart, setWindowStart] = useState(1);
@@ -1483,6 +1493,58 @@ function AccentColorPicker({ value, onChange, label, idKey = "accent" }: {
   );
 }
 
+// Song Context bar — a DAW-style status row. Display-only in this pass (mood is
+// stored + shown but does not filter behavior yet).
+function SongContextBar({ keyLabel, tuningName, instrument, mood, onMood }: {
+  keyLabel: string; tuningName: string; instrument: string; mood: string; onMood: (m: string) => void;
+}) {
+  const [moodOpen, setMoodOpen] = useState(false);
+  const Item = ({ icon, label, value }: { icon: string; label: string; value: string }) => (
+    <span className="flex items-center gap-1 whitespace-nowrap">
+      <span style={{ fontSize: 11 }}>{icon}</span>
+      <span style={{ fontFamily: PROSE, color: "var(--t-text5)" }}>{label}:</span>
+      <span style={{ fontFamily: PROSE, color: "var(--t-text2)", fontWeight: 600 }}>{value}</span>
+    </span>
+  );
+  const sep = <span style={{ color: "var(--t-border-lg)" }}>·</span>;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl px-4 py-2 text-xs"
+      style={{ background: "var(--t-card)" }} data-testid="song-context-bar">
+      <Item icon="🎵" label="Key" value={keyLabel} />
+      {sep}
+      <Item icon="🎸" label="Tuning" value={tuningName} />
+      {sep}
+      <Item icon="🎹" label="Instrument" value={instrument} />
+      {sep}
+      <div className="relative">
+        <button type="button" onClick={() => setMoodOpen((o) => !o)} className="flex items-center gap-1 whitespace-nowrap" data-testid="mood-field">
+          <span style={{ fontSize: 11 }}>☀</span>
+          <span style={{ fontFamily: PROSE, color: "var(--t-text5)" }}>Mood:</span>
+          <span style={{ fontFamily: PROSE, color: "var(--t-text2)", fontWeight: 600 }}>{mood} ▾</span>
+        </button>
+        {moodOpen && (
+          <>
+            <div onClick={() => setMoodOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} data-testid="mood-backdrop" />
+            <div className="flex flex-wrap gap-1.5"
+              style={{ position: "absolute", top: 26, right: 0, zIndex: 50, minWidth: 210, padding: 10, borderRadius: 14, background: "var(--t-surface)", border: "1px solid var(--t-border-md)", boxShadow: CARD_SHADOW }}
+              data-testid="mood-panel">
+              {MOODS.map((m) => {
+                const on = mood === m;
+                return (
+                  <button key={m} type="button" onClick={() => { onMood(m); setMoodOpen(false); }}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold"
+                    style={{ fontFamily: PROSE, background: on ? "var(--t-el-med)" : "var(--t-el-low)", color: on ? "var(--t-text)" : "var(--t-text3)", border: "1px solid var(--t-border)" }}
+                    data-testid={`mood-${m}`}>{m}</button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 export default function ComposingTools() {
   const [remiColor, setRemiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
@@ -1502,6 +1564,12 @@ export default function ComposingTools() {
     : (TUNINGS.find((t) => t.name === tuningName) || TUNINGS[0]);
   const showTuning = tab === "chord-explorer" || tab === "scales" || tab === "chord-draw";
 
+  // Lifted to page level so the Song Context bar can read them across tabs.
+  const [ceRoot, setCeRoot] = useState("C");
+  const [ceMode, setCeMode] = useState<"major" | "minor">("major");
+  const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
+  const [mood, setMood] = useState("Neutral");
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 2000);
@@ -1519,7 +1587,7 @@ export default function ComposingTools() {
         .composing-tools select { touch-action: manipulation; cursor: pointer; }
       `}</style>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
-      <PageHeader title="Composing Tools" color={remiColor} onMenu={() => setMenuOpen(true)}
+      <PageHeader title="Composing Tools" subtitle="Your creative co-pilot" color={remiColor} onMenu={() => setMenuOpen(true)}
         right={
           <div className="flex items-start gap-3">
             <AccentColorPicker value={userColor} onChange={setUserColor} label="Root" idKey="root" />
@@ -1527,29 +1595,41 @@ export default function ComposingTools() {
           </div>
         } />
 
-      {/* Tab bar — horizontal scroll, no scrollbar */}
-      <div
-        className="flex items-stretch gap-1 px-3 overflow-x-auto no-scrollbar shrink-0"
-        style={{ background: "var(--t-surface)", borderBottom: "1px solid var(--t-border)" }}
-      >
+      {/* Composer Dock — icon + label navigation with a pill for the active tool */}
+      <div className="flex items-stretch gap-1 px-2 py-2 overflow-x-auto no-scrollbar shrink-0"
+        style={{ background: "var(--t-surface)" }}>
         {TABS.map((t) => {
           const active = tab === t.id;
+          const Icon = t.icon;
           return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className="whitespace-nowrap px-3 py-3 text-sm font-medium transition-colors shrink-0"
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className="flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 shrink-0 flex-1 transition-colors"
               style={{
-                fontFamily: MONO,
-                color: active ? remiColor : "var(--t-text4)",
-                borderBottom: `2px solid ${active ? remiColor : "transparent"}`,
+                minWidth: 56, minHeight: 44,
+                background: active ? "var(--t-card)" : "transparent",
+                border: active ? "1px solid var(--t-border)" : "1px solid transparent",
+                color: active ? "var(--t-text)" : "var(--t-text2)",
               }}
               data-testid={`tab-${t.id}`}
             >
-              {t.label}
+              <Icon size={17} />
+              <span className="text-[10px] whitespace-nowrap" style={{ fontFamily: PROSE, color: active ? "var(--t-text)" : "var(--t-text2)" }}>{t.short}</span>
             </button>
           );
         })}
+      </div>
+
+      {/* Divider between dock and context bar */}
+      <div style={{ height: 1, background: "var(--t-border)" }} />
+
+      {/* Song Context bar — persistent status of the current musical context */}
+      <div className="px-3 py-2 shrink-0" style={{ background: "var(--t-surface)" }}>
+        <SongContextBar
+          keyLabel={`${ceRoot} ${ceMode === "major" ? "Major" : "Minor"}`}
+          tuningName={currentTuning.name}
+          instrument={instrument === "guitar" ? "Guitar" : "Piano"}
+          mood={mood} onMood={setMood}
+        />
       </div>
 
       {/* Tuning selector — page level, only on guitar-relevant tabs */}
@@ -1569,8 +1649,10 @@ export default function ComposingTools() {
       {/* Body */}
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 40px)" }}>
         {tab === "key-finder"     && <KeyFinder accent={remiColor} />}
-        {tab === "chord-explorer" && <ChordExplorer accent={remiColor} userColor={userColor} tuning={currentTuning} />}
-        {tab === "chord-draw"     && <ChordDraw accent={remiColor} userColor={userColor} tuning={currentTuning} />}
+        {tab === "chord-explorer" && <ChordExplorer accent={remiColor} userColor={userColor} tuning={currentTuning}
+          root={ceRoot} setRoot={setCeRoot} mode={ceMode} setMode={setCeMode} instrument={instrument} setInstrument={setInstrument} />}
+        {tab === "chord-draw"     && <ChordDraw accent={remiColor} userColor={userColor} tuning={currentTuning}
+          instrument={instrument} setInstrument={setInstrument} />}
         {tab === "progressions"   && <Progressions accent={remiColor} />}
         {tab === "scales"         && <ScalesModes accent={remiColor} userColor={userColor} tuning={currentTuning} />}
         {tab === "delay"          && <DelayCalc accent={remiColor} onCopy={(ms) => { copyText(ms); setToast("Copied!"); }} />}
@@ -1807,8 +1889,8 @@ function Progressions({ accent }: { accent: string }) {
 
       {/* Progression sections */}
       {PROGRESSION_SECTIONS.map((section) => (
-        <div key={section.name} className="flex flex-col gap-2">
-          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: MONO }}>
+        <div key={section.name} className="flex flex-col gap-2" style={{ marginTop: 8 }}>
+          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: PROSE, fontWeight: 700, borderLeft: "2px solid var(--t-border)", paddingLeft: 8 }}>
             {section.name}
           </div>
           {section.items.map((prog) => {
@@ -1817,13 +1899,13 @@ function Progressions({ accent }: { accent: string }) {
               <div
                 key={prog.numerals}
                 className="rounded-xl px-4 py-3 flex flex-col gap-1"
-                style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}
+                style={{ background: "var(--t-card)", border: "1px solid var(--t-border)", boxShadow: CARD_SHADOW }}
               >
-                <div className="text-xs" style={{ color: "var(--t-text5)", fontFamily: MONO }}>{prog.numerals}</div>
-                <div className="text-base font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>
+                <div className="text-[11px]" style={{ color: "var(--t-text5)", fontFamily: MONO }}>{prog.numerals}</div>
+                <div className="text-lg font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>
                   {chords.join(" – ")}
                 </div>
-                <div className="text-xs italic leading-relaxed" style={{ color: "var(--t-text2)" }}>{prog.desc}</div>
+                <div className="text-sm italic leading-relaxed" style={{ color: "var(--t-text2)", fontFamily: PROSE }}>{prog.desc}</div>
               </div>
             );
           })}
@@ -1992,7 +2074,7 @@ function ArpeggioSection({ root, scaleName, accent, userColor }: { root: string;
         <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: MONO }}>Arpeggios</div>
         <div className="flex-1" style={{ height: 1, background: "var(--t-border)" }} />
       </div>
-      <div className="text-xs" style={{ color: "var(--t-text4)" }}>The notes of the chord, played one at a time.</div>
+      <div className="text-xs" style={{ color: "var(--t-text4)", fontFamily: PROSE }}>The notes of the chord, played one at a time.</div>
 
       {/* Arp type pills */}
       <div className="flex flex-wrap gap-1.5">
@@ -2006,7 +2088,7 @@ function ArpeggioSection({ root, scaleName, accent, userColor }: { root: string;
           );
         })}
       </div>
-      <div className="text-xs italic" style={{ color: "var(--t-text3)" }} data-testid="arp-feel">{typeDef.feel}</div>
+      <div className="text-xs italic" style={{ color: "var(--t-text3)", fontFamily: PROSE }} data-testid="arp-feel">{typeDef.feel}</div>
 
       {/* Notes */}
       <div className="flex flex-wrap gap-2" data-testid="arp-notes">
@@ -2091,7 +2173,7 @@ function ArpeggioSection({ root, scaleName, accent, userColor }: { root: string;
           {tipsOpen && (
             <ul className="flex flex-col gap-1.5 pl-4" style={{ listStyle: "disc" }} data-testid="arp-tips">
               {ARP_TECHNIQUE_TIPS.map((tip, i) => (
-                <li key={i} className="text-xs leading-relaxed" style={{ color: "var(--t-text3)" }}>{tip}</li>
+                <li key={i} className="text-xs leading-relaxed" style={{ color: "var(--t-text3)", fontFamily: PROSE }}>{tip}</li>
               ))}
             </ul>
           )}
@@ -2137,8 +2219,8 @@ function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor:
       {/* Scale type selector */}
       <div className="flex flex-col gap-3">
         {SCALE_GROUPS.map((g) => (
-          <div key={g.group} className="flex flex-col gap-2">
-            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: MONO }}>
+          <div key={g.group} className="flex flex-col gap-2" style={{ marginTop: 8 }}>
+            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: PROSE, fontWeight: 700, borderLeft: "2px solid var(--t-border)", paddingLeft: 8 }}>
               {g.group}
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -2167,7 +2249,7 @@ function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor:
       </div>
 
       {/* Result card */}
-      <div className="rounded-2xl px-4 py-4 flex flex-col gap-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}>
+      <div className="rounded-2xl px-4 py-4 flex flex-col gap-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)", boxShadow: CARD_SHADOW }}>
         <div className="text-lg font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>{scale.name}</div>
 
         <div className="flex flex-wrap gap-2">
@@ -2191,15 +2273,15 @@ function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor:
           })}
         </div>
 
-        <div className="text-sm leading-relaxed" style={{ color: "var(--t-text2)" }}>{scale.feel}</div>
-        <div className="text-xs leading-relaxed" style={{ color: "var(--t-text4)" }}>
+        <div className="text-sm leading-relaxed" style={{ color: "var(--t-text2)", fontFamily: PROSE }}>{scale.feel}</div>
+        <div className="text-xs leading-relaxed" style={{ color: "var(--t-text4)", fontFamily: PROSE }}>
           <span style={{ color: "var(--t-text5)", fontFamily: MONO }}>Sounds like: </span>{scale.examples}
         </div>
         <div className="text-xs" style={{ color: "var(--t-text6)", fontFamily: MONO }}>{scale.formula}</div>
         {hasChar && keyNoteText && (
           <div className="text-xs leading-relaxed" data-testid="scale-key-note">
             <span style={{ color: accent, fontFamily: MONO, fontWeight: 700 }}>Key note: {characteristicNotes.join(", ")}</span>
-            <span style={{ color: "var(--t-text3)" }}> — {keyNoteText}</span>
+            <span style={{ color: "var(--t-text3)", fontFamily: PROSE }}> — {keyNoteText}</span>
           </div>
         )}
       </div>
@@ -2239,7 +2321,7 @@ function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor:
           </div>
         )}
 
-        <div className="rounded-2xl px-3 py-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}>
+        <div className="rounded-2xl px-3 py-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)", boxShadow: CARD_SHADOW }}>
           <FretboardDiagram
             mode="scale" tuning={tuning} accent={userColor} characteristicColor={accent}
             scaleNotes={notes} rootNote={root} characteristicNotes={characteristicNotes}

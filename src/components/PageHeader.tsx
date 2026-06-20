@@ -7,9 +7,10 @@ interface PageHeaderProps {
   color: string;
   onMenu: () => void;
   right?: React.ReactNode;
+  subtitle?: string;
 }
 
-export function PageHeader({ title, color, onMenu, right }: PageHeaderProps) {
+export function PageHeader({ title, color, onMenu, right, subtitle }: PageHeaderProps) {
   const [, navigate] = useLocation();
   const { isLight, toggleTheme } = useTheme();
 
@@ -38,12 +39,19 @@ export function PageHeader({ title, color, onMenu, right }: PageHeaderProps) {
       >
         <ArrowLeft size={20} />
       </button>
-      <span
-        className="text-base font-bold tracking-tight flex-1"
-        style={{ fontFamily: "'Space Mono', monospace", color }}
-      >
-        {title}
-      </span>
+      <div className="flex-1 min-w-0">
+        <span
+          className="block text-base font-bold tracking-tight"
+          style={{ fontFamily: "'Space Mono', monospace", color }}
+        >
+          {title}
+        </span>
+        {subtitle && (
+          <span className="block text-xs leading-tight" style={{ color: "var(--t-text2)" }}>
+            {subtitle}
+          </span>
+        )}
+      </div>
       {right}
       <button
         className="p-1.5 rounded-full hover:bg-white/5 transition-colors"
