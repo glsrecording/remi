@@ -28,6 +28,7 @@ export interface FretboardDiagramProps {
   // scale mode
   scaleNotes?: string[];
   rootNote?: string;
+  characteristicNotes?: string[]; // modal "key" notes — rendered in warm amber
   viewType?: "full" | "position";
   positionIndex?: number;
   onPositionChange?: (index: number) => void;
@@ -106,7 +107,8 @@ export function FretboardDiagram(props: FretboardDiagramProps) {
 
 // ── SCALE NECK (horizontal) ─────────────────────────────────────────────────
 function ScaleBoard(props: FretboardDiagramProps) {
-  const { tuning, accent, scaleNotes = [], rootNote, viewType = "full" } = props;
+  const { tuning, accent, scaleNotes = [], rootNote, characteristicNotes = [], viewType = "full" } = props;
+  const CHAR_COLOR = "#f59e0b"; // warm amber for modal characteristic ("key") notes
   const positions = viewType === "position" ? getScalePositions(scaleNotes, tuning) : [];
   const posLen = positions.length || 1;
   const idx = Math.min(Math.max(props.positionIndex ?? 0, 0), posLen - 1);
@@ -136,11 +138,15 @@ function ScaleBoard(props: FretboardDiagramProps) {
   const cy = (s: number) => boardTop + (5 - s) * rowH; // high string on top
   const hasOpenCol = frets[0] === 0;
 
-  const dots: { s: number; f: number; root: boolean; name: string }[] = [];
+  const dots: { s: number; f: number; root: boolean; char: boolean; name: string }[] = [];
   for (let s = 0; s < 6; s++) {
     for (const f of frets) {
       const nm = noteName(tuning.strings[s] + f);
-      if (scaleNotes.includes(nm)) dots.push({ s, f, root: !!rootNote && nm === rootNote, name: nm });
+      if (!scaleNotes.includes(nm)) continue;
+      const root = !!rootNote && nm === rootNote;
+      // Root treatment wins if a note is both root and characteristic.
+      const char = !root && characteristicNotes.includes(nm);
+      dots.push({ s, f, root, char, name: nm });
     }
   }
 
@@ -199,16 +205,19 @@ function ScaleBoard(props: FretboardDiagramProps) {
           <text x={boardLeft + colW * 0.5} y={boardTop + 5 * rowH + 11} textAnchor="middle"
             fontFamily={MONO} fontSize="8" fill="var(--t-text5)">{start}fr</text>
         )}
-        {/* note dots */}
-        {dots.map((d, i) => (
-          <g key={`d-${i}`}>
-            <circle cx={cx(d.f)} cy={cy(d.s)} r={d.root ? dotR : dotR - 1.5}
-              fill={d.root ? accent : "var(--t-text2)"}
-              stroke={d.root ? accent : "var(--t-border-lg)"} strokeWidth="1" />
-            <text x={cx(d.f)} y={cy(d.s) + 3} textAnchor="middle" fontFamily={MONO}
-              fontSize="9" fontWeight="700" fill="#111">{d.name}</text>
-          </g>
-        ))}
+        {/* note dots — root (accent, larger) > characteristic (amber) > other (gray) */}
+        {dots.map((d, i) => {
+          const fill = d.root ? accent : d.char ? CHAR_COLOR : "var(--t-text2)";
+          const stroke = d.root ? accent : d.char ? CHAR_COLOR : "var(--t-border-lg)";
+          return (
+            <g key={`d-${i}`}>
+              <circle cx={cx(d.f)} cy={cy(d.s)} r={d.root ? dotR : dotR - 1.5}
+                fill={fill} stroke={stroke} strokeWidth="1" />
+              <text x={cx(d.f)} y={cy(d.s) + 3} textAnchor="middle" fontFamily={MONO}
+                fontSize="9" fontWeight="700" fill="#111">{d.name}</text>
+            </g>
+          );
+        })}
         </svg>
       </div>
 

@@ -1679,6 +1679,41 @@ function Progressions({ accent }: { accent: string }) {
 }
 
 // ── TAB 5: SCALES & MODES ────────────────────────────────────────────────────
+// Modal characteristic ("key") note — the interval (semitones from root) that
+// defines each mode's unique sound. Verified against the scale definitions above.
+// Empty = no overlay (the reference major, pentatonics, whole tone).
+const CHARACTERISTIC_INTERVALS: Record<string, number[]> = {
+  "Dorian":                  [9],     // major 6th — raised from natural minor
+  "Mixolydian":              [10],    // b7 — lowered from major
+  "Lydian":                  [6],     // #4 — raised from major
+  "Phrygian":                [1],     // b2 — the dark/Spanish note
+  "Locrian":                 [6],     // b5 — the most unstable note
+  "Natural Minor (Aeolian)": [8],     // b6 — lowered from major
+  "Phrygian Dominant":       [4],     // major 3rd over a Phrygian base
+  "Harmonic Minor":          [11],    // major 7th — raised from natural minor
+  "Melodic Minor":           [9, 11], // major 6th AND major 7th
+  "Major (Ionian)":          [],
+  "Pentatonic Major":        [],
+  "Pentatonic Minor":        [],
+  "Blues Scale":             [6],     // the blue note (b5) is the characteristic note
+  "Whole Tone":              [],
+};
+
+const KEY_NOTE_EXPLANATIONS: Record<string, string> = {
+  "Dorian": "The raised 6th. This is what separates Dorian from straight minor — cooler, more sophisticated.",
+  "Mixolydian": "The flattened 7th. Lean on this for the bluesy, unresolved edge.",
+  "Lydian": "The raised 4th. The floating, cinematic note — the one that makes it sound like something magical.",
+  "Phrygian": "The flattened 2nd. Dark, Spanish tension. The most exotic note in the scale.",
+  "Locrian": "The flattened 5th. The unstable note — handle with care, it never wants to rest.",
+  "Natural Minor (Aeolian)": "The flattened 6th. Adds the classic minor sadness without going full dramatic.",
+  "Phrygian Dominant": "The major 3rd over a Phrygian base. The Spanish/flamenco fire note.",
+  "Harmonic Minor": "The raised 7th. Creates the classical minor pull — strong gravity back to the root.",
+  "Melodic Minor": "The raised 6th and 7th together. Smoother ascending motion — jazz and film-score territory.",
+  "Blues Scale": "The blue note — the flattened 5th. The grit and soul of every blues and rock solo ever played.",
+};
+
+const CHAR_COLOR = "#f59e0b"; // warm amber for characteristic notes (matches FretboardDiagram)
+
 function ScalesModes({ accent, tuning }: { accent: string; tuning: GuitarTuning }) {
   const [root, setRoot] = useState("C");
   const [scaleName, setScaleName] = useState("Major (Ionian)");
@@ -1695,6 +1730,15 @@ function ScalesModes({ accent, tuning }: { accent: string; tuning: GuitarTuning 
 
   const notes = useMemo(() => getScaleNotes(root, scale.intervals), [root, scale]);
   const positions = useMemo(() => getScalePositions(notes, tuning), [notes, tuning]);
+
+  // Modal characteristic notes for the current root + scale (empty for non-modes).
+  const characteristicNotes = useMemo(() => {
+    const ivs = CHARACTERISTIC_INTERVALS[scaleName] || [];
+    const r = NOTE_INDEX[root] ?? 0;
+    return ivs.map((iv) => NOTE_NAMES[(r + iv) % 12]);
+  }, [root, scaleName]);
+  const hasChar = characteristicNotes.length > 0;
+  const keyNoteText = KEY_NOTE_EXPLANATIONS[scaleName];
 
   // Keep the position index valid when scale/root/tuning change the position list.
   useEffect(() => { setPosIdx((p) => (p >= positions.length ? 0 : p)); }, [positions.length]);
@@ -1765,6 +1809,12 @@ function ScalesModes({ accent, tuning }: { accent: string; tuning: GuitarTuning 
           <span style={{ color: "var(--t-text5)", fontFamily: MONO }}>Sounds like: </span>{scale.examples}
         </div>
         <div className="text-xs" style={{ color: "var(--t-text6)", fontFamily: MONO }}>{scale.formula}</div>
+        {hasChar && keyNoteText && (
+          <div className="text-xs leading-relaxed" data-testid="scale-key-note">
+            <span style={{ color: CHAR_COLOR, fontFamily: MONO, fontWeight: 700 }}>Key note: {characteristicNotes.join(", ")}</span>
+            <span style={{ color: "var(--t-text3)" }}> — {keyNoteText}</span>
+          </div>
+        )}
       </div>
 
       {/* ── On the guitar (Session 2) ── */}
@@ -1793,10 +1843,19 @@ function ScalesModes({ accent, tuning }: { accent: string; tuning: GuitarTuning 
           })}
         </div>
 
+        {/* Legend — only when a characteristic note is in play */}
+        {hasChar && (
+          <div className="flex items-center gap-3 text-[10px]" style={{ color: "var(--t-text4)" }} data-testid="scale-legend">
+            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 99, background: accent, display: "inline-block" }} />Root</span>
+            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 99, background: CHAR_COLOR, display: "inline-block" }} />Key note</span>
+            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--t-text2)", display: "inline-block" }} />Scale notes</span>
+          </div>
+        )}
+
         <div className="rounded-2xl px-3 py-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}>
           <FretboardDiagram
             mode="scale" tuning={tuning} accent={accent}
-            scaleNotes={notes} rootNote={root}
+            scaleNotes={notes} rootNote={root} characteristicNotes={characteristicNotes}
             viewType={view} positionIndex={posIdx} onPositionChange={setPosIdx}
           />
         </div>
