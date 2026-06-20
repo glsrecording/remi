@@ -698,6 +698,138 @@ function ColorPanel({ rootName, minorFamily, accent, userColor, instrument, tuni
 }
 
 // ── TAB 2: CHORD EXPLORER ──────────────────────────────────────────────────────
+// ── DADGAD NATIVE CHORD LIBRARY (researched + math-verified) ──────────────────
+// DADGAD open notes (low→high): D A D G A D = [2,9,2,7,9,2]. Every voicing below
+// was verified: (open[string] + fret) % 12 produces exactly the listed notes.
+// These are native DADGAD shapes, NOT translations of standard fingerings.
+interface DadgadChord {
+  name: string;
+  category: string;
+  dots: ChordDot[];
+  startFret: number;
+  openStrings: number[];
+  mutedStrings: number[];
+  notes: string[];
+  feel: string;
+}
+const DADGAD_CHORDS: DadgadChord[] = [
+  // ── D family ──
+  { name: "Dsus4", category: "D family", dots: [], startFret: 1, openStrings: [0, 1, 2, 3, 4, 5], mutedStrings: [], notes: ["D", "G", "A"],
+    feel: "The signature open DADGAD chord — all six strings ring as one hovering Dsus4." },
+  { name: "D", category: "D family", dots: [D(3, 2), D(5, 4)], startFret: 1, openStrings: [0, 1, 2, 4], mutedStrings: [], notes: ["D", "F#", "A"],
+    feel: "True D major — the high F# (fret 4) supplies the 3rd over the open D/A drones." },
+  { name: "Dm", category: "D family", dots: [D(3, 2), D(5, 3)], startFret: 1, openStrings: [0, 1, 2, 4], mutedStrings: [], notes: ["D", "F", "A"],
+    feel: "D minor — the high F (fret 3) darkens it against the ringing drones." },
+  { name: "Dmaj7", category: "D family", dots: [D(3, 2), D(4, 4), D(5, 4)], startFret: 1, openStrings: [0, 1, 2], mutedStrings: [], notes: ["D", "F#", "A", "C#"],
+    feel: "Lush, dreamy Celtic-air color — the C# shimmers just under the D drone." },
+  { name: "D7", category: "D family", dots: [D(3, 2), D(4, 3), D(5, 4)], startFret: 1, openStrings: [0, 1, 2], mutedStrings: [], notes: ["D", "F#", "A", "C"],
+    feel: "Bluesy, restless dominant — the C natural wants to pull toward G." },
+  { name: "Dadd9", category: "D family", dots: [D(2, 2), D(3, 2), D(5, 4)], startFret: 1, openStrings: [0, 1, 4], mutedStrings: [], notes: ["D", "F#", "A", "E"],
+    feel: "Full major plus the singing E (9th) — the most 'DADGAD' of the major colors." },
+  { name: "Dsus2", category: "D family", dots: [D(3, 2), D(5, 2)], startFret: 1, openStrings: [0, 1, 2, 4], mutedStrings: [], notes: ["D", "E", "A"],
+    feel: "Airy and open — the E (2nd) sits in for the 3rd." },
+  // ── G family ──
+  { name: "G", category: "G family", dots: [D(0, 5, true), D(4, 2)], startFret: 1, openStrings: [2, 3, 5], mutedStrings: [1], notes: ["G", "B", "D"],
+    feel: "Solid G triad — the A-string B (fret 2) is what makes G major exist here." },
+  { name: "Gmaj7", category: "G family", dots: [D(0, 5, true), D(1, 2), D(4, 2), D(5, 4)], startFret: 1, openStrings: [2, 3], mutedStrings: [], notes: ["G", "B", "D", "F#"],
+    feel: "Warm, glassy major-7 — beautiful as the IV chord in D." },
+  { name: "G6", category: "G family", dots: [D(0, 5, true), D(1, 2), D(2, 2), D(4, 2)], startFret: 1, openStrings: [3, 5], mutedStrings: [], notes: ["G", "B", "D", "E"],
+    feel: "Bright, folky lift from the added 6th (E)." },
+  { name: "Gadd9", category: "G family", dots: [D(0, 5, true), D(1, 2)], startFret: 1, openStrings: [2, 3, 4, 5], mutedStrings: [], notes: ["G", "B", "D", "A"],
+    feel: "G triad with the open A drones ringing as the 9th — wide and resonant." },
+  // ── A family ──
+  { name: "Am", category: "A family", dots: [D(3, 5), D(5, 2)], startFret: 1, openStrings: [1, 4], mutedStrings: [0, 2], notes: ["A", "C", "E"],
+    feel: "A clean, sparse A-minor triad." },
+  { name: "A7sus4", category: "A family", dots: [D(2, 2)], startFret: 1, openStrings: [1, 3, 4, 5], mutedStrings: [0], notes: ["A", "D", "E", "G"],
+    feel: "The most natural 'A' in DADGAD — gloriously open and suspended." },
+  { name: "Asus4", category: "A family", dots: [D(2, 2), D(3, 2, true)], startFret: 1, openStrings: [1, 4, 5], mutedStrings: [0], notes: ["A", "D", "E"],
+    feel: "Open and leaning forward — the D (4th) over A." },
+  { name: "Asus2", category: "A family", dots: [D(3, 4), D(5, 2)], startFret: 1, openStrings: [1, 4], mutedStrings: [0, 2], notes: ["A", "B", "E"],
+    feel: "Spare and airy — the B (2nd) gives an unresolved A color." },
+  // ── Modal / Open ──
+  { name: "A7sus4/D", category: "Modal / Open", dots: [D(2, 2)], startFret: 1, openStrings: [0, 1, 3, 4, 5], mutedStrings: [], notes: ["A", "D", "E", "G"],
+    feel: "A7sus4 over the low-D drone — fat, modal, endlessly ringing." },
+  { name: "Aadd11", category: "Modal / Open", dots: [D(0, 7, true), D(1, 7), D(3, 6)], startFret: 6, openStrings: [2, 4, 5], mutedStrings: [], notes: ["A", "C#", "D", "E"],
+    feel: "Shimmering high A major with the open D strings ringing as the 11th." },
+  // ── Borrowed / Color ──
+  { name: "Cadd9", category: "Borrowed / Color", dots: [D(1, 3, true), D(2, 2), D(4, 3, true)], startFret: 1, openStrings: [0, 3, 5], mutedStrings: [], notes: ["C", "D", "E", "G"],
+    feel: "Warm borrowed color (C-E-G plus the D) over the low-D drone." },
+  { name: "Em", category: "Borrowed / Color", dots: [D(0, 5), D(1, 2), D(2, 2, true), D(4, 2), D(5, 2, true)], startFret: 1, openStrings: [3], mutedStrings: [], notes: ["E", "G", "B"],
+    feel: "Clean E-minor triad — supports E Dorian / Aeolian passages." },
+];
+const DADGAD_CATEGORIES = ["D family", "G family", "A family", "Modal / Open", "Borrowed / Color"];
+
+// Dev-only: recompute each DADGAD voicing's notes from its dots+open strings and
+// flag any mismatch with the declared `notes` field. Stripped from production.
+if (import.meta.env.DEV) {
+  const DADGAD_OPEN = [2, 9, 2, 7, 9, 2];
+  (window as unknown as Record<string, unknown>).__dadgadCheck = () =>
+    DADGAD_CHORDS.map((c) => {
+      const pcs = [
+        ...c.openStrings.map((s) => DADGAD_OPEN[s] % 12),
+        ...c.dots.map((d) => (DADGAD_OPEN[d.string] + d.fret) % 12),
+      ];
+      const computed = Array.from(new Set(pcs)).sort((a, b) => a - b).map((p) => NOTE_NAMES[p]);
+      const declared = Array.from(new Set(c.notes.map((n) => NOTE_INDEX[n]))).sort((a, b) => a - b).map((p) => NOTE_NAMES[p]);
+      return { name: c.name, computed, declared, match: JSON.stringify(computed) === JSON.stringify(declared) };
+    });
+}
+
+// Chord Explorer in DADGAD tuning: native shapes instead of the standard diatonic grid.
+function DadgadView({ accent, userColor, tuning }: { accent: string; userColor: string; tuning: GuitarTuning }) {
+  const [selected, setSelected] = useState<DadgadChord | null>(null);
+  return (
+    <div className="px-4 py-5 flex flex-col gap-5">
+      {/* Header notice */}
+      <div className="rounded-xl px-4 py-3" style={{ background: "var(--t-card)", border: `1px solid ${accent}` }}>
+        <div className="text-sm font-bold" style={{ color: accent, fontFamily: MONO }}>DADGAD Tuning — showing native chord shapes</div>
+        <div className="text-xs mt-0.5" style={{ color: "var(--t-text4)" }}>These voicings are specific to DADGAD open tuning</div>
+      </div>
+
+      {DADGAD_CATEGORIES.map((cat) => {
+        const items = DADGAD_CHORDS.filter((c) => c.category === cat);
+        if (!items.length) return null;
+        return (
+          <div key={cat} className="flex flex-col gap-2">
+            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: MONO }}>{cat}</div>
+            <div className="grid grid-cols-2 gap-2">
+              {items.map((c) => {
+                const on = selected?.name === c.name;
+                return (
+                  <button key={c.name} type="button" onClick={() => setSelected(on ? null : c)}
+                    className="rounded-xl px-3 py-2 flex flex-col gap-0.5 text-left transition-all active:scale-95"
+                    style={{ background: "var(--t-card)", border: `1.5px solid ${on ? accent : "var(--t-border)"}` }}
+                    data-testid={`dadgad-card-${c.name.replace(/[^a-z0-9]/gi, "-")}`}>
+                    <span className="text-sm font-bold" style={{ color: on ? accent : "var(--t-text)", fontFamily: MONO }}>{c.name}</span>
+                    <span className="text-[9px] uppercase tracking-wide" style={{ color: "var(--t-text6)", fontFamily: MONO }}>{c.category}</span>
+                    <span className="text-[10px] leading-snug" style={{ color: "var(--t-text4)" }}>{c.feel}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {selected && (
+        <div className="rounded-2xl px-4 py-4 flex flex-col gap-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }} data-testid="dadgad-detail">
+          <div className="text-xl font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>{selected.name}</div>
+          <div className="flex flex-wrap gap-2">
+            {selected.notes.map((n, i) => (
+              <span key={`${n}-${i}`} className="px-3 py-1.5 rounded-lg text-sm font-bold"
+                style={{ fontFamily: MONO, background: i === 0 ? userColor + "26" : "var(--t-el-med)", color: i === 0 ? userColor : "var(--t-text2)", border: i === 0 ? `1.5px solid ${userColor}` : "1px solid var(--t-border)" }}>{n}</span>
+            ))}
+          </div>
+          <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={userColor}
+            chordDots={selected.dots} startFret={selected.startFret} openStrings={selected.openStrings} mutedStrings={selected.mutedStrings} />
+          <div className="text-sm leading-relaxed" style={{ color: "var(--t-text2)" }}>{selected.feel}</div>
+          <div className="text-xs italic" style={{ color: "var(--t-text5)" }}>These are DADGAD-native shapes — standard fingerings don't apply in this tuning.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChordExplorer({ accent, userColor, tuning }: { accent: string; userColor: string; tuning: GuitarTuning }) {
   const [root, setRoot] = useState("C");
   const [mode, setMode] = useState<"major" | "minor">("major");
@@ -728,6 +860,12 @@ function ChordExplorer({ accent, userColor, tuning }: { accent: string; userColo
     const notes: string[] = [];
     for (const pc of pcs) { const nm = noteName(pc); if (!seen.has(nm)) { seen.add(nm); notes.push(nm); } }
     tuningNotice = { name: recognizeChordName(pcs, bassPc), notes, bass: noteName(bassPc) };
+  }
+
+  // DADGAD has its own native chord vocabulary — show the dedicated library instead
+  // of the standard diatonic grid. Other tunings keep standard behavior.
+  if (tuning.name === "DADGAD") {
+    return <DadgadView accent={accent} userColor={userColor} tuning={tuning} />;
   }
 
   return (
@@ -1275,6 +1413,11 @@ function ChordDraw({ accent, userColor, tuning }: { accent: string; userColor: s
           {instrument === "guitar" && tuning.name !== "Standard" && result.standardName && (
             <div className="text-xs" style={{ color: "var(--t-text5)" }}>
               In Standard tuning this shape would be: <b>{result.standardName}</b>
+            </div>
+          )}
+          {tuning.name === "DADGAD" && result.chordName !== "Unknown chord" && DADGAD_CHORDS.some((c) => c.name === result.chordName) && (
+            <div className="text-xs" style={{ color: accent }} data-testid="dadgad-cross-ref">
+              This shape is in your DADGAD library — see Chord Explorer for more.
             </div>
           )}
 
