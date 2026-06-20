@@ -1294,9 +1294,51 @@ function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning })
   );
 }
 
+// Accent palette — mirrors ACCENT_COLORS in MainChat.tsx (the Settings picker).
+// Kept in sync intentionally; both write the same STORAGE_KEYS.REMI_COLOR.
+const ACCENT_COLORS = [
+  { name: "green",  value: "#22c55e" },
+  { name: "blue",   value: "#3b82f6" },
+  { name: "purple", value: "#a855f7" },
+  { name: "gold",   value: "#f59e0b" },
+  { name: "rose",   value: "#f43f5e" },
+  { name: "teal",   value: "#14b8a6" },
+  { name: "orange", value: "#f97316" },
+  { name: "ice",    value: "#bae6fd" },
+];
+
+// Lightweight contextual accent picker for the page header: a color swatch that
+// opens a small popover of the same options as the Settings picker. Writes go to
+// the lifted remiColor state so every accent in Composing Tools updates live.
+function AccentColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: "relative" }}>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-label="Accent color"
+        style={{ width: 22, height: 22, borderRadius: 999, background: value, border: "2px solid var(--t-border-lg)", touchAction: "manipulation" }}
+        data-testid="accent-color-swatch" />
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} data-testid="accent-color-backdrop" />
+          <div className="flex flex-wrap gap-2"
+            style={{ position: "absolute", top: 30, right: 0, zIndex: 50, minWidth: 168, padding: 10, borderRadius: 14, background: "var(--t-surface)", border: "1px solid var(--t-border-md)", boxShadow: "0 12px 40px rgba(0,0,0,0.5)" }}
+            data-testid="accent-color-panel">
+            {ACCENT_COLORS.map((c) => (
+              <button key={c.name} type="button" title={c.name}
+                onClick={() => { onChange(c.value); setOpen(false); }}
+                style={{ width: 24, height: 24, borderRadius: 999, background: c.value, border: value === c.value ? "2px solid var(--t-text)" : "2px solid transparent", touchAction: "manipulation" }}
+                data-testid={`accent-color-${c.name}`} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 export default function ComposingTools() {
-  const [remiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
+  const [remiColor, setRemiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
   const [menuOpen, setMenuOpen] = useState(false);
   // Always opens to Key Finder on fresh navigation — tab is NOT persisted.
   const [tab, setTab] = useState<TabId>("key-finder");
@@ -1327,7 +1369,8 @@ export default function ComposingTools() {
         .composing-tools select { touch-action: manipulation; cursor: pointer; }
       `}</style>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
-      <PageHeader title="Composing Tools" color={remiColor} onMenu={() => setMenuOpen(true)} />
+      <PageHeader title="Composing Tools" color={remiColor} onMenu={() => setMenuOpen(true)}
+        right={<AccentColorPicker value={remiColor} onChange={setRemiColor} />} />
 
       {/* Tab bar — horizontal scroll, no scrollbar */}
       <div
