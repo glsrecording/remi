@@ -1867,6 +1867,240 @@ const KEY_NOTE_EXPLANATIONS: Record<string, string> = {
   "Blues Scale": "The blue note — the flattened 5th. The grit and soul of every blues and rock solo ever played.",
 };
 
+// ── ARPEGGIOS (researched + math-verified) ────────────────────────────────────
+const ARP_TYPES: { name: string; intervals: number[]; feel: string }[] = [
+  { name: "Major",      intervals: [4, 7],     feel: "Bright and triumphant. The heroic arpeggio." },
+  { name: "Minor",      intervals: [3, 7],     feel: "Melancholy and expressive. Emotional depth." },
+  { name: "Diminished", intervals: [3, 6],     feel: "Tense and unstable. Creates dramatic suspense." },
+  { name: "Augmented",  intervals: [4, 8],     feel: "Mysterious and floating. Cinematic tension." },
+  { name: "Dom 7th",    intervals: [4, 7, 10], feel: "Bluesy and unresolved. Pulls hard toward resolution." },
+  { name: "Minor 7th",  intervals: [3, 7, 10], feel: "Jazz cool. Smooth and sophisticated." },
+  { name: "Major 7th",  intervals: [4, 7, 11], feel: "Lush and dreamy. The romantic arpeggio." },
+  { name: "Dim 7th",    intervals: [3, 6, 9],  feel: "Maximum tension. Dark and theatrical." },
+];
+
+interface ArpDot { string: number; off: number } // off = fret relative to the root fret
+interface ArpeggioShape { stringCount: number; rootString: number; dots: ArpDot[]; sweepDirection: "up" | "down" | "both"; description: string }
+// Shapes are movable: offsets are relative to the root fret on rootString. Standard
+// tuning. Every shape's pitch classes were verified against the type's intervals.
+const ARPEGGIO_SHAPES: Record<string, ArpeggioShape[]> = {
+  "Major": [
+    { stringCount: 5, rootString: 1, dots: [{ string: 1, off: 0 }, { string: 2, off: 2 }, { string: 3, off: 2 }, { string: 4, off: 2 }, { string: 5, off: 0 }], sweepDirection: "both", description: "CAGED A-shape 5-string major sweep, root on the A string." },
+    { stringCount: 3, rootString: 3, dots: [{ string: 3, off: 0 }, { string: 4, off: 0 }, { string: 5, off: -2 }], sweepDirection: "both", description: "Top-three-string major triad sweep — beginner-friendly." },
+  ],
+  "Minor": [
+    { stringCount: 5, rootString: 1, dots: [{ string: 1, off: 0 }, { string: 2, off: 2 }, { string: 3, off: 2 }, { string: 4, off: 1 }, { string: 5, off: 0 }], sweepDirection: "both", description: "CAGED Am-shape 5-string minor sweep, root on the A string." },
+    { stringCount: 3, rootString: 3, dots: [{ string: 3, off: 0 }, { string: 4, off: -1 }, { string: 5, off: -2 }], sweepDirection: "both", description: "Top-three-string minor triad sweep — beginner-friendly." },
+  ],
+  "Diminished": [
+    { stringCount: 5, rootString: 1, dots: [{ string: 1, off: 0 }, { string: 2, off: 1 }, { string: 3, off: 2 }, { string: 4, off: 1 }, { string: 5, off: -1 }], sweepDirection: "both", description: "5-string diminished triad sweep, root on the A string." },
+    { stringCount: 3, rootString: 3, dots: [{ string: 3, off: 0 }, { string: 4, off: -1 }, { string: 5, off: -3 }], sweepDirection: "both", description: "Top-three diminished triad sweep." },
+  ],
+  "Augmented": [
+    { stringCount: 5, rootString: 1, dots: [{ string: 1, off: 0 }, { string: 2, off: 3 }, { string: 3, off: 2 }, { string: 4, off: 2 }, { string: 5, off: 1 }], sweepDirection: "both", description: "5-string augmented sweep (symmetric every 4 frets)." },
+    { stringCount: 3, rootString: 3, dots: [{ string: 3, off: 0 }, { string: 4, off: 0 }, { string: 5, off: -1 }], sweepDirection: "both", description: "Top-three augmented sweep." },
+  ],
+  "Dom 7th": [
+    { stringCount: 5, rootString: 1, dots: [{ string: 1, off: 0 }, { string: 2, off: 2 }, { string: 3, off: 0 }, { string: 4, off: 2 }, { string: 5, off: 0 }], sweepDirection: "both", description: "5-string dominant-7th sweep — the b7 sits on the G string." },
+    { stringCount: 3, rootString: 3, dots: [{ string: 3, off: 0 }, { string: 4, off: 0 }, { string: 5, off: -2 }, { string: 5, off: 1 }], sweepDirection: "both", description: "Compact top-three dom7 sweep (R-3-5-b7)." },
+  ],
+  "Minor 7th": [
+    { stringCount: 5, rootString: 1, dots: [{ string: 1, off: 0 }, { string: 2, off: 2 }, { string: 3, off: 0 }, { string: 4, off: 1 }, { string: 5, off: 0 }], sweepDirection: "both", description: "5-string m7 sweep — b7 on the G string, b3 on the B string." },
+    { stringCount: 3, rootString: 3, dots: [{ string: 3, off: 0 }, { string: 4, off: -1 }, { string: 5, off: -2 }, { string: 5, off: 1 }], sweepDirection: "both", description: "Top-three m7 sweep (R-b3-5-b7)." },
+  ],
+  "Major 7th": [
+    { stringCount: 5, rootString: 1, dots: [{ string: 1, off: 0 }, { string: 2, off: 2 }, { string: 3, off: 1 }, { string: 4, off: 2 }, { string: 5, off: 0 }], sweepDirection: "both", description: "5-string maj7 sweep — the maj7 sits on the G string." },
+    { stringCount: 3, rootString: 3, dots: [{ string: 3, off: 0 }, { string: 4, off: 0 }, { string: 5, off: -2 }, { string: 5, off: 2 }], sweepDirection: "both", description: "Top-three maj7 sweep (R-3-5-7)." },
+  ],
+  "Dim 7th": [
+    { stringCount: 6, rootString: 0, dots: [{ string: 0, off: 0 }, { string: 1, off: 1 }, { string: 2, off: 2 }, { string: 3, off: 0 }, { string: 4, off: 2 }, { string: 5, off: 0 }], sweepDirection: "both", description: "6-string dim7 sweep, root on low E — symmetric every 3 frets." },
+    { stringCount: 3, rootString: 3, dots: [{ string: 3, off: 0 }, { string: 4, off: -1 }, { string: 5, off: -3 }, { string: 5, off: 0 }], sweepDirection: "both", description: "Top-three dim7 sweep (R-b3-b5-bb7)." },
+  ],
+};
+
+const ARP_TECHNIQUE_TIPS = [
+  "Prepare the thumb early, not late — start it moving the moment finger 2 plays so it's already over the next key. Lumpy arpeggios almost always come from a late thumb.",
+  "Lead with a small forearm shift, not by stretching the fingers — let the hand glide to each new position to stay loose and accurate.",
+  "Add a subtle wrist/forearm rotation through the thumb-under so the line stays smooth instead of accenting the thumb note.",
+  "Practice in rhythmic bursts (four fast notes, stop, reset; then dotted rhythms) — it trains the position jumps that cap your speed far better than slow even repetition.",
+  "Watch for the thumb accent: if you hear a pulse every 3rd note (triads) or 4th note (7ths), that's the thumb hitting too hard. Aim for dynamic evenness.",
+];
+
+const ARP_OPEN = [4, 9, 2, 7, 11, 4]; // standard tuning, for arpeggio shape math
+
+function arpAbsDots(shape: ArpeggioShape, rootPc: number, positionIndex: number): ChordDot[] {
+  let base = ((rootPc - ARP_OPEN[shape.rootString]) % 12 + 12) % 12;
+  const minOff = Math.min(...shape.dots.map((d) => d.off));
+  while (base + minOff < 1) base += 12;
+  base += positionIndex * 12;
+  return shape.dots.map((d) => ({
+    string: d.string,
+    fret: base + d.off,
+    isRoot: (ARP_OPEN[d.string] + base + d.off) % 12 === rootPc,
+  }));
+}
+
+// Dev-only: verify each arpeggio shape produces exactly the type's pitch classes.
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__arpCheck = () => {
+    const out: { type: string; stringCount: number; ok: boolean; got: string[]; want: string[] }[] = [];
+    for (const t of ARP_TYPES) {
+      const want = Array.from(new Set([0, ...t.intervals])).sort((a, b) => a - b);
+      for (const sh of ARPEGGIO_SHAPES[t.name] || []) {
+        const dots = arpAbsDots(sh, 0, 0); // root = C (pc 0)
+        const got = Array.from(new Set(dots.map((d) => (ARP_OPEN[d.string] + d.fret) % 12))).sort((a, b) => a - b);
+        out.push({ type: t.name, stringCount: sh.stringCount, ok: JSON.stringify(got) === JSON.stringify(want), got: got.map((p) => NOTE_NAMES[p]), want: want.map((p) => NOTE_NAMES[p]) });
+      }
+    }
+    return out;
+  };
+}
+
+const STANDARD_TUNING_OBJ: GuitarTuning = { name: "Standard", strings: [4, 9, 2, 7, 11, 4] };
+
+function ArpeggioSection({ root, scaleName, accent, userColor }: { root: string; scaleName: string; accent: string; userColor: string }) {
+  const [arpType, setArpType] = useState(scaleName.toLowerCase().includes("minor") ? "Minor" : "Major");
+  const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
+  const [stringCount, setStringCount] = useState(5);
+  const [posIdx, setPosIdx] = useState(0);
+  const [tipsOpen, setTipsOpen] = useState(false);
+
+  // Arpeggio type follows the selected scale's quality (until the user overrides it).
+  useEffect(() => { setArpType(scaleName.toLowerCase().includes("minor") ? "Minor" : "Major"); }, [scaleName]);
+  useEffect(() => { setPosIdx(0); }, [arpType, stringCount, root, instrument]);
+
+  const typeDef = ARP_TYPES.find((t) => t.name === arpType) || ARP_TYPES[0];
+  const rootPc = NOTE_INDEX[root] ?? 0;
+  const arpNotes = [root, ...typeDef.intervals.map((iv) => NOTE_NAMES[(rootPc + iv) % 12])];
+
+  const shapesForCount = (ARPEGGIO_SHAPES[arpType] || []).filter((s) => s.stringCount === stringCount);
+  const baseShape = shapesForCount[0] || null;
+  const POSITIONS = 2; // base octave + one octave up
+  const pos = posIdx % POSITIONS;
+  const absDots = baseShape ? arpAbsDots(baseShape, rootPc, pos) : [];
+  const startFret = absDots.length ? Math.max(1, Math.min(...absDots.map((d) => d.fret))) : 1;
+  const usedStrings = new Set(absDots.map((d) => d.string));
+  const mutedStrings = [0, 1, 2, 3, 4, 5].filter((s) => !usedStrings.has(s));
+
+  const isSeventh = arpType.includes("7th");
+  const rh = isSeventh ? [1, 2, 3, 4, 5] : [1, 2, 3, 5];
+  const lh = isSeventh ? [5, 4, 3, 2, 1] : [5, 3, 2, 1];
+
+  return (
+    <div className="flex flex-col gap-3" data-testid="arpeggio-section">
+      <div className="flex items-center gap-3">
+        <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: MONO }}>Arpeggios</div>
+        <div className="flex-1" style={{ height: 1, background: "var(--t-border)" }} />
+      </div>
+      <div className="text-xs" style={{ color: "var(--t-text4)" }}>The notes of the chord, played one at a time.</div>
+
+      {/* Arp type pills */}
+      <div className="flex flex-wrap gap-1.5">
+        {ARP_TYPES.map((t) => {
+          const on = arpType === t.name;
+          return (
+            <button key={t.name} type="button" onClick={() => setArpType(t.name)}
+              className="px-2.5 py-1 rounded-xl text-xs font-bold transition-all active:scale-95"
+              style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-low)", color: on ? "#111" : "var(--t-text4)", border: `1px solid ${on ? accent : "var(--t-border-md)"}` }}
+              data-testid={`arp-type-${t.name.replace(/[^a-z0-9]/gi, "-")}`}>{t.name}</button>
+          );
+        })}
+      </div>
+      <div className="text-xs italic" style={{ color: "var(--t-text3)" }} data-testid="arp-feel">{typeDef.feel}</div>
+
+      {/* Notes */}
+      <div className="flex flex-wrap gap-2" data-testid="arp-notes">
+        {arpNotes.map((n, i) => (
+          <span key={`${n}-${i}`} className="px-3 py-1.5 rounded-lg text-sm font-bold"
+            style={{ fontFamily: MONO, background: i === 0 ? userColor + "26" : "var(--t-el-med)", color: i === 0 ? userColor : "var(--t-text2)", border: i === 0 ? `1.5px solid ${userColor}` : "1px solid var(--t-border)" }}>{n}</span>
+        ))}
+      </div>
+
+      {/* Instrument toggle */}
+      <div className="flex gap-1.5">
+        {(["guitar", "piano"] as const).map((ins) => {
+          const on = instrument === ins;
+          return (
+            <button key={ins} type="button" onClick={() => setInstrument(ins)}
+              className="px-4 py-1.5 rounded-xl text-sm font-bold capitalize transition-all active:scale-95"
+              style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-low)", color: on ? "#111" : "var(--t-text4)", border: `1px solid ${on ? accent : "var(--t-border-md)"}` }}
+              data-testid={`arp-instrument-${ins}`}>{ins}</button>
+          );
+        })}
+      </div>
+
+      {instrument === "guitar" ? (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-bold" style={{ color: "var(--t-text3)", fontFamily: MONO }}>Guitar — Sweep Arpeggio Shapes</div>
+          {/* String count toggle */}
+          <div className="flex gap-1.5">
+            {[3, 5, 6].map((n) => {
+              const on = stringCount === n;
+              return (
+                <button key={n} type="button" onClick={() => setStringCount(n)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+                  style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-low)", color: on ? "#111" : "var(--t-text4)", border: `1px solid ${on ? accent : "var(--t-border-md)"}` }}
+                  data-testid={`arp-strings-${n}`}>{n}-string</button>
+              );
+            })}
+          </div>
+          {baseShape ? (
+            <>
+              <div className="rounded-2xl px-3 py-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}>
+                <FretboardDiagram mode="chord" instrument="guitar" tuning={STANDARD_TUNING_OBJ} accent={userColor}
+                  chordDots={absDots} startFret={startFret} openStrings={[]} mutedStrings={mutedStrings} />
+              </div>
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => setPosIdx((p) => (p + POSITIONS - 1) % POSITIONS)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95"
+                  style={{ fontFamily: MONO, background: "var(--t-el-low)", color: "var(--t-text3)", border: "1px solid var(--t-border-md)" }}
+                  data-testid="arp-prev">← Prev</button>
+                <span className="text-xs font-bold" style={{ color: "var(--t-text3)", fontFamily: MONO }}>Shape {pos + 1} of {POSITIONS}</span>
+                <button type="button" onClick={() => setPosIdx((p) => (p + 1) % POSITIONS)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95"
+                  style={{ fontFamily: MONO, background: "var(--t-el-low)", color: "var(--t-text3)", border: "1px solid var(--t-border-md)" }}
+                  data-testid="arp-next">Next shape →</button>
+              </div>
+              <div className="text-xs" style={{ color: "var(--t-text4)" }}>
+                <span style={{ color: accent, fontFamily: MONO }}>Sweep direction: {baseShape.sweepDirection}</span> — {baseShape.description}
+              </div>
+            </>
+          ) : (
+            <div className="text-xs" style={{ color: "var(--t-text5)" }}>No {stringCount}-string shape for {arpType} — try 3-string{arpType === "Dim 7th" ? " or 6-string" : " or 5-string"}.</div>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="text-xs font-bold" style={{ color: "var(--t-text3)", fontFamily: MONO }}>Piano — Arpeggio Fingering</div>
+          <div className="rounded-2xl px-3 py-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}>
+            <FretboardDiagram mode="chord" instrument="piano" tuning={STANDARD_TUNING_OBJ} accent={userColor} chordNotes={arpNotes} />
+          </div>
+          <div className="flex flex-col gap-1" data-testid="arp-fingering">
+            <div className="text-xs" style={{ color: "var(--t-text3)" }}>
+              <span style={{ fontFamily: MONO, color: accent }}>Right hand:</span> {rh.map((f) => `[${f}]`).join(" ")}
+            </div>
+            <div className="text-xs" style={{ color: "var(--t-text3)" }}>
+              <span style={{ fontFamily: MONO, color: accent }}>Left hand:</span> {lh.map((f) => `[${f}]`).join(" ")}
+            </div>
+            <div className="text-[10px]" style={{ color: "var(--t-text5)" }}>Numbers = fingers (1 = thumb … 5 = pinky), ascending; the pattern repeats each octave via the thumb-under.</div>
+          </div>
+          <button type="button" onClick={() => setTipsOpen((o) => !o)}
+            className="self-start px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+            style={{ fontFamily: MONO, background: tipsOpen ? accent : "var(--t-el-low)", color: tipsOpen ? "#111" : "var(--t-text3)", border: `1px solid ${tipsOpen ? accent : "var(--t-border-md)"}` }}
+            data-testid="arp-tips-toggle">Technique tips {tipsOpen ? "▲" : "▼"}</button>
+          {tipsOpen && (
+            <ul className="flex flex-col gap-1.5 pl-4" style={{ listStyle: "disc" }} data-testid="arp-tips">
+              {ARP_TECHNIQUE_TIPS.map((tip, i) => (
+                <li key={i} className="text-xs leading-relaxed" style={{ color: "var(--t-text3)" }}>{tip}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor: string; tuning: GuitarTuning }) {
   const [root, setRoot] = useState("C");
   const [scaleName, setScaleName] = useState("Major (Ionian)");
@@ -2024,6 +2258,9 @@ function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor:
           </div>
         )}
       </div>
+
+      {/* ── Arpeggios (additive — below the scale fretboard) ── */}
+      <ArpeggioSection root={root} scaleName={scaleName} accent={accent} userColor={userColor} />
     </div>
   );
 }
