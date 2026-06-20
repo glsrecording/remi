@@ -41,6 +41,38 @@ const MOODS = ["Hopeful", "Dark", "Cinematic", "Tense", "Dreamy", "Heavy", "Upli
 const PROSE = "system-ui, -apple-system, sans-serif"; // prose type role (human language)
 const CARD_SHADOW = "0 2px 8px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2)";
 
+// ── Emotional color system (Part 2 visual vocabulary) ─────────────────────────
+const EMOTIONAL_COLORS = {
+  warmth: "#f59e0b", tension: "#8b5cf6", open: "#06b6d4", dark: "#6366f1", power: "#ef4444",
+};
+const CATEGORY_EMOTION: Record<string, string> = {
+  "Warmth & Depth": EMOTIONAL_COLORS.warmth,
+  "Tension & Movement": EMOTIONAL_COLORS.tension,
+  "Open & Floating": EMOTIONAL_COLORS.open,
+  "Dark & Complex": EMOTIONAL_COLORS.dark,
+  "Raw & Powerful": EMOTIONAL_COLORS.power,
+};
+const PROG_EMOTION: Record<string, string> = {
+  "Uplifting / Anthemic": EMOTIONAL_COLORS.warmth,
+  "Dark / Emotional": EMOTIONAL_COLORS.dark,
+  "Tense / Unresolved": EMOTIONAL_COLORS.tension,
+  "Nostalgic / Melancholy": EMOTIONAL_COLORS.open,
+  "Cinematic / Epic": "#d97706",
+};
+function hexToRgb(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `${r}, ${g}, ${b}`;
+}
+function moodDotColor(mood: string): string {
+  if (mood === "Hopeful" || mood === "Uplifting") return EMOTIONAL_COLORS.warmth;
+  if (mood === "Dark" || mood === "Heavy") return EMOTIONAL_COLORS.dark;
+  if (mood === "Cinematic" || mood === "Dreamy") return "#d97706";
+  if (mood === "Tense") return EMOTIONAL_COLORS.tension;
+  return "#888890"; // Neutral
+}
+
 // ── KEY FINDER DATA ─────────────────────────────────────────────────────────
 // 12 note buttons — display label (with enharmonics) → canonical sharp name.
 const NOTE_BUTTONS: { label: string; value: string }[] = [
@@ -639,7 +671,7 @@ function ColorPanel({ rootName, minorFamily, accent, userColor, instrument, tuni
         const suffixes = minorFamily ? cat.minor : cat.major;
         return (
           <div key={cat.name} className="flex flex-col gap-1.5 rounded-xl px-3 py-2" style={{ background: "var(--t-bg)", border: "1px solid var(--t-border)", boxShadow: CARD_SHADOW, marginTop: 8 }}>
-            <div className="text-xs font-bold uppercase tracking-wider" style={{ color: accent, fontFamily: PROSE, borderLeft: "2px solid var(--t-border)", paddingLeft: 8 }}>{cat.name}</div>
+            <div className="text-xs font-bold uppercase tracking-wider" style={{ color: CATEGORY_EMOTION[cat.name] || accent, opacity: 0.9, fontFamily: PROSE, borderLeft: `3px solid ${CATEGORY_EMOTION[cat.name] || "var(--t-border)"}`, paddingLeft: 10 }}>{cat.name}</div>
             <div className="text-xs italic" style={{ color: "var(--t-text4)", fontFamily: PROSE }}>{cat.teaser}</div>
             <div className="flex flex-wrap gap-1.5">
               {suffixes.map((suffix) => {
@@ -648,7 +680,7 @@ function ColorPanel({ rootName, minorFamily, accent, userColor, instrument, tuni
                 const on = expanded === key;
                 return (
                   <button key={name} type="button" onClick={() => setExpanded(on ? null : key)}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95"
+                    className="ct-pill px-2.5 py-1 rounded-lg text-xs font-bold active:scale-95"
                     style={{ fontFamily: MONO, touchAction: "manipulation", background: on ? accent : "var(--t-el-med)", color: on ? "#111" : "var(--t-text2)", border: `1px solid ${on ? accent : "var(--t-border)"}` }}
                     data-testid={`color-chord-${name.replace(/[^a-z0-9]/gi, "-")}`}>
                     {name}
@@ -823,7 +855,7 @@ function DadgadView({ accent, userColor, tuning }: { accent: string; userColor: 
           <div className="flex flex-wrap gap-2">
             {selected.notes.map((n, i) => (
               <span key={`${n}-${i}`} className="px-3 py-1.5 rounded-lg text-sm font-bold"
-                style={{ fontFamily: MONO, background: i === 0 ? userColor + "26" : "var(--t-el-med)", color: i === 0 ? userColor : "var(--t-text2)", border: i === 0 ? `1.5px solid ${userColor}` : "1px solid var(--t-border)" }}>{n}</span>
+                style={{ fontFamily: MONO, background: i === 0 ? userColor + "26" : "var(--t-el-med)", color: i === 0 ? userColor : "var(--t-text2)", border: i === 0 ? `1.5px solid ${userColor}` : "1px solid var(--t-border)", boxShadow: i === 0 ? `0 0 6px rgba(${hexToRgb(userColor)}, 0.4)` : undefined }}>{n}</span>
             ))}
           </div>
           <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={userColor}
@@ -913,8 +945,12 @@ function ChordExplorer({ accent, userColor, tuning, root, setRoot, mode, setMode
           const on = selectedIdx === i;
           return (
             <button key={c.roman} onClick={() => setSelectedIdx(i)}
-              className="rounded-xl px-2 py-2 flex flex-col items-center gap-0.5 transition-all active:scale-95"
-              style={{ background: "var(--t-card)", border: `1.5px solid ${on ? accent : "var(--t-border)"}`, boxShadow: CARD_SHADOW }}
+              className="ct-lift rounded-xl px-2 py-2 flex flex-col items-center gap-0.5 active:scale-95"
+              style={{
+                background: "var(--t-card)",
+                border: on ? `1.5px solid rgba(${hexToRgb(userColor)}, 0.5)` : "1.5px solid var(--t-border)",
+                boxShadow: on ? `0 0 0 1px rgba(${hexToRgb(userColor)}, 0.3), ${CARD_SHADOW}` : CARD_SHADOW,
+              }}
               data-testid={`chord-card-${c.name.replace(/[^a-z0-9]/gi, "-")}`}>
               <span className="font-bold" style={{ fontSize: "1.1em", color: on ? accent : "var(--t-text)", fontFamily: MONO }}>{c.name}</span>
               <span className="text-[10px]" style={{ color: "var(--t-text6)", fontFamily: MONO }}>{c.roman}</span>
@@ -932,7 +968,7 @@ function ChordExplorer({ accent, userColor, tuning, root, setRoot, mode, setMode
           <div className="flex flex-wrap gap-2">
             {selected.notes.map((n, i) => (
               <span key={`${n}-${i}`} className="px-3 py-1.5 rounded-lg text-sm font-bold"
-                style={{ fontFamily: MONO, background: i === 0 ? accent + "26" : "var(--t-el-med)", color: i === 0 ? accent : "var(--t-text2)", border: i === 0 ? `1.5px solid ${accent}` : "1px solid var(--t-border)" }}>
+                style={{ fontFamily: MONO, background: i === 0 ? accent + "26" : "var(--t-el-med)", color: i === 0 ? accent : "var(--t-text2)", border: i === 0 ? `1.5px solid ${accent}` : "1px solid var(--t-border)", boxShadow: i === 0 ? `0 0 6px rgba(${hexToRgb(accent)}, 0.4)` : undefined }}>
                 {n}
               </span>
             ))}
@@ -1382,8 +1418,8 @@ function ChordDraw({ accent, userColor, tuning, instrument, setInstrument }: {
       {/* D) Action row */}
       <div className="flex flex-wrap gap-2">
         <button type="button" onClick={identify}
-          className="px-4 py-2 rounded-xl text-sm font-bold active:scale-95"
-          style={{ fontFamily: MONO, background: accent, color: "#111" }}
+          className="ct-identify px-4 py-2 rounded-xl text-sm font-bold active:scale-95"
+          style={{ fontFamily: MONO, background: accent, color: "#111", boxShadow: `0 0 16px rgba(${hexToRgb(userColor)}, 0.3)` }}
           data-testid="cd-identify">Identify chord</button>
         <button type="button" onClick={clearAll}
           className="px-4 py-2 rounded-xl text-sm font-medium active:scale-95"
@@ -1508,8 +1544,12 @@ function SongContextBar({ keyLabel, tuningName, instrument, mood, onMood }: {
   );
   const sep = <span style={{ color: "var(--t-border-lg)" }}>·</span>;
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl px-4 py-2 text-xs"
-      style={{ background: "var(--t-card)" }} data-testid="song-context-bar">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 text-xs"
+      style={{
+        background: "linear-gradient(180deg, var(--t-card) 0%, var(--t-surface) 100%)",
+        border: "1px solid var(--t-border)", borderRadius: 10, boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+      }}
+      data-testid="song-context-bar">
       <Item icon="🎵" label="Key" value={keyLabel} />
       {sep}
       <Item icon="🎸" label="Tuning" value={tuningName} />
@@ -1520,6 +1560,7 @@ function SongContextBar({ keyLabel, tuningName, instrument, mood, onMood }: {
         <button type="button" onClick={() => setMoodOpen((o) => !o)} className="flex items-center gap-1 whitespace-nowrap" data-testid="mood-field">
           <span style={{ fontSize: 11 }}>☀</span>
           <span style={{ fontFamily: PROSE, color: "var(--t-text5)" }}>Mood:</span>
+          <span style={{ width: 7, height: 7, borderRadius: 99, background: moodDotColor(mood), display: "inline-block" }} data-testid="mood-dot" />
           <span style={{ fontFamily: PROSE, color: "var(--t-text2)", fontWeight: 600 }}>{mood} ▾</span>
         </button>
         {moodOpen && (
@@ -1577,14 +1618,26 @@ export default function ComposingTools() {
   }, [toast]);
 
   return (
-    <div className="composing-tools flex flex-col h-full w-full" style={{ background: "var(--t-bg)" }}>
-      {/* Cross-input hardening (Session 2 fix): every control responds cleanly to
-          mouse + touch. touch-action: manipulation removes the touch tap-delay;
-          cursor: pointer makes the desktop affordance explicit. Selection logic
-          is unchanged — buttons already use onClick + state-driven inline styles. */}
+    <div className="composing-tools flex flex-col h-full w-full"
+      style={{ background: "var(--t-bg)", ["--ct-user-rgb" as string]: hexToRgb(userColor) } as React.CSSProperties}>
+      {/* Cross-input hardening + Part 2 visual polish (hover states, scrollbar, glows).
+          --ct-user-rgb carries the live root color so hover/glow rules track it. */}
       <style>{`
         .composing-tools button { touch-action: manipulation; cursor: pointer; }
         .composing-tools select { touch-action: manipulation; cursor: pointer; }
+        .composing-tools ::-webkit-scrollbar { width: 4px; height: 4px; }
+        .composing-tools ::-webkit-scrollbar-track { background: transparent; }
+        .composing-tools ::-webkit-scrollbar-thumb { background: var(--t-border); border-radius: 2px; }
+        .composing-tools ::-webkit-scrollbar-thumb:hover { background: var(--t-text2); }
+        .composing-tools .ct-dock { transition: all 0.2s ease; }
+        .composing-tools .ct-lift { transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
+        .composing-tools .ct-lift:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important; }
+        .composing-tools .ct-pill { transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease; }
+        .composing-tools .ct-pill:hover { transform: translateY(-1px); }
+        .composing-tools .ct-note { transition: all 0.15s ease; }
+        .composing-tools .ct-note:hover { background: rgba(var(--ct-user-rgb), 0.08) !important; }
+        .composing-tools .ct-identify { transition: box-shadow 0.2s ease; }
+        .composing-tools .ct-identify:hover { box-shadow: 0 0 24px rgba(var(--ct-user-rgb), 0.5) !important; }
       `}</style>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <PageHeader title="Composing Tools" subtitle="Your creative co-pilot" color={remiColor} onMenu={() => setMenuOpen(true)}
@@ -1601,19 +1654,21 @@ export default function ComposingTools() {
         {TABS.map((t) => {
           const active = tab === t.id;
           const Icon = t.icon;
+          const rgb = hexToRgb(userColor);
           return (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className="flex flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 shrink-0 flex-1 transition-colors"
+              className="ct-dock flex flex-col items-center justify-center gap-1 px-2 py-1.5 shrink-0 flex-1"
               style={{
-                minWidth: 56, minHeight: 44,
-                background: active ? "var(--t-card)" : "transparent",
-                border: active ? "1px solid var(--t-border)" : "1px solid transparent",
-                color: active ? "var(--t-text)" : "var(--t-text2)",
+                minWidth: 56, minHeight: 44, borderRadius: 10,
+                background: active ? `linear-gradient(135deg, rgba(${rgb}, 0.15) 0%, rgba(${rgb}, 0.05) 100%)` : "transparent",
+                border: active ? `1px solid rgba(${rgb}, 0.3)` : "1px solid transparent",
+                boxShadow: active ? `0 0 12px rgba(${rgb}, 0.2)` : "none",
+                color: active ? userColor : "var(--t-text2)",
               }}
               data-testid={`tab-${t.id}`}
             >
               <Icon size={17} />
-              <span className="text-[10px] whitespace-nowrap" style={{ fontFamily: PROSE, color: active ? "var(--t-text)" : "var(--t-text2)" }}>{t.short}</span>
+              <span className="text-[10px] whitespace-nowrap" style={{ fontFamily: PROSE, color: active ? userColor : "var(--t-text2)" }}>{t.short}</span>
             </button>
           );
         })}
@@ -1648,14 +1703,14 @@ export default function ComposingTools() {
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 40px)" }}>
-        {tab === "key-finder"     && <KeyFinder accent={remiColor} />}
+        {tab === "key-finder"     && <KeyFinder accent={remiColor} userColor={userColor} />}
         {tab === "chord-explorer" && <ChordExplorer accent={remiColor} userColor={userColor} tuning={currentTuning}
           root={ceRoot} setRoot={setCeRoot} mode={ceMode} setMode={setCeMode} instrument={instrument} setInstrument={setInstrument} />}
         {tab === "chord-draw"     && <ChordDraw accent={remiColor} userColor={userColor} tuning={currentTuning}
           instrument={instrument} setInstrument={setInstrument} />}
         {tab === "progressions"   && <Progressions accent={remiColor} />}
         {tab === "scales"         && <ScalesModes accent={remiColor} userColor={userColor} tuning={currentTuning} />}
-        {tab === "delay"          && <DelayCalc accent={remiColor} onCopy={(ms) => { copyText(ms); setToast("Copied!"); }} />}
+        {tab === "delay"          && <DelayCalc accent={remiColor} userColor={userColor} onCopy={(ms) => { copyText(ms); setToast("Copied!"); }} />}
       </div>
 
       {/* Toast — bottom center, above nav bar */}
@@ -1714,7 +1769,7 @@ function Placeholder({ icon, title, subtitle }: { icon: string; title: string; s
 }
 
 // ── TAB 1: KEY FINDER ─────────────────────────────────────────────────────────
-function KeyFinder({ accent }: { accent: string }) {
+function KeyFinder({ accent, userColor }: { accent: string; userColor: string }) {
   const [selected, setSelected] = useState<string[]>([]);
 
   const toggle = (value: string) =>
@@ -1751,13 +1806,15 @@ function KeyFinder({ accent }: { accent: string }) {
             <button
               key={n.value}
               onClick={() => toggle(n.value)}
-              className="rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center justify-center"
+              className={`rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center justify-center${on ? "" : " ct-note"}`}
               style={{
                 minHeight: "48px",
                 fontFamily: MONO,
-                background: on ? accent : "var(--t-card)",
+                background: on ? userColor : "var(--t-card)",
                 color: on ? "#111" : "var(--t-text3)",
-                border: `1px solid ${on ? accent : "var(--t-border-md)"}`,
+                border: `1px solid ${on ? userColor : "var(--t-border-md)"}`,
+                boxShadow: on ? `0 0 12px rgba(${hexToRgb(userColor)}, 0.4)` : "none",
+                transform: on ? "scale(1.02)" : undefined,
               }}
               data-testid={`note-${n.value}`}
             >
@@ -1783,7 +1840,7 @@ function KeyFinder({ accent }: { accent: string }) {
           <div
             key={r.name}
             className="flex items-center justify-between rounded-xl px-4 py-3"
-            style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}
+            style={{ background: "var(--t-card)", border: "1px solid var(--t-border)", borderLeft: `3px solid ${userColor}` }}
             data-testid={`key-result-${r.name.replace(/[^a-z0-9]/gi, "-")}`}
           >
             <span className="text-sm font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>{r.name}</span>
@@ -1888,9 +1945,12 @@ function Progressions({ accent }: { accent: string }) {
       </div>
 
       {/* Progression sections */}
-      {PROGRESSION_SECTIONS.map((section) => (
+      {PROGRESSION_SECTIONS.map((section) => {
+        const emo = PROG_EMOTION[section.name];
+        const emoRgb = emo ? hexToRgb(emo) : "0,0,0";
+        return (
         <div key={section.name} className="flex flex-col gap-2" style={{ marginTop: 8 }}>
-          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: PROSE, fontWeight: 700, borderLeft: "2px solid var(--t-border)", paddingLeft: 8 }}>
+          <div className="text-xs uppercase tracking-wider" style={{ color: emo || "var(--t-text5)", opacity: 0.9, fontFamily: PROSE, fontWeight: 700, borderLeft: `3px solid ${emo || "var(--t-border)"}`, paddingLeft: 10 }}>
             {section.name}
           </div>
           {section.items.map((prog) => {
@@ -1898,8 +1958,8 @@ function Progressions({ accent }: { accent: string }) {
             return (
               <div
                 key={prog.numerals}
-                className="rounded-xl px-4 py-3 flex flex-col gap-1"
-                style={{ background: "var(--t-card)", border: "1px solid var(--t-border)", boxShadow: CARD_SHADOW }}
+                className="ct-lift rounded-xl px-4 py-3 flex flex-col gap-1"
+                style={{ background: `linear-gradient(rgba(${emoRgb}, 0.03), rgba(${emoRgb}, 0.03)), var(--t-card)`, border: "1px solid var(--t-border)", boxShadow: CARD_SHADOW }}
               >
                 <div className="text-[11px]" style={{ color: "var(--t-text5)", fontFamily: MONO }}>{prog.numerals}</div>
                 <div className="text-lg font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>
@@ -1910,7 +1970,8 @@ function Progressions({ accent }: { accent: string }) {
             );
           })}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -2082,7 +2143,7 @@ function ArpeggioSection({ root, scaleName, accent, userColor }: { root: string;
           const on = arpType === t.name;
           return (
             <button key={t.name} type="button" onClick={() => setArpType(t.name)}
-              className="px-2.5 py-1 rounded-xl text-xs font-bold transition-all active:scale-95"
+              className="ct-pill px-2.5 py-1 rounded-xl text-xs font-bold active:scale-95"
               style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-low)", color: on ? "#111" : "var(--t-text4)", border: `1px solid ${on ? accent : "var(--t-border-md)"}` }}
               data-testid={`arp-type-${t.name.replace(/[^a-z0-9]/gi, "-")}`}>{t.name}</button>
           );
@@ -2094,7 +2155,7 @@ function ArpeggioSection({ root, scaleName, accent, userColor }: { root: string;
       <div className="flex flex-wrap gap-2" data-testid="arp-notes">
         {arpNotes.map((n, i) => (
           <span key={`${n}-${i}`} className="px-3 py-1.5 rounded-lg text-sm font-bold"
-            style={{ fontFamily: MONO, background: i === 0 ? userColor + "26" : "var(--t-el-med)", color: i === 0 ? userColor : "var(--t-text2)", border: i === 0 ? `1.5px solid ${userColor}` : "1px solid var(--t-border)" }}>{n}</span>
+            style={{ fontFamily: MONO, background: i === 0 ? userColor + "26" : "var(--t-el-med)", color: i === 0 ? userColor : "var(--t-text2)", border: i === 0 ? `1.5px solid ${userColor}` : "1px solid var(--t-border)", boxShadow: i === 0 ? `0 0 6px rgba(${hexToRgb(userColor)}, 0.4)` : undefined }}>{n}</span>
         ))}
       </div>
 
@@ -2230,7 +2291,7 @@ function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor:
                   <button
                     key={s.name}
                     onClick={() => setScaleName(s.name)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95"
+                    className="ct-pill px-3 py-1.5 rounded-xl text-xs font-medium active:scale-95"
                     style={{
                       fontFamily: MONO,
                       background: on ? accent : "var(--t-el-low)",
@@ -2264,6 +2325,7 @@ function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor:
                   background: isRoot ? accent + "26" : "var(--t-el-med)",
                   color: isRoot ? accent : "var(--t-text2)",
                   border: isRoot ? `1.5px solid ${accent}` : "1px solid var(--t-border)",
+                  boxShadow: isRoot ? `0 0 6px rgba(${hexToRgb(accent)}, 0.4)` : undefined,
                 }}
                 data-testid={`scale-note-${n}`}
               >
@@ -2348,7 +2410,7 @@ function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor:
 }
 
 // ── TAB 6: DELAY CALCULATOR ────────────────────────────────────────────────────
-function DelayCalc({ accent, onCopy }: { accent: string; onCopy: (ms: string) => void }) {
+function DelayCalc({ accent, userColor, onCopy }: { accent: string; userColor: string; onCopy: (ms: string) => void }) {
   const [bpm, setBpm] = useState(120);
   const [editing, setEditing] = useState(false);
 
@@ -2381,14 +2443,14 @@ function DelayCalc({ accent, onCopy }: { accent: string; onCopy: (ms: string) =>
                 if (e.key === "Enter") { setBpmClamped(parseInt((e.target as HTMLInputElement).value) || 120); setEditing(false); }
               }}
               className="text-center bg-transparent focus:outline-none"
-              style={{ fontFamily: MONO, fontSize: "48px", fontWeight: 700, color: accent, width: "160px" }}
+              style={{ fontFamily: MONO, fontSize: "48px", fontWeight: 700, color: userColor, width: "160px" }}
               data-testid="bpm-input"
             />
           ) : (
             <button
               onClick={() => setEditing(true)}
               className="tabular-nums"
-              style={{ fontFamily: MONO, fontSize: "48px", fontWeight: 700, color: accent, minWidth: "120px" }}
+              style={{ fontFamily: MONO, fontSize: "48px", fontWeight: 700, color: userColor, minWidth: "120px" }}
               data-testid="bpm-value"
             >
               {bpm}

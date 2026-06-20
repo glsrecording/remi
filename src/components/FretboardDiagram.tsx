@@ -6,8 +6,19 @@
    string notes is hardcoded.
    ────────────────────────────────────────────────────────────────────────── */
 
+import { useId } from "react";
+
 const MONO = "'Space Mono', monospace";
 export const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+// Lighten a #rrggbb hex by `amount` per channel (Part 2 dot gradients).
+function lightenColor(hex: string, amount: number): string {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return hex; // pass through CSS vars / non-hex
+  const r = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount);
+  const g = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount);
+  const b = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+}
 
 export interface GuitarTuning {
   name: string;
@@ -110,6 +121,7 @@ export function FretboardDiagram(props: FretboardDiagramProps) {
 function ScaleBoard(props: FretboardDiagramProps) {
   const { tuning, accent = "#22c55e", scaleNotes = [], rootNote, characteristicNotes = [], viewType = "full" } = props;
   const CHAR_COLOR = props.characteristicColor ?? "#f59e0b"; // modal characteristic ("key") note color
+  const uid = useId().replace(/:/g, ""); // unique gradient/filter ids per instance
   const positions = viewType === "position" ? getScalePositions(scaleNotes, tuning) : [];
   const posLen = positions.length || 1;
   const idx = Math.min(Math.max(props.positionIndex ?? 0, 0), posLen - 1);
@@ -165,6 +177,24 @@ function ScaleBoard(props: FretboardDiagramProps) {
             and the neck scrolls horizontally on narrow phones (Option A→B fallback). */}
         <svg viewBox={`0 0 ${vbW} ${vbH}`} width="100%"
           style={{ display: "block", height: "auto", minWidth: viewType === "full" ? vbW : undefined }}>
+        <defs>
+          <radialGradient id={`rootGrad-${uid}`} cx="35%" cy="35%" r="65%">
+            <stop offset="0%" stopColor={lightenColor(accent, 30)} />
+            <stop offset="100%" stopColor={accent} />
+          </radialGradient>
+          <radialGradient id={`charGrad-${uid}`} cx="35%" cy="35%" r="65%">
+            <stop offset="0%" stopColor={lightenColor(CHAR_COLOR, 30)} />
+            <stop offset="100%" stopColor={CHAR_COLOR} />
+          </radialGradient>
+          <filter id={`rootGlow-${uid}`} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id={`charGlow-${uid}`} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
         {/* fret numbers — own row above the neck, high contrast (inlay frets brightest) */}
         {frets.map((f) =>
           f >= 1 && (viewType !== "full" || FRET_LABELS.includes(f)) ? (
@@ -206,14 +236,15 @@ function ScaleBoard(props: FretboardDiagramProps) {
           <text x={boardLeft + colW * 0.5} y={boardTop + 5 * rowH + 11} textAnchor="middle"
             fontFamily={MONO} fontSize="8" fill="var(--t-text5)">{start}fr</text>
         )}
-        {/* note dots — root (accent, larger) > characteristic (amber) > other (gray) */}
+        {/* note dots — root (accent gradient + glow) > characteristic (amber gradient + soft glow) > other (flat gray) */}
         {dots.map((d, i) => {
-          const fill = d.root ? accent : d.char ? CHAR_COLOR : "var(--t-text2)";
+          const fill = d.root ? `url(#rootGrad-${uid})` : d.char ? `url(#charGrad-${uid})` : "var(--t-text2)";
           const stroke = d.root ? accent : d.char ? CHAR_COLOR : "var(--t-border-lg)";
+          const filter = d.root ? `url(#rootGlow-${uid})` : d.char ? `url(#charGlow-${uid})` : undefined;
           return (
             <g key={`d-${i}`}>
               <circle cx={cx(d.f)} cy={cy(d.s)} r={d.root ? dotR : dotR - 1.5}
-                fill={fill} stroke={stroke} strokeWidth="1" />
+                fill={fill} stroke={stroke} strokeWidth="1" filter={filter} />
               <text x={cx(d.f)} y={cy(d.s) + 3} textAnchor="middle" fontFamily={MONO}
                 fontSize="9" fontWeight="700" fill="#111">{d.name}</text>
             </g>
@@ -265,6 +296,7 @@ function ChordBoard(props: FretboardDiagramProps) {
   const vbH = boardTop + fretRows * fretRowH + 18;
   const stringX = (s: number) => leftPad + s * stringGap;
   const showNut = startFret <= 1;
+  const uid = useId().replace(/:/g, "");
 
   // group dots by fret for barre detection
   const byFret = new Map<number, ChordDot[]>();
@@ -276,6 +308,20 @@ function ChordBoard(props: FretboardDiagramProps) {
 
   return (
     <svg viewBox={`0 0 ${vbW} ${vbH}`} width="100%" style={{ display: "block", height: "auto", maxWidth: 220, margin: "0 auto" }}>
+      <defs>
+        <radialGradient id={`cRootGrad-${uid}`} cx="35%" cy="35%" r="65%">
+          <stop offset="0%" stopColor={lightenColor(accent, 30)} />
+          <stop offset="100%" stopColor={accent} />
+        </radialGradient>
+        <radialGradient id={`cLitGrad-${uid}`} cx="35%" cy="35%" r="70%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="var(--t-text)" stopOpacity="1" />
+        </radialGradient>
+        <filter id={`cRootGlow-${uid}`} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="1.5" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
       {/* strings */}
       {Array.from({ length: 6 }).map((_, s) => (
         <line key={`cs-${s}`} x1={stringX(s)} y1={boardTop} x2={stringX(s)} y2={boardTop + fretRows * fretRowH}
@@ -318,12 +364,13 @@ function ChordBoard(props: FretboardDiagramProps) {
         return <rect key={`bar-${fret}`} x={stringX(lo) - 7} y={y - 7} width={stringX(hi) - stringX(lo) + 14}
           height="14" rx="7" fill={accent} opacity="0.85" />;
       })}
-      {/* dots */}
+      {/* dots — root: gradient + glow; others: subtle lit gradient (no glow) */}
       {chordDots.map((d, i) => {
         const rowIdx = d.fret - startFret;
         const y = boardTop + (rowIdx + 0.5) * fretRowH;
         return <circle key={`cd-${i}`} cx={stringX(d.string)} cy={y} r="9"
-          fill={d.isRoot ? accent : "var(--t-text)"} stroke="var(--t-bg)" strokeWidth="1" />;
+          fill={d.isRoot ? `url(#cRootGrad-${uid})` : `url(#cLitGrad-${uid})`}
+          stroke="var(--t-bg)" strokeWidth="1" filter={d.isRoot ? `url(#cRootGlow-${uid})` : undefined} />;
       })}
       {/* open-note label per string (reflects current tuning) */}
       {Array.from({ length: 6 }).map((_, s) => (
@@ -340,6 +387,7 @@ function PianoBoard(props: FretboardDiagramProps) {
   const notePcs = chordNotes.map((n) => NOTE_NAMES.indexOf(n)).filter((x) => x >= 0);
   const rootPc = notePcs.length ? notePcs[0] : -1;
   const litSet = new Set(notePcs);
+  const uid = useId().replace(/:/g, "");
 
   // White keys C3 … E4
   const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11]; // C D E F G A B
@@ -367,12 +415,22 @@ function PianoBoard(props: FretboardDiagramProps) {
 
   return (
     <svg viewBox={`0 0 ${vbW} ${vbH}`} width="100%" style={{ display: "block", height: "auto", maxWidth: 360 }}>
+      <defs>
+        <linearGradient id={`pKey-${uid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={lightenColor(accent, 45)} />
+          <stop offset="100%" stopColor={accent} />
+        </linearGradient>
+        <linearGradient id={`pRoot-${uid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={lightenColor(accent, 75)} />
+          <stop offset="100%" stopColor={accent} />
+        </linearGradient>
+      </defs>
       {whites.map((k, i) => {
         const lit = litSet.has(k.pc);
         return (
           <g key={`w-${i}`}>
             <rect x={k.x + 0.5} y={0.5} width={ww - 1} height={wh} rx="3"
-              fill={lit ? accent : "var(--t-card)"} stroke="var(--t-border-lg)" strokeWidth="1" />
+              fill={lit ? (k.pc === rootPc ? `url(#pRoot-${uid})` : `url(#pKey-${uid})`) : "var(--t-card)"} stroke="var(--t-border-lg)" strokeWidth="1" />
             {lit && k.pc === rootPc && (
               <rect x={k.x + 1.5} y={1.5} width={ww - 3} height={wh - 2} rx="3"
                 fill="none" stroke="#111" strokeWidth="2" />
@@ -389,7 +447,7 @@ function PianoBoard(props: FretboardDiagramProps) {
         return (
           <g key={`b-${i}`}>
             <rect x={k.x} y={0} width={bw} height={bh} rx="2"
-              fill={lit ? accent : "var(--t-text)"} stroke="var(--t-bg)" strokeWidth="1" />
+              fill={lit ? (k.pc === rootPc ? `url(#pRoot-${uid})` : `url(#pKey-${uid})`) : "var(--t-text)"} stroke="var(--t-bg)" strokeWidth="1" />
             {lit && k.pc === rootPc && (
               <rect x={k.x + 1} y={1} width={bw - 2} height={bh - 2} rx="2"
                 fill="none" stroke="#111" strokeWidth="2" />
