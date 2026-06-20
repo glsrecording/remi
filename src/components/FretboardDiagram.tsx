@@ -123,7 +123,7 @@ function ScaleBoard(props: FretboardDiagramProps) {
   const labelW = 22;
   const colW = big ? 46 : 26; // full neck compressed to fit all 24 frets
   const rowH = big ? 24 : 20;
-  const topPad = 18;
+  const topPad = 26; // headroom so fret-number labels sit above the neck, clear of dots
   const dotR = big ? 10 : 8;
   const boardLeft = labelW;
   const boardTop = topPad;
@@ -158,11 +158,12 @@ function ScaleBoard(props: FretboardDiagramProps) {
             and the neck scrolls horizontally on narrow phones (Option A→B fallback). */}
         <svg viewBox={`0 0 ${vbW} ${vbH}`} width="100%"
           style={{ display: "block", height: "auto", minWidth: viewType === "full" ? vbW : undefined }}>
-        {/* fret numbers */}
+        {/* fret numbers — own row above the neck, high contrast (inlay frets brightest) */}
         {frets.map((f) =>
           f >= 1 && (viewType !== "full" || FRET_LABELS.includes(f)) ? (
-            <text key={`fn-${f}`} x={cx(f)} y={topPad - 6} textAnchor="middle"
-              fontFamily={MONO} fontSize="8" fill="var(--t-text6)">{f}</text>
+            <text key={`fn-${f}`} x={cx(f)} y={topPad - 14} textAnchor="middle"
+              fontFamily={MONO} fontSize="9" fontWeight="700"
+              fill={SINGLE_INLAYS.includes(f) || DOUBLE_INLAYS.includes(f) ? "var(--t-text)" : "var(--t-text2)"}>{f}</text>
           ) : null,
         )}
         {/* inlay dots */}
@@ -294,12 +295,14 @@ function ChordBoard(props: FretboardDiagramProps) {
         }
         return null;
       })}
-      {/* barres */}
+      {/* barres — a true barre only: 3+ dots on CONSECUTIVE strings at the same,
+          non-open fret. Two dots, or 3+ on non-adjacent strings, render as plain dots. */}
       {Array.from(byFret.entries()).map(([fret, arr]) => {
-        if (arr.length < 2) return null;
-        const ss = arr.map((d) => d.string);
-        const lo = Math.min(...ss), hi = Math.max(...ss);
-        if (hi - lo < 2) return null; // only draw a bar across 3+ strings
+        if (fret === 0 || arr.length < 3) return null;
+        const ss = arr.map((d) => d.string).sort((a, b) => a - b);
+        const consecutive = ss.every((s, i) => i === 0 || s === ss[i - 1] + 1);
+        if (!consecutive) return null;
+        const lo = ss[0], hi = ss[ss.length - 1];
         const rowIdx = fret - startFret;
         const y = boardTop + (rowIdx + 0.5) * fretRowH;
         return <rect key={`bar-${fret}`} x={stringX(lo) - 7} y={y - 7} width={stringX(hi) - stringX(lo) + 14}

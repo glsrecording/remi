@@ -618,7 +618,7 @@ function ColorPanel({ rootName, minorFamily, accent, instrument, tuning }: {
   rootName: string; minorFamily: boolean; accent: string; instrument: "guitar" | "piano"; tuning: GuitarTuning;
 }) {
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null); // chord name
+  const [expanded, setExpanded] = useState<string | null>(null); // composite key "category::chordName"
 
   return (
     <div className="flex flex-col gap-2 mt-1">
@@ -638,11 +638,12 @@ function ColorPanel({ rootName, minorFamily, accent, instrument, tuning }: {
             <div className="flex flex-wrap gap-1.5">
               {suffixes.map((suffix) => {
                 const name = rootName + suffix;
-                const on = expanded === name;
+                const key = cat.name + "::" + name; // Bug 2: expansion keyed by category + chord, not chord alone
+                const on = expanded === key;
                 return (
-                  <button key={name} type="button" onClick={() => setExpanded(on ? null : name)}
+                  <button key={name} type="button" onClick={() => setExpanded(on ? null : key)}
                     className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95"
-                    style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-med)", color: on ? "#111" : "var(--t-text2)", border: `1px solid ${on ? accent : "var(--t-border)"}` }}
+                    style={{ fontFamily: MONO, touchAction: "manipulation", background: on ? accent : "var(--t-el-med)", color: on ? "#111" : "var(--t-text2)", border: `1px solid ${on ? accent : "var(--t-border)"}` }}
                     data-testid={`color-chord-${name.replace(/[^a-z0-9]/gi, "-")}`}>
                     {name}
                   </button>
@@ -651,7 +652,8 @@ function ColorPanel({ rootName, minorFamily, accent, instrument, tuning }: {
             </div>
             {suffixes.map((suffix) => {
               const name = rootName + suffix;
-              if (expanded !== name) return null;
+              const key = cat.name + "::" + name;
+              if (expanded !== key) return null;
               const notes = chordNotesFromSuffix(rootName, suffix);
               const desc = CHORD_DESCRIPTIONS[suffix];
               const voicing = VOICINGS[name]?.[0];
