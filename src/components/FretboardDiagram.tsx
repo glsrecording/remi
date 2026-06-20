@@ -23,12 +23,13 @@ export interface ChordDot {
 export interface FretboardDiagramProps {
   mode: "scale" | "chord";
   tuning: GuitarTuning;
-  accent: string;
+  accent?: string;               // root-note / chord-root color (default green)
+  characteristicColor?: string;  // modal "key"-note color (default amber)
 
   // scale mode
   scaleNotes?: string[];
   rootNote?: string;
-  characteristicNotes?: string[]; // modal "key" notes — rendered in warm amber
+  characteristicNotes?: string[]; // modal "key" notes
   viewType?: "full" | "position";
   positionIndex?: number;
   onPositionChange?: (index: number) => void;
@@ -107,8 +108,8 @@ export function FretboardDiagram(props: FretboardDiagramProps) {
 
 // ── SCALE NECK (horizontal) ─────────────────────────────────────────────────
 function ScaleBoard(props: FretboardDiagramProps) {
-  const { tuning, accent, scaleNotes = [], rootNote, characteristicNotes = [], viewType = "full" } = props;
-  const CHAR_COLOR = "#f59e0b"; // warm amber for modal characteristic ("key") notes
+  const { tuning, accent = "#22c55e", scaleNotes = [], rootNote, characteristicNotes = [], viewType = "full" } = props;
+  const CHAR_COLOR = props.characteristicColor ?? "#f59e0b"; // modal characteristic ("key") note color
   const positions = viewType === "position" ? getScalePositions(scaleNotes, tuning) : [];
   const posLen = positions.length || 1;
   const idx = Math.min(Math.max(props.positionIndex ?? 0, 0), posLen - 1);
@@ -252,7 +253,7 @@ function ScaleBoard(props: FretboardDiagramProps) {
 
 // ── CHORD VOICING (vertical chart) ──────────────────────────────────────────
 function ChordBoard(props: FretboardDiagramProps) {
-  const { tuning, accent, chordDots = [], startFret = 1, openStrings = [], mutedStrings = [] } = props;
+  const { tuning, accent = "#22c55e", chordDots = [], startFret = 1, openStrings = [], mutedStrings = [] } = props;
   const stringGap = 24;
   const leftPad = 24;
   const rightPad = 14;
@@ -335,7 +336,7 @@ function ChordBoard(props: FretboardDiagramProps) {
 
 // ── PIANO KEYBOARD (tuning-independent) ─────────────────────────────────────
 function PianoBoard(props: FretboardDiagramProps) {
-  const { accent, chordNotes = [] } = props;
+  const { accent = "#22c55e", chordNotes = [] } = props;
   const notePcs = chordNotes.map((n) => NOTE_NAMES.indexOf(n)).filter((x) => x >= 0);
   const rootPc = notePcs.length ? notePcs[0] : -1;
   const litSet = new Set(notePcs);

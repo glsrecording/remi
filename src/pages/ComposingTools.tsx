@@ -614,8 +614,8 @@ const COLOR_CATEGORIES: ColorCategory[] = [
 // Collapsible "Add color" panel — shows emotionally-grouped related chords for the
 // current root, each expandable to a two-layer description + diagram. Shared by
 // Chord Explorer and Chord Draw.
-function ColorPanel({ rootName, minorFamily, accent, instrument, tuning }: {
-  rootName: string; minorFamily: boolean; accent: string; instrument: "guitar" | "piano"; tuning: GuitarTuning;
+function ColorPanel({ rootName, minorFamily, accent, userColor, instrument, tuning }: {
+  rootName: string; minorFamily: boolean; accent: string; userColor: string; instrument: "guitar" | "piano"; tuning: GuitarTuning;
 }) {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null); // composite key "category::chordName"
@@ -666,13 +666,13 @@ function ColorPanel({ rootName, minorFamily, accent, instrument, tuning }: {
                   </div>
                   {instrument === "guitar" ? (
                     voicing ? (
-                      <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={accent}
+                      <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={userColor}
                         chordDots={voicing.dots} startFret={voicing.startFret} openStrings={voicing.openStrings} mutedStrings={voicing.mutedStrings} />
                     ) : (
                       <div className="text-[10px]" style={{ color: "var(--t-text6)" }}>Diagram coming soon for this voicing</div>
                     )
                   ) : (
-                    <FretboardDiagram mode="chord" instrument="piano" tuning={tuning} accent={accent} chordNotes={notes} />
+                    <FretboardDiagram mode="chord" instrument="piano" tuning={tuning} accent={userColor} chordNotes={notes} />
                   )}
                   {desc && (
                     <div className="flex flex-col gap-1.5">
@@ -698,7 +698,7 @@ function ColorPanel({ rootName, minorFamily, accent, instrument, tuning }: {
 }
 
 // ── TAB 2: CHORD EXPLORER ──────────────────────────────────────────────────────
-function ChordExplorer({ accent, tuning }: { accent: string; tuning: GuitarTuning }) {
+function ChordExplorer({ accent, userColor, tuning }: { accent: string; userColor: string; tuning: GuitarTuning }) {
   const [root, setRoot] = useState("C");
   const [mode, setMode] = useState<"major" | "minor">("major");
   const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
@@ -795,7 +795,7 @@ function ChordExplorer({ accent, tuning }: { accent: string; tuning: GuitarTunin
           {instrument === "guitar" ? (
             activeVoicing ? (
               <>
-                <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={accent}
+                <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={userColor}
                   chordDots={activeVoicing.dots} startFret={activeVoicing.startFret}
                   openStrings={activeVoicing.openStrings} mutedStrings={activeVoicing.mutedStrings} />
                 {voicings.length > 1 && (
@@ -823,9 +823,9 @@ function ChordExplorer({ accent, tuning }: { accent: string; tuning: GuitarTunin
               <div className="text-xs" style={{ color: "var(--t-text5)" }}>Diagram coming soon for this voicing</div>
             )
           ) : (
-            <FretboardDiagram mode="chord" instrument="piano" tuning={tuning} accent={accent} chordNotes={selected.notes} />
+            <FretboardDiagram mode="chord" instrument="piano" tuning={tuning} accent={userColor} chordNotes={selected.notes} />
           )}
-          <ColorPanel rootName={selected.notes[0]} minorFamily={selected.quality !== "major"} accent={accent} instrument={instrument} tuning={tuning} />
+          <ColorPanel rootName={selected.notes[0]} minorFamily={selected.quality !== "major"} accent={accent} userColor={userColor} instrument={instrument} tuning={tuning} />
         </div>
       )}
     </div>
@@ -996,7 +996,7 @@ function computePianoResult(keys: Set<number>): DrawResult | null {
 // Piano key layout for C3-B4 (24 semitones).
 const PIANO_WHITE_PC = new Set([0, 2, 4, 5, 7, 9, 11]);
 
-function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning }) {
+function ChordDraw({ accent, userColor, tuning }: { accent: string; userColor: string; tuning: GuitarTuning }) {
   const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
   const [strings, setStrings] = useState<Record<number, DrawString>>({});
   const [pianoKeys, setPianoKeys] = useState<Set<number>>(new Set());
@@ -1284,6 +1284,7 @@ function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning })
               rootName={NOTE_NAMES[result.root]}
               minorFamily={(() => { const sfx = result.chordName.slice(NOTE_NAMES[result.root].length); return sfx.startsWith("m") && !sfx.startsWith("maj"); })()}
               accent={accent}
+              userColor={userColor}
               instrument={instrument}
               tuning={tuning}
             />
@@ -1310,24 +1311,27 @@ const ACCENT_COLORS = [
 // Lightweight contextual accent picker for the page header: a color swatch that
 // opens a small popover of the same options as the Settings picker. Writes go to
 // the lifted remiColor state so every accent in Composing Tools updates live.
-function AccentColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function AccentColorPicker({ value, onChange, label, idKey = "accent" }: {
+  value: string; onChange: (v: string) => void; label?: string; idKey?: string;
+}) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-label="Accent color"
+    <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-label={label ? `${label} color` : "Accent color"}
         style={{ width: 22, height: 22, borderRadius: 999, background: value, border: "2px solid var(--t-border-lg)", touchAction: "manipulation" }}
-        data-testid="accent-color-swatch" />
+        data-testid={`${idKey}-color-swatch`} />
+      {label && <span style={{ fontSize: 8, color: "var(--t-text5)", fontFamily: MONO, lineHeight: 1 }}>{label}</span>}
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} data-testid="accent-color-backdrop" />
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} data-testid={`${idKey}-color-backdrop`} />
           <div className="flex flex-wrap gap-2"
             style={{ position: "absolute", top: 30, right: 0, zIndex: 50, minWidth: 168, padding: 10, borderRadius: 14, background: "var(--t-surface)", border: "1px solid var(--t-border-md)", boxShadow: "0 12px 40px rgba(0,0,0,0.5)" }}
-            data-testid="accent-color-panel">
+            data-testid={`${idKey}-color-panel`}>
             {ACCENT_COLORS.map((c) => (
               <button key={c.name} type="button" title={c.name}
                 onClick={() => { onChange(c.value); setOpen(false); }}
                 style={{ width: 24, height: 24, borderRadius: 999, background: c.value, border: value === c.value ? "2px solid var(--t-text)" : "2px solid transparent", touchAction: "manipulation" }}
-                data-testid={`accent-color-${c.name}`} />
+                data-testid={`${idKey}-color-${c.name}`} />
             ))}
           </div>
         </>
@@ -1339,6 +1343,9 @@ function AccentColorPicker({ value, onChange }: { value: string; onChange: (v: s
 // ════════════════════════════════════════════════════════════════════════════
 export default function ComposingTools() {
   const [remiColor, setRemiColor] = useLocalStorage<string>(STORAGE_KEYS.REMI_COLOR, "#f59e0b");
+  // userColor = Josh's chat-bubble color → drives fretboard ROOT dots.
+  // remiColor = Remi's chat-bubble color → drives fretboard KEY (characteristic) dots + tool UI accent.
+  const [userColor, setUserColor] = useLocalStorage<string>(STORAGE_KEYS.USER_COLOR, "#f59e0b");
   const [menuOpen, setMenuOpen] = useState(false);
   // Always opens to Key Finder on fresh navigation — tab is NOT persisted.
   const [tab, setTab] = useState<TabId>("key-finder");
@@ -1370,7 +1377,12 @@ export default function ComposingTools() {
       `}</style>
       <HamburgerMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
       <PageHeader title="Composing Tools" color={remiColor} onMenu={() => setMenuOpen(true)}
-        right={<AccentColorPicker value={remiColor} onChange={setRemiColor} />} />
+        right={
+          <div className="flex items-start gap-3">
+            <AccentColorPicker value={userColor} onChange={setUserColor} label="Root" idKey="root" />
+            <AccentColorPicker value={remiColor} onChange={setRemiColor} label="Key" idKey="key" />
+          </div>
+        } />
 
       {/* Tab bar — horizontal scroll, no scrollbar */}
       <div
@@ -1414,10 +1426,10 @@ export default function ComposingTools() {
       {/* Body */}
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 40px)" }}>
         {tab === "key-finder"     && <KeyFinder accent={remiColor} />}
-        {tab === "chord-explorer" && <ChordExplorer accent={remiColor} tuning={currentTuning} />}
-        {tab === "chord-draw"     && <ChordDraw accent={remiColor} tuning={currentTuning} />}
+        {tab === "chord-explorer" && <ChordExplorer accent={remiColor} userColor={userColor} tuning={currentTuning} />}
+        {tab === "chord-draw"     && <ChordDraw accent={remiColor} userColor={userColor} tuning={currentTuning} />}
         {tab === "progressions"   && <Progressions accent={remiColor} />}
-        {tab === "scales"         && <ScalesModes accent={remiColor} tuning={currentTuning} />}
+        {tab === "scales"         && <ScalesModes accent={remiColor} userColor={userColor} tuning={currentTuning} />}
         {tab === "delay"          && <DelayCalc accent={remiColor} onCopy={(ms) => { copyText(ms); setToast("Copied!"); }} />}
       </div>
 
@@ -1712,9 +1724,7 @@ const KEY_NOTE_EXPLANATIONS: Record<string, string> = {
   "Blues Scale": "The blue note — the flattened 5th. The grit and soul of every blues and rock solo ever played.",
 };
 
-const CHAR_COLOR = "#f59e0b"; // warm amber for characteristic notes (matches FretboardDiagram)
-
-function ScalesModes({ accent, tuning }: { accent: string; tuning: GuitarTuning }) {
+function ScalesModes({ accent, userColor, tuning }: { accent: string; userColor: string; tuning: GuitarTuning }) {
   const [root, setRoot] = useState("C");
   const [scaleName, setScaleName] = useState("Major (Ionian)");
   const [view, setView] = useState<"full" | "position">("full");
@@ -1811,7 +1821,7 @@ function ScalesModes({ accent, tuning }: { accent: string; tuning: GuitarTuning 
         <div className="text-xs" style={{ color: "var(--t-text6)", fontFamily: MONO }}>{scale.formula}</div>
         {hasChar && keyNoteText && (
           <div className="text-xs leading-relaxed" data-testid="scale-key-note">
-            <span style={{ color: CHAR_COLOR, fontFamily: MONO, fontWeight: 700 }}>Key note: {characteristicNotes.join(", ")}</span>
+            <span style={{ color: accent, fontFamily: MONO, fontWeight: 700 }}>Key note: {characteristicNotes.join(", ")}</span>
             <span style={{ color: "var(--t-text3)" }}> — {keyNoteText}</span>
           </div>
         )}
@@ -1846,15 +1856,15 @@ function ScalesModes({ accent, tuning }: { accent: string; tuning: GuitarTuning 
         {/* Legend — only when a characteristic note is in play */}
         {hasChar && (
           <div className="flex items-center gap-3 text-[10px]" style={{ color: "var(--t-text4)" }} data-testid="scale-legend">
-            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 99, background: accent, display: "inline-block" }} />Root</span>
-            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 99, background: CHAR_COLOR, display: "inline-block" }} />Key note</span>
+            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 99, background: userColor, display: "inline-block" }} />Root</span>
+            <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 99, background: accent, display: "inline-block" }} />Key note</span>
             <span className="flex items-center gap-1"><span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--t-text2)", display: "inline-block" }} />Scale notes</span>
           </div>
         )}
 
         <div className="rounded-2xl px-3 py-3" style={{ background: "var(--t-card)", border: "1px solid var(--t-border)" }}>
           <FretboardDiagram
-            mode="scale" tuning={tuning} accent={accent}
+            mode="scale" tuning={tuning} accent={userColor} characteristicColor={accent}
             scaleNotes={notes} rootNote={root} characteristicNotes={characteristicNotes}
             viewType={view} positionIndex={posIdx} onPositionChange={setPosIdx}
           />
