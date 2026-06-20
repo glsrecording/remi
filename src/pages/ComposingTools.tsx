@@ -305,73 +305,122 @@ function diatonicChords(root: string, mode: "major" | "minor"): DiatonicChord[] 
 interface ChordVoicing { name: string; dots: ChordDot[]; startFret: number; openStrings: number[]; mutedStrings: number[]; }
 const D = (string: number, fret: number, isRoot?: boolean): ChordDot => ({ string, fret, isRoot });
 
-const VOICINGS: Record<string, ChordVoicing[]> = {
-  // Majors
-  C: [
-    { name: "C", dots: [D(1, 3, true), D(2, 2), D(4, 1, true)], startFret: 1, openStrings: [3, 5], mutedStrings: [0] },
-    { name: "C (A-shape)", dots: [D(1, 3, true), D(2, 5), D(3, 5, true), D(4, 5), D(5, 3)], startFret: 3, openStrings: [], mutedStrings: [0] },
-  ],
-  D: [
-    { name: "D", dots: [D(3, 2), D(4, 3, true), D(5, 2)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
-    { name: "D (A-shape)", dots: [D(1, 5, true), D(2, 7), D(3, 7, true), D(4, 7), D(5, 5)], startFret: 5, openStrings: [], mutedStrings: [0] },
-  ],
-  E: [
-    { name: "E", dots: [D(1, 2), D(2, 2, true), D(3, 1)], startFret: 1, openStrings: [0, 4, 5], mutedStrings: [] },
-    { name: "E (A-shape)", dots: [D(1, 7, true), D(2, 9), D(3, 9, true), D(4, 9), D(5, 7)], startFret: 7, openStrings: [], mutedStrings: [0] },
-  ],
-  F: [
-    { name: "F (barre)", dots: [D(0, 1, true), D(1, 3), D(2, 3, true), D(3, 2), D(4, 1), D(5, 1)], startFret: 1, openStrings: [], mutedStrings: [] },
-    { name: "F (partial)", dots: [D(2, 3, true), D(3, 2), D(4, 1), D(5, 1)], startFret: 1, openStrings: [], mutedStrings: [0, 1] },
-  ],
-  G: [
-    { name: "G", dots: [D(0, 3, true), D(1, 2), D(5, 3, true)], startFret: 1, openStrings: [2, 3, 4], mutedStrings: [] },
-    { name: "G (E-shape)", dots: [D(0, 3, true), D(1, 5), D(2, 5, true), D(3, 4), D(4, 3), D(5, 3, true)], startFret: 3, openStrings: [], mutedStrings: [] },
-  ],
-  A: [
-    { name: "A", dots: [D(2, 2), D(3, 2, true), D(4, 2)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] },
-    { name: "A (E-shape)", dots: [D(0, 5, true), D(1, 7), D(2, 7, true), D(3, 6), D(4, 5), D(5, 5)], startFret: 5, openStrings: [], mutedStrings: [] },
-  ],
-  B: [{ name: "B (barre)", dots: [D(1, 2, true), D(2, 4), D(3, 4, true), D(4, 4), D(5, 2)], startFret: 2, openStrings: [], mutedStrings: [0] }],
-  // Minors
-  Cm: [{ name: "Cm (barre)", dots: [D(1, 3, true), D(2, 5), D(3, 5, true), D(4, 4), D(5, 3)], startFret: 3, openStrings: [], mutedStrings: [0] }],
-  Dm: [
-    { name: "Dm", dots: [D(3, 2), D(4, 3, true), D(5, 1)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
-    { name: "Dm (A-shape)", dots: [D(1, 5, true), D(2, 7), D(3, 7, true), D(4, 6), D(5, 5)], startFret: 5, openStrings: [], mutedStrings: [0] },
-  ],
-  Em: [
-    { name: "Em", dots: [D(1, 2), D(2, 2, true)], startFret: 1, openStrings: [0, 3, 4, 5], mutedStrings: [] },
-    { name: "Em (A-shape)", dots: [D(1, 7, true), D(2, 9), D(3, 9, true), D(4, 8), D(5, 7)], startFret: 7, openStrings: [], mutedStrings: [0] },
-  ],
-  Fm: [{ name: "Fm (barre)", dots: [D(0, 1, true), D(1, 3), D(2, 3, true), D(3, 1), D(4, 1), D(5, 1)], startFret: 1, openStrings: [], mutedStrings: [] }],
-  Gm: [{ name: "Gm (barre)", dots: [D(0, 3, true), D(1, 5), D(2, 5, true), D(3, 3), D(4, 3), D(5, 3)], startFret: 3, openStrings: [], mutedStrings: [] }],
-  Am: [
-    { name: "Am", dots: [D(2, 2), D(3, 2, true), D(4, 1)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] },
-    { name: "Am (E-shape)", dots: [D(0, 5, true), D(1, 7), D(2, 7, true), D(3, 5), D(4, 5), D(5, 5)], startFret: 5, openStrings: [], mutedStrings: [] },
-  ],
-  Bm: [{ name: "Bm (barre)", dots: [D(1, 2, true), D(2, 4), D(3, 4, true), D(4, 3), D(5, 2)], startFret: 2, openStrings: [], mutedStrings: [0] }],
-  // 7ths
-  Am7: [{ name: "Am7", dots: [D(2, 2), D(4, 1)], startFret: 1, openStrings: [1, 3, 5], mutedStrings: [0] }],
-  Dm7: [{ name: "Dm7", dots: [D(3, 2), D(4, 1), D(5, 1)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] }],
-  Em7: [{ name: "Em7", dots: [D(1, 2), D(2, 2, true), D(4, 3)], startFret: 1, openStrings: [0, 3, 5], mutedStrings: [] }],
-  G7: [{ name: "G7", dots: [D(0, 3, true), D(1, 2), D(5, 1)], startFret: 1, openStrings: [2, 3, 4], mutedStrings: [] }],
-  D7: [{ name: "D7", dots: [D(3, 2), D(4, 1), D(5, 2)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] }],
-  A7: [{ name: "A7", dots: [D(2, 2), D(4, 2)], startFret: 1, openStrings: [1, 3, 5], mutedStrings: [0] }],
-  E7: [{ name: "E7", dots: [D(1, 2), D(3, 1)], startFret: 1, openStrings: [0, 2, 4, 5], mutedStrings: [] }],
-  // maj7
-  Cmaj7: [{ name: "Cmaj7", dots: [D(1, 3, true), D(2, 2)], startFret: 1, openStrings: [3, 4, 5], mutedStrings: [0] }],
-  Gmaj7: [{ name: "Gmaj7", dots: [D(0, 3, true), D(1, 2), D(5, 2)], startFret: 1, openStrings: [2, 3, 4], mutedStrings: [] }],
-  Fmaj7: [{ name: "Fmaj7", dots: [D(2, 3, true), D(3, 2), D(4, 1)], startFret: 1, openStrings: [5], mutedStrings: [0, 1] }],
-  Dmaj7: [{ name: "Dmaj7", dots: [D(3, 2), D(4, 2), D(5, 2)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] }],
-  Amaj7: [{ name: "Amaj7", dots: [D(2, 2), D(3, 1), D(4, 2)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] }],
-  // add9 / sus
-  Cadd9: [{ name: "Cadd9", dots: [D(1, 3, true), D(2, 2), D(4, 3)], startFret: 1, openStrings: [3, 5], mutedStrings: [0] }],
-  Gadd9: [{ name: "Gadd9", dots: [D(0, 3, true), D(3, 2), D(5, 3, true)], startFret: 1, openStrings: [1, 2, 4], mutedStrings: [] }],
-  Dsus2: [{ name: "Dsus2", dots: [D(3, 2), D(4, 3, true)], startFret: 1, openStrings: [2, 5], mutedStrings: [0, 1] }],
-  Asus2: [{ name: "Asus2", dots: [D(2, 2), D(3, 2, true)], startFret: 1, openStrings: [1, 4, 5], mutedStrings: [0] }],
-  Esus4: [{ name: "Esus4", dots: [D(1, 2), D(2, 2, true), D(3, 2)], startFret: 1, openStrings: [0, 4, 5], mutedStrings: [] }],
-  Dsus4: [{ name: "Dsus4", dots: [D(3, 2), D(4, 3, true), D(5, 3)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] }],
-  Asus4: [{ name: "Asus4", dots: [D(2, 2), D(3, 2, true), D(4, 3)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] }],
-};
+// Open-position chords (canonical shapes, verified note-by-note in Phase-1 research).
+const OPEN_VOICINGS: ChordVoicing[] = [
+  { name: "C",     dots: [D(1, 3, true), D(2, 2), D(4, 1, true)], startFret: 1, openStrings: [3, 5], mutedStrings: [0] },
+  { name: "A",     dots: [D(2, 2), D(3, 2, true), D(4, 2)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] },
+  { name: "G",     dots: [D(0, 3, true), D(1, 2), D(5, 3, true)], startFret: 1, openStrings: [2, 3, 4], mutedStrings: [] },
+  { name: "E",     dots: [D(1, 2), D(2, 2, true), D(3, 1)], startFret: 1, openStrings: [0, 4, 5], mutedStrings: [] },
+  { name: "D",     dots: [D(3, 2), D(4, 3, true), D(5, 2)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
+  { name: "Am",    dots: [D(2, 2), D(3, 2, true), D(4, 1)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] },
+  { name: "Em",    dots: [D(1, 2), D(2, 2, true)], startFret: 1, openStrings: [0, 3, 4, 5], mutedStrings: [] },
+  { name: "Dm",    dots: [D(3, 2), D(4, 3, true), D(5, 1)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
+  { name: "A7",    dots: [D(2, 2), D(4, 2)], startFret: 1, openStrings: [1, 3, 5], mutedStrings: [0] },
+  { name: "D7",    dots: [D(3, 2), D(4, 1), D(5, 2)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
+  { name: "E7",    dots: [D(1, 2), D(3, 1)], startFret: 1, openStrings: [0, 2, 4, 5], mutedStrings: [] },
+  { name: "G7",    dots: [D(0, 3, true), D(1, 2), D(5, 1)], startFret: 1, openStrings: [2, 3, 4], mutedStrings: [] },
+  { name: "Cmaj7", dots: [D(1, 3, true), D(2, 2)], startFret: 1, openStrings: [3, 4, 5], mutedStrings: [0] },
+  { name: "Amaj7", dots: [D(2, 2), D(3, 1), D(4, 2)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] },
+  { name: "Dmaj7", dots: [D(3, 2), D(4, 2), D(5, 2)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
+  { name: "Fmaj7", dots: [D(2, 3, true), D(3, 2), D(4, 1)], startFret: 1, openStrings: [5], mutedStrings: [0, 1] },
+  { name: "Gmaj7", dots: [D(0, 3, true), D(1, 2), D(5, 2)], startFret: 1, openStrings: [2, 3, 4], mutedStrings: [] },
+  { name: "Em7",   dots: [D(1, 2)], startFret: 1, openStrings: [0, 2, 3, 4, 5], mutedStrings: [] },
+  { name: "Am7",   dots: [D(2, 2), D(4, 1)], startFret: 1, openStrings: [1, 3, 5], mutedStrings: [0] },
+  { name: "Dm7",   dots: [D(3, 2), D(4, 1), D(5, 1)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
+  { name: "Asus2", dots: [D(2, 2), D(3, 2, true)], startFret: 1, openStrings: [1, 4, 5], mutedStrings: [0] },
+  { name: "Dsus2", dots: [D(3, 2), D(4, 3, true)], startFret: 1, openStrings: [2, 5], mutedStrings: [0, 1] },
+  { name: "Asus4", dots: [D(2, 2), D(3, 2, true), D(4, 3)], startFret: 1, openStrings: [1, 5], mutedStrings: [0] },
+  { name: "Dsus4", dots: [D(3, 2), D(4, 3, true), D(5, 3)], startFret: 1, openStrings: [2], mutedStrings: [0, 1] },
+  { name: "Esus4", dots: [D(1, 2), D(2, 2, true), D(3, 2)], startFret: 1, openStrings: [0, 4, 5], mutedStrings: [] },
+  { name: "Cadd9", dots: [D(1, 3, true), D(2, 2), D(4, 3)], startFret: 1, openStrings: [3, 5], mutedStrings: [0] },
+  { name: "Gadd9", dots: [D(0, 3, true), D(3, 2), D(5, 3, true)], startFret: 1, openStrings: [1, 2, 4], mutedStrings: [] },
+];
+
+// Movable shapes: per-string fret OFFSET relative to the barre/root fret; "x" = muted.
+// rootString carries the bass root. All verified against (open+fret)%12 in Phase-1.
+type MovShape = { suffix: string; rootString: number; pat: (number | "x")[] };
+const MOVABLE_SHAPES: MovShape[] = [
+  // E-shapes (root on low E)
+  { suffix: "",     rootString: 0, pat: [0, 2, 2, 1, 0, 0] },
+  { suffix: "m",    rootString: 0, pat: [0, 2, 2, 0, 0, 0] },
+  { suffix: "7",    rootString: 0, pat: [0, 2, 0, 1, 0, 0] },
+  { suffix: "maj7", rootString: 0, pat: [0, 2, 1, 1, 0, 0] },
+  { suffix: "m7",   rootString: 0, pat: [0, 2, 0, 0, 0, 0] },
+  { suffix: "sus4", rootString: 0, pat: [0, 2, 2, 2, 0, 0] },
+  { suffix: "6",    rootString: 0, pat: [0, 2, 2, 1, 2, 0] },
+  { suffix: "m6",   rootString: 0, pat: [0, 2, 2, 0, 2, 0] },
+  { suffix: "5",    rootString: 0, pat: [0, 2, 2, "x", "x", "x"] },
+  { suffix: "aug",  rootString: 0, pat: [0, 3, 2, 1, 1, "x"] },
+  // A-shapes (root on A)
+  { suffix: "",     rootString: 1, pat: ["x", 0, 2, 2, 2, 0] },
+  { suffix: "m",    rootString: 1, pat: ["x", 0, 2, 2, 1, 0] },
+  { suffix: "7",    rootString: 1, pat: ["x", 0, 2, 0, 2, 0] },
+  { suffix: "maj7", rootString: 1, pat: ["x", 0, 2, 1, 2, 0] },
+  { suffix: "m7",   rootString: 1, pat: ["x", 0, 2, 0, 1, 0] },
+  { suffix: "sus2", rootString: 1, pat: ["x", 0, 2, 2, 0, 0] },
+  { suffix: "sus4", rootString: 1, pat: ["x", 0, 2, 2, 3, 0] },
+  { suffix: "add9", rootString: 1, pat: ["x", 0, 2, 4, 0, 0] },
+  { suffix: "6",    rootString: 1, pat: ["x", 0, 2, 2, 2, 2] },
+  { suffix: "m6",   rootString: 1, pat: ["x", 0, 2, 2, 1, 2] },
+  { suffix: "5",    rootString: 1, pat: ["x", 0, 2, 2, "x", "x"] },
+  { suffix: "dim",  rootString: 1, pat: ["x", 0, 1, "x", 1, "x"] },
+  { suffix: "dim7", rootString: 1, pat: ["x", 0, 1, 2, 1, "x"] },
+  { suffix: "m7b5", rootString: 1, pat: ["x", 0, 1, 0, 1, "x"] },
+  { suffix: "aug",  rootString: 1, pat: ["x", 0, 3, 2, 2, "x"] },
+];
+
+const STD_OPEN = [4, 9, 2, 7, 11, 4]; // standard-tuning open-string semitones, low→high
+
+// Build the full voicing library: open chords + transposed movable shapes for all
+// 12 roots. A shape whose root lands on an open string (f===0) becomes an open
+// voicing; duplicates of an existing open chord are skipped.
+function buildVoicings(): Record<string, ChordVoicing[]> {
+  const map: Record<string, ChordVoicing[]> = {};
+  const add = (name: string, v: ChordVoicing) => { (map[name] = map[name] || []).push(v); };
+  for (const v of OPEN_VOICINGS) add(v.name, v);
+  for (let R = 0; R < 12; R++) {
+    const rn = NOTE_NAMES[R];
+    for (const sh of MOVABLE_SHAPES) {
+      const baseF = (((R - STD_OPEN[sh.rootString]) % 12) + 12) % 12;
+      const name = rn + sh.suffix;
+      // Try the low position and (for low roots) the same shape an octave up, so
+      // common open-position roots still get an upper-neck alternative voicing.
+      const fretsToTry = baseF <= 2 ? [baseF, baseF + 12] : [baseF];
+      for (const f of fretsToTry) {
+        if (f === 0 && map[name] && map[name].length) continue; // don't duplicate an open chord
+        const dots: ChordDot[] = [];
+        const open: number[] = [];
+        const muted: number[] = [];
+        sh.pat.forEach((off, s) => {
+          if (off === "x") { muted.push(s); return; }
+          const abs = f + off;
+          if (abs === 0) open.push(s);
+          else dots.push({ string: s, fret: abs, isRoot: s === sh.rootString });
+        });
+        if (!dots.length) continue;
+        const minF = Math.min(...dots.map((d) => d.fret));
+        const startFret = open.length || minF <= 1 ? 1 : minF;
+        add(name, { name, dots, startFret, openStrings: open, mutedStrings: muted });
+      }
+    }
+  }
+  return map;
+}
+const VOICINGS: Record<string, ChordVoicing[]> = buildVoicings();
+
+// Dev-only hooks for verifying the library against (open+fret)%12 from the console.
+if (import.meta.env.DEV) {
+  const w = window as unknown as Record<string, unknown>;
+  w.__voicingCount = () => Object.values(VOICINGS).reduce((n, a) => n + a.length, 0);
+  w.__voicingNotes = (name: string) =>
+    (VOICINGS[name] || []).map((v) => {
+      const pcs = [
+        ...v.openStrings.map((s) => STD_OPEN[s] % 12),
+        ...v.dots.map((d) => (STD_OPEN[d.string] + d.fret) % 12),
+      ];
+      return { startFret: v.startFret, notes: Array.from(new Set(pcs)).sort((a, b) => a - b).map((p) => NOTE_NAMES[p]) };
+    });
+}
 
 // Strings that actually sound in a voicing (open + fretted), sorted low → high.
 function soundingStrings(v: ChordVoicing): { s: number; fret: number }[] {
@@ -437,6 +486,211 @@ function TuningSelector({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── EMOTIONAL COLOR SYSTEM (Phase 4/5) ────────────────────────────────────────
+// Two-layer descriptions sourced from Phase-1 research (musician feel + plain-English
+// theory + verified song examples). Keyed by chord suffix.
+interface ChordDescription { musicianLayer: string; theoryLayer: string; famousExamples: string[]; }
+const CHORD_DESCRIPTIONS: Record<string, ChordDescription> = {
+  "": {
+    musicianLayer: "The bedrock bright, resolved sound — clarity and finality. Reach for it when you want a clean, settled statement with no ache.",
+    theoryLayer: "Root + major third (4 semitones) + perfect fifth. The wide major third reads as positive; the perfect fifth is the most consonant interval, so it sits fully at rest.",
+    famousExamples: ["Most three-chord pop/rock (the I, IV, V chords)"],
+  },
+  m: {
+    musicianLayer: "Subdued, melancholic, serious. Choose it over major when you want weight, introspection, or shadow instead of sunshine.",
+    theoryLayer: "A major chord with the third lowered a half-step (minor third, 3 semitones). That narrower root-to-third gap is what the ear hears as darker; the fifth is unchanged, so it stays grounded but somber.",
+    famousExamples: ["Most minor-key ballads & rock ('Stairway to Heaven' verse, Am)"],
+  },
+  maj7: {
+    musicianLayer: "The 'adult' major chord — keeps the brightness but adds a wistful, sophisticated, cinematic ache. Reach for it when a plain major feels too resolved; it's the warm sound of jazz ballads, dream pop, and neo-soul.",
+    theoryLayer: "Adds the major 7th — the note one half-step below the octave (B in Cmaj7). Because it sits so close to the root's octave without landing on it, the ear hears resolution and suspension at once: the 'sighing' quality.",
+    famousExamples: ["'Yesterday' – The Beatles", "'Misty' – Erroll Garner"],
+  },
+  m7: {
+    musicianLayer: "Minor's smoother, soulful cousin — still in shadow but warmer and more relaxed. Use it to take the sting out of a minor chord; a staple of funk, R&B, soul, and smooth jazz.",
+    theoryLayer: "A minor triad plus a minor 7th (Am7 = A-C-E-G). The added note sits a comfortable whole-step below the octave, which rounds the minor sound out rather than sharpening it.",
+    famousExamples: ["Funk & soul rhythm comping (genre staple)"],
+  },
+  "7": {
+    musicianLayer: "Restless and unresolved — it leans forward, wanting to move. It's the engine of the blues, and the V chord that cranks up the pull back home.",
+    theoryLayer: "A major triad plus a minor 7th (C7 = C-E-G-Bb). The tritone between the major third and the flat seventh is the most unstable interval in music, which creates the urge to resolve.",
+    famousExamples: ["Virtually all 12-bar blues (I7–IV7–V7)"],
+  },
+  maj9: {
+    musicianLayer: "Maj7's dreamier sibling — maximum lush sophistication; the chord to use when you want the tonic itself to shimmer. Neo-soul, R&B, bossa nova.",
+    theoryLayer: "A maj7 with the 9th added on top (Cmaj9 = C-E-G-B-D). The 9th (the 2nd up an octave) adds an airy upper layer without muddying the warm maj7 core.",
+    famousExamples: ["Neo-soul & bossa tonic voicings (genre context)"],
+  },
+  m9: {
+    musicianLayer: "A lush, slightly bluesy upgrade to the m7 — richer, velvety, and still grooving. Neo-soul, R&B, jazz.",
+    theoryLayer: "An m7 with a major 9th on top (Cm9 = C-Eb-G-Bb-D). The consonant 9th over the soulful m7 adds depth and a fuller texture than the four-note m7 alone.",
+    famousExamples: ["Neo-soul & jazz comping (genre context)"],
+  },
+  "9": {
+    musicianLayer: "THE funk chord — bright, punchy, full of forward motion (James Brown / Jimmy Nolen). Use it when a plain dominant 7 needs more color and groove.",
+    theoryLayer: "A dominant 7 with a major 9th added (C9 = C-E-G-Bb-D). It keeps the 7th's restless tritone but the 9th adds brightness and percussive bite that cuts through a mix.",
+    famousExamples: ["'I Got You (I Feel Good)' – James Brown"],
+  },
+  "6": {
+    musicianLayer: "A 'happy-sad' chord — clearly major but with an easygoing, vintage glow. A sweeter stand-in for a plain major or maj7; swing, doo-wop, retro pop.",
+    theoryLayer: "A major triad plus a major 6th (C6 = C-E-G-A). The 6th adds warmth with no harsh half-step rub, and avoids the root-vs-7th clash a maj7 has.",
+    famousExamples: ["Classic swing/jazz & doo-wop endings (genre context)"],
+  },
+  m6: {
+    musicianLayer: "A vintage, bittersweet minor with a touch of sophistication — minor melancholy plus a sliver of sweetness. Jazz, soulful ballads, noir.",
+    theoryLayer: "A minor triad with a major 6th added (Cm6 = C-Eb-G-A). A bright major-6th glowing over the dark minor third creates the bittersweet push-pull.",
+    famousExamples: ["Jazz ballads & noir harmony (genre context)"],
+  },
+  add9: {
+    musicianLayer: "Bright, shimmering, jangly — a strummed major that sparkles more, without the jazzy lounge flavor of a maj7. Folk, acoustic pop, arena rock.",
+    theoryLayer: "A major triad plus the 9th but NO 7th (Cadd9 = C-E-G-D). With no major 7th there's none of the jazz creaminess — just the airy 9th ringing over a clean triad.",
+    famousExamples: ["'Wonderwall' – Oasis", "'Every Breath You Take' – The Police"],
+  },
+  madd9: {
+    musicianLayer: "A minor chord with a glint of brightness and tension — darker than add9, more open than a plain minor. Atmospheric/cinematic minor, alt-rock, film.",
+    theoryLayer: "A minor triad plus the 9th, no 7th (Cm(add9) = C-Eb-G-D). The 9th sits close to the root and minor third for a gentle bittersweet rub. Keeping the third is what distinguishes it from a sus2.",
+    famousExamples: ["Atmospheric alt-rock & scoring (genre context)"],
+  },
+  sus2: {
+    musicianLayer: "Open, airy, ambiguous — neither happy nor sad, it just floats. Dreamy, modal, jangly textures; ambient pop, indie, modern worship.",
+    theoryLayer: "A triad with the third REPLACED by the 2nd (Csus2 = C-D-G). With no third there's no major/minor identity, so it sounds suspended and neutral. (Csus2 has the same notes as Gsus4.)",
+    famousExamples: ["Ringing arpeggiated indie/worship parts (genre context)"],
+  },
+  sus4: {
+    musicianLayer: "The classic 'about to become something else' chord — it leans forward, aching to resolve down into a major. Used right before the major chord for anticipation; rock, pop, gospel.",
+    theoryLayer: "A triad with the third REPLACED by a perfect 4th (Csus4 = C-F-G). The 4th sits a half-step above where the major third should be and wants to step down to it, so it feels temporary.",
+    famousExamples: ["'Pinball Wizard' – The Who (opening)"],
+  },
+  "7sus4": {
+    musicianLayer: "A floating, 'almost resolving' chord — the forward pull of a dominant 7 without a major third, so it can hang or melt into major or minor. Gospel, soul, modal jazz.",
+    theoryLayer: "Root, 4th, 5th, and b7 (C7sus4 = C-F-G-Bb). The b7 keeps the dominant energy; with no third the chord is neither major nor minor, so it floats.",
+    famousExamples: ["Modal-jazz 'floating dominant' (genre context)"],
+  },
+  dim: {
+    musicianLayer: "Tense, unstable, anxious — it sounds like something needs fixing. A passing or leading chord for a brief jolt of suspense before resolving.",
+    theoryLayer: "Two stacked minor thirds (Cdim = C-Eb-Gb). The diminished fifth (a tritone) between root and fifth makes it restless and eager to move.",
+    famousExamples: ["Passing/leading chords in jazz & classical (theory standard)"],
+  },
+  dim7: {
+    musicianLayer: "Maximum drama — the silent-movie 'villain' chord. Use it for heightened tension, sudden harmonic turns, or to pivot into a distant key.",
+    theoryLayer: "Three stacked minor thirds (Cdim7 = C-Eb-Gb-A). It's perfectly symmetrical, so it has no single home note and can resolve in four directions.",
+    famousExamples: ["Classical/Romantic drama; jazz turnarounds (theory standard)"],
+  },
+  m7b5: {
+    musicianLayer: "Dark, smoky, tense but elegant — not as cartoonish as a full diminished chord. Its home is jazz, almost always opening a minor ii–V–i.",
+    theoryLayer: "A minor 7th with the fifth lowered a half-step (Cm7b5 = C-Eb-Gb-Bb). It has the diminished fifth's instability, but the softer minor 7th keeps it bittersweet rather than panicked.",
+    famousExamples: ["The ii chord in 'Autumn Leaves' & minor jazz standards"],
+  },
+  aug: {
+    musicianLayer: "Dreamlike, mysterious, unstable — it hangs in the air with a strange glow. A brief color chord for surreal or transitional moments.",
+    theoryLayer: "A major triad with the fifth RAISED a half-step (Caug = C-E-G#). It's symmetrical (two stacked major thirds), so it has no clear root or key — hence the floating ambiguity.",
+    famousExamples: ["'All My Loving' – The Beatles", "'It's My Party' – Lesley Gore"],
+  },
+  mmaj7: {
+    musicianLayer: "The 'James Bond' / spy chord — suave, mysterious, faintly ominous, with a bittersweet edge. Film noir, thrillers, dramatic minor passages.",
+    theoryLayer: "A minor triad with a MAJOR 7th (Cm(maj7) = C-Eb-G-B). The clash of the dark minor third under the bright major-7th (a half-step from the root) is the whole 'mystery' sound.",
+    famousExamples: ["'James Bond Theme'", "'Psycho' score (the 'Hitchcock chord')"],
+  },
+  "5": {
+    musicianLayer: "Raw, punchy, tonally neutral — neither happy nor sad, just powerful. The building block of rock, punk, and metal under distortion.",
+    theoryLayer: "Just the root and perfect fifth, no third (C5 = C-G, often with the octave). No third means no major/minor identity; omitting it also removes the overtone clashes distortion amplifies.",
+    famousExamples: ["Riff foundation of hard rock, punk & metal (genre standard)"],
+  },
+};
+
+interface ColorCategory { name: string; teaser: string; major: string[]; minor: string[]; }
+const COLOR_CATEGORIES: ColorCategory[] = [
+  { name: "Warmth & Depth",     teaser: "Opens up the sound without losing brightness",   major: ["maj7", "6", "add9"],   minor: ["mmaj7", "m6", "madd9"] },
+  { name: "Tension & Movement", teaser: "Creates forward motion and unresolved energy",    major: ["7", "9", "sus4"],      minor: ["m7b5", "dim", "dim7"] },
+  { name: "Open & Floating",    teaser: "Removes the third — neither major nor minor",      major: ["sus2", "sus4", "add9"], minor: ["sus2", "sus4", "madd9"] },
+  { name: "Dark & Complex",     teaser: "Deepens the shadow without losing control",        major: ["m", "m7", "mmaj7"],    minor: ["m7", "m9", "m6"] },
+  { name: "Raw & Powerful",     teaser: "Strip it to the bones — root and fifth only",       major: ["5"],                   minor: ["5"] },
+];
+
+// Collapsible "Add color" panel — shows emotionally-grouped related chords for the
+// current root, each expandable to a two-layer description + diagram. Shared by
+// Chord Explorer and Chord Draw.
+function ColorPanel({ rootName, minorFamily, accent, instrument, tuning }: {
+  rootName: string; minorFamily: boolean; accent: string; instrument: "guitar" | "piano"; tuning: GuitarTuning;
+}) {
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null); // chord name
+
+  return (
+    <div className="flex flex-col gap-2 mt-1">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="self-start px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95"
+        style={{ fontFamily: MONO, background: open ? accent : "var(--t-el-low)", color: open ? "#111" : "var(--t-text3)", border: `1px solid ${open ? accent : "var(--t-border-md)"}` }}
+        data-testid="add-color-toggle">
+        Add color {open ? "▲" : "▼"}
+      </button>
+
+      {open && COLOR_CATEGORIES.map((cat) => {
+        const suffixes = minorFamily ? cat.minor : cat.major;
+        return (
+          <div key={cat.name} className="flex flex-col gap-1.5 rounded-xl px-3 py-2" style={{ background: "var(--t-bg)", border: "1px solid var(--t-border)" }}>
+            <div className="text-xs font-bold uppercase tracking-wider" style={{ color: accent, fontFamily: MONO }}>{cat.name}</div>
+            <div className="text-xs italic" style={{ color: "var(--t-text4)" }}>{cat.teaser}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {suffixes.map((suffix) => {
+                const name = rootName + suffix;
+                const on = expanded === name;
+                return (
+                  <button key={name} type="button" onClick={() => setExpanded(on ? null : name)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all active:scale-95"
+                    style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-med)", color: on ? "#111" : "var(--t-text2)", border: `1px solid ${on ? accent : "var(--t-border)"}` }}
+                    data-testid={`color-chord-${name.replace(/[^a-z0-9]/gi, "-")}`}>
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+            {suffixes.map((suffix) => {
+              const name = rootName + suffix;
+              if (expanded !== name) return null;
+              const notes = chordNotesFromSuffix(rootName, suffix);
+              const desc = CHORD_DESCRIPTIONS[suffix];
+              const voicing = VOICINGS[name]?.[0];
+              return (
+                <div key={`exp-${name}`} className="flex flex-col gap-2 rounded-lg px-3 py-2 mt-1" style={{ background: "var(--t-card)", border: `1px solid ${accent}` }} data-testid={`color-detail-${name.replace(/[^a-z0-9]/gi, "-")}`}>
+                  <div className="flex flex-wrap gap-1">
+                    {notes.map((n, i) => (
+                      <span key={`${n}-${i}`} className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ fontFamily: MONO, background: "var(--t-el-med)", color: "var(--t-text3)" }}>{n}</span>
+                    ))}
+                  </div>
+                  {instrument === "guitar" ? (
+                    voicing ? (
+                      <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={accent}
+                        chordDots={voicing.dots} startFret={voicing.startFret} openStrings={voicing.openStrings} mutedStrings={voicing.mutedStrings} />
+                    ) : (
+                      <div className="text-[10px]" style={{ color: "var(--t-text6)" }}>Diagram coming soon for this voicing</div>
+                    )
+                  ) : (
+                    <FretboardDiagram mode="chord" instrument="piano" tuning={tuning} accent={accent} chordNotes={notes} />
+                  )}
+                  {desc && (
+                    <div className="flex flex-col gap-1.5">
+                      <div className="text-xs leading-relaxed" style={{ color: "var(--t-text2)" }}>
+                        <span style={{ color: accent, fontFamily: MONO }}>Feel — </span>{desc.musicianLayer}
+                      </div>
+                      <div className="text-xs leading-relaxed" style={{ color: "var(--t-text3)" }}>
+                        <span style={{ color: "var(--t-text5)", fontFamily: MONO }}>Theory — </span>{desc.theoryLayer}
+                      </div>
+                      <div className="text-[10px]" style={{ color: "var(--t-text5)" }}>
+                        e.g. {desc.famousExamples.join(" · ")}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -569,6 +823,7 @@ function ChordExplorer({ accent, tuning }: { accent: string; tuning: GuitarTunin
           ) : (
             <FretboardDiagram mode="chord" instrument="piano" tuning={tuning} accent={accent} chordNotes={selected.notes} />
           )}
+          <ColorPanel rootName={selected.notes[0]} minorFamily={selected.quality !== "major"} accent={accent} instrument={instrument} tuning={tuning} />
         </div>
       )}
     </div>
@@ -580,32 +835,41 @@ function ChordExplorer({ accent, tuning }: { accent: string; tuning: GuitarTunin
 // tuning → show variations. Pure math, no backend. Identification is musically
 // correct (the actual notes under the fingers), not forced to a "nice" name.
 
-interface ChordTemplate { name: string; intervals: number[] } // intervals from root, excluding 0
+interface ChordTemplate { name: string; intervals: number[] } // intervals from root (mod 12), excluding 0
+// Verified Phase-1 research (Wikipedia chord pages, oolimo, musicpy). Intervals reduced
+// to 0-11 for pitch-class matching: 9th=14→2, 11th=17→5, 13th=21→9.
 const CHORD_TEMPLATES: ChordTemplate[] = [
-  { name: "5",     intervals: [7] },            // power chord (simplest → checked early via size sort)
-  { name: "",      intervals: [4, 7] },         // major
-  { name: "m",     intervals: [3, 7] },         // minor
-  { name: "dim",   intervals: [3, 6] },         // diminished
-  { name: "aug",   intervals: [4, 8] },         // augmented
+  { name: "",      intervals: [4, 7] },          // major
+  { name: "m",     intervals: [3, 7] },          // minor
+  { name: "5",     intervals: [7] },             // power chord — ONLY valid with exactly 2 distinct notes
+  { name: "dim",   intervals: [3, 6] },          // diminished triad
+  { name: "aug",   intervals: [4, 8] },          // augmented
   { name: "sus2",  intervals: [2, 7] },
   { name: "sus4",  intervals: [5, 7] },
-  { name: "7",     intervals: [4, 7, 10] },     // dominant 7
+  { name: "6",     intervals: [4, 7, 9] },       // major 6
+  { name: "m6",    intervals: [3, 7, 9] },
+  { name: "7",     intervals: [4, 7, 10] },      // dominant 7
   { name: "maj7",  intervals: [4, 7, 11] },
   { name: "m7",    intervals: [3, 7, 10] },
+  { name: "m7b5",  intervals: [3, 6, 10] },      // half-diminished
   { name: "dim7",  intervals: [3, 6, 9] },
   { name: "mmaj7", intervals: [3, 7, 11] },
   { name: "7sus4", intervals: [5, 7, 10] },
-  { name: "6",     intervals: [4, 7, 9] },
-  { name: "m6",    intervals: [3, 7, 9] },
-  { name: "add9",  intervals: [4, 7, 2] },      // 2 == 14 mod 12
+  { name: "add9",  intervals: [4, 7, 2] },       // triad + 9, NO 7th
   { name: "madd9", intervals: [3, 7, 2] },
-  { name: "9",     intervals: [4, 7, 10, 2] },
+  { name: "9",     intervals: [4, 7, 10, 2] },   // dom7 + 9
   { name: "maj9",  intervals: [4, 7, 11, 2] },
   { name: "m9",    intervals: [3, 7, 10, 2] },
+  { name: "11",    intervals: [4, 7, 10, 2, 5] },
+  { name: "maj11", intervals: [4, 7, 11, 2, 5] },
+  { name: "m11",   intervals: [3, 7, 10, 2, 5] },
+  { name: "13",    intervals: [4, 7, 10, 2, 5, 9] },
 ];
 
-// Identify a chord from a set of pitch classes; prefers the bass (lowest string)
-// as root, strong (exact) over partial, and simpler templates over complex.
+// Identify a chord from a set of pitch classes. Priority (Phase-1 research):
+// 1) exact match beats partial, 2) richest template among exacts, 3) lowest note
+// (bass) as root — resolves C6 vs Am7. Power chord is ONLY valid with exactly 2
+// distinct pitch classes (any 3rd present ⇒ triad, never a power chord).
 function identifyChord(pcs: number[], bassPc: number | null): { name: string; confidence: string; root: number } | null {
   const uniq = Array.from(new Set(pcs.map((p) => ((p % 12) + 12) % 12)));
   if (uniq.length < 2) return null;
@@ -616,25 +880,33 @@ function identifyChord(pcs: number[], bassPc: number | null): { name: string; co
     const rel = new Set(uniq.map((p) => (p - root + 12) % 12)); // includes 0
     const nonRoot = Array.from(rel).filter((x) => x !== 0);
     for (const t of CHORD_TEMPLATES) {
+      // Power chord rule: root+fifth ONLY when the WHOLE set is exactly 2 distinct
+      // pitch classes. With a 3rd (or anything else) present it is a triad/extension.
+      if (t.name === "5" && uniq.length !== 2) continue;
       const tset = Array.from(new Set(t.intervals.map((i) => ((i % 12) + 12) % 12))).filter((x) => x !== 0);
       const allPresent = tset.every((i) => rel.has(i));
       if (!allPresent) continue;
       const noExtra = nonRoot.every((i) => tset.includes(i));
-      // A power chord (1 interval) is defined by having ONLY root+fifth — never
-      // report it as a partial match when other notes are present (would mislabel
-      // any set containing a fifth). Partials are for triad-or-larger templates.
-      if (!noExtra && tset.length < 2) continue;
       cands.push({ root, name: NOTE_NAMES[root] + t.name, strong: noExtra, size: tset.length, bassRoot: root === bassPc });
     }
   }
   if (!cands.length) return null;
   cands.sort((a, b) =>
-    (Number(b.strong) - Number(a.strong)) ||
-    (a.size - b.size) ||
-    (Number(b.bassRoot) - Number(a.bassRoot)),
+    (Number(b.strong) - Number(a.strong)) ||   // exact (strong) before partial
+    (b.size - a.size) ||                         // richest template among ties
+    (Number(b.bassRoot) - Number(a.bassRoot)),   // lowest note as root (C6 vs Am7)
   );
   const best = cands[0];
   return { name: best.name, confidence: best.strong ? "Strong match" : "Possible match", root: best.root };
+}
+
+// Dev-only hook so the identifier can be exercised against known cases from the
+// preview console. Stripped from production builds (import.meta.env.DEV === false).
+if (import.meta.env.DEV) {
+  (window as unknown as { __identifyTest?: (names: string[]) => unknown }).__identifyTest = (names: string[]) => {
+    const pcs = names.map((n) => NOTE_INDEX[n]).filter((x) => x != null && x >= 0);
+    return identifyChord(pcs, pcs.length ? pcs[0] : null);
+  };
 }
 
 function chordNotesFromSuffix(rootName: string, suffix: string): string[] {
@@ -698,21 +970,55 @@ function computeDrawResult(st: Record<number, DrawString>, tuning: GuitarTuning)
   };
 }
 
+// Piano input is tuning-independent (always concert pitch). Keys are absolute
+// semitone indices over C3-B4; bass = the lowest selected key.
+function computePianoResult(keys: Set<number>): DrawResult | null {
+  const idxs = Array.from(keys).sort((a, b) => a - b);
+  if (!idxs.length) return null;
+  const pcs = idxs.map((i) => i % 12);
+  const bass = idxs[0] % 12;
+  const seen = new Set<string>();
+  const notes: string[] = [];
+  for (const pc of pcs) { const nm = noteName(pc); if (!seen.has(nm)) { seen.add(nm); notes.push(nm); } }
+  const id = identifyChord(pcs, bass);
+  return {
+    chordName: id ? id.name : "Unknown chord",
+    confidence: id ? id.confidence : "Unknown",
+    notes,
+    root: id ? id.root : null,
+    standardName: null,
+    variations: [],
+  };
+}
+
+// Piano key layout for C3-B4 (24 semitones).
+const PIANO_WHITE_PC = new Set([0, 2, 4, 5, 7, 9, 11]);
+
 function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning }) {
+  const [instrument, setInstrument] = useState<"guitar" | "piano">("guitar");
   const [strings, setStrings] = useState<Record<number, DrawString>>({});
+  const [pianoKeys, setPianoKeys] = useState<Set<number>>(new Set());
   const [windowStart, setWindowStart] = useState(1);
   const [result, setResult] = useState<DrawResult | null>(null);
   const [autoIdentify, setAutoIdentify] = useState(false);
   const [muteMode, setMuteMode] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
   const longPress = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const frets = [0, 1, 2, 3, 4].map((i) => windowStart + i);
 
-  // Auto-identify reruns whenever the shape or tuning changes (when enabled).
+  // Auto-identify reruns whenever the shape, tuning, or instrument changes.
   useEffect(() => {
-    if (autoIdentify) setResult(computeDrawResult(strings, tuning));
-  }, [strings, tuning, autoIdentify]);
+    if (!autoIdentify) return;
+    setResult(instrument === "piano" ? computePianoResult(pianoKeys) : computeDrawResult(strings, tuning));
+  }, [strings, pianoKeys, tuning, autoIdentify, instrument]);
+
+  const togglePianoKey = (idx: number) => {
+    setPianoKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  };
 
   const toggleFret = (s: number, f: number) => {
     setStrings((prev) => {
@@ -744,8 +1050,8 @@ function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning })
     });
   };
 
-  const clearAll = () => { setStrings({}); setResult(null); setExpanded(null); };
-  const identify = () => setResult(computeDrawResult(strings, tuning));
+  const clearAll = () => { setStrings({}); setPianoKeys(new Set()); setResult(null); };
+  const identify = () => setResult(instrument === "piano" ? computePianoResult(pianoKeys) : computeDrawResult(strings, tuning));
 
   const cell = 44;
   const labelW = 60;
@@ -757,12 +1063,26 @@ function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning })
     <div className="px-4 py-5 flex flex-col gap-4">
       <style>{`.cd-cell{background:transparent;} .cd-cell:hover{background:var(--t-el-low);}`}</style>
 
-      {/* A) Tuning reminder */}
-      <div className="text-xs" style={{ color: "var(--t-text5)", fontFamily: MONO }} data-testid="chorddraw-tuning">
-        Tuning: {tuning.name}
+      {/* A) Instrument toggle + reminder */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex gap-1.5">
+          {(["guitar", "piano"] as const).map((ins) => {
+            const on = instrument === ins;
+            return (
+              <button key={ins} type="button" onClick={() => setInstrument(ins)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all active:scale-95"
+                style={{ fontFamily: MONO, background: on ? accent : "var(--t-el-low)", color: on ? "#111" : "var(--t-text4)", border: `1px solid ${on ? accent : "var(--t-border-md)"}` }}
+                data-testid={`cd-instrument-${ins}`}>{ins}</button>
+            );
+          })}
+        </div>
+        <span className="text-xs" style={{ color: "var(--t-text5)", fontFamily: MONO }} data-testid="chorddraw-tuning">
+          {instrument === "piano" ? "Piano — concert pitch" : `Tuning: ${tuning.name}`}
+        </span>
       </div>
 
-      {/* B) Interactive fretboard grid */}
+      {/* B) Interactive fretboard grid (guitar) */}
+      {instrument === "guitar" && (
       <div style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}>
         {/* fret number header */}
         <div className="flex">
@@ -834,8 +1154,64 @@ function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning })
           );
         })}
       </div>
+      )}
 
-      {/* C) Position selector */}
+      {/* B-piano) Interactive keyboard (piano) */}
+      {instrument === "piano" && (
+        <div className="overflow-x-auto no-scrollbar" style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}>
+          {(() => {
+            const ww = 38, bw = 24, wh = 150, bh = 96;
+            const keys = Array.from({ length: 24 }, (_, i) => ({ idx: i, pc: i % 12, black: !PIANO_WHITE_PC.has(i % 12) }));
+            const whites = keys.filter((k) => !k.black);
+            const whiteX: Record<number, number> = {};
+            whites.forEach((k, wi) => { whiteX[k.idx] = wi * ww; });
+            const blacks = keys.filter((k) => k.black);
+            return (
+              <div style={{ position: "relative", width: whites.length * ww, height: wh }}>
+                {whites.map((k) => {
+                  const on = pianoKeys.has(k.idx);
+                  const isRoot = on && result?.root != null && k.pc === result.root;
+                  return (
+                    <div key={k.idx} onPointerDown={(e) => { e.preventDefault(); togglePianoKey(k.idx); }}
+                      style={{
+                        position: "absolute", left: whiteX[k.idx], top: 0, width: ww - 1, height: wh,
+                        background: on ? accent : "var(--t-card)", border: `1px solid ${isRoot ? "var(--t-text)" : "var(--t-border-lg)"}`,
+                        borderRadius: "0 0 4px 4px", display: "flex", alignItems: "flex-end", justifyContent: "center",
+                        paddingBottom: 6, cursor: "pointer",
+                      }}
+                      data-testid={`piano-key-${k.idx}`}>
+                      {(on || k.pc === 0) && (
+                        <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 700, color: on ? "#111" : "var(--t-text5)" }}>
+                          {noteName(k.pc)}{k.pc === 0 ? Math.floor(k.idx / 12) + 3 : ""}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+                {blacks.map((k) => {
+                  const on = pianoKeys.has(k.idx);
+                  const isRoot = on && result?.root != null && k.pc === result.root;
+                  const left = whiteX[k.idx - 1] + ww - bw / 2;
+                  return (
+                    <div key={k.idx} onPointerDown={(e) => { e.preventDefault(); togglePianoKey(k.idx); }}
+                      style={{
+                        position: "absolute", left, top: 0, width: bw, height: bh, zIndex: 2,
+                        background: on ? accent : "var(--t-text)", border: isRoot ? "2px solid var(--t-bg)" : "1px solid var(--t-bg)",
+                        borderRadius: "0 0 3px 3px", display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 4, cursor: "pointer",
+                      }}
+                      data-testid={`piano-key-${k.idx}`}>
+                      {on && <span style={{ fontFamily: MONO, fontSize: 8, fontWeight: 700, color: "#111" }}>{noteName(k.pc)}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* C) Position selector (guitar only) */}
+      {instrument === "guitar" && (
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold" style={{ color: "var(--t-text3)", fontFamily: MONO }}>
           Position: Frets {windowStart}–{windowStart + 4}
@@ -851,6 +1227,7 @@ function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning })
             data-testid="cd-up">▲ Up</button>
         </div>
       </div>
+      )}
 
       {/* D) Action row */}
       <div className="flex flex-wrap gap-2">
@@ -862,10 +1239,12 @@ function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning })
           className="px-4 py-2 rounded-xl text-sm font-medium active:scale-95"
           style={{ fontFamily: MONO, background: "var(--t-el-low)", color: "var(--t-text4)", border: "1px solid var(--t-border-md)" }}
           data-testid="cd-clear">Clear</button>
-        <button type="button" onClick={() => setMuteMode((m) => !m)}
-          className="px-4 py-2 rounded-xl text-sm font-medium active:scale-95"
-          style={{ fontFamily: MONO, background: muteMode ? accent : "var(--t-el-low)", color: muteMode ? "#111" : "var(--t-text4)", border: `1px solid ${muteMode ? accent : "var(--t-border-md)"}` }}
-          data-testid="cd-mute">Mute string</button>
+        {instrument === "guitar" && (
+          <button type="button" onClick={() => setMuteMode((m) => !m)}
+            className="px-4 py-2 rounded-xl text-sm font-medium active:scale-95"
+            style={{ fontFamily: MONO, background: muteMode ? accent : "var(--t-el-low)", color: muteMode ? "#111" : "var(--t-text4)", border: `1px solid ${muteMode ? accent : "var(--t-border-md)"}` }}
+            data-testid="cd-mute">Mute string</button>
+        )}
       </div>
 
       <label className="flex items-center gap-2 text-xs" style={{ color: "var(--t-text4)" }}>
@@ -886,54 +1265,26 @@ function ChordDraw({ accent, tuning }: { accent: string; tuning: GuitarTuning })
                 style={{ fontFamily: MONO, background: "var(--t-el-med)", color: "var(--t-text2)", border: "1px solid var(--t-border)" }}>{n}</span>
             ))}
           </div>
-          {result.chordName !== "Unknown chord" && (
+          {instrument === "guitar" && result.chordName !== "Unknown chord" && (
             <div className="text-xs" style={{ color: "var(--t-text4)" }}>
               This shape in <b>{tuning.name}</b>: <b style={{ color: accent }}>{result.chordName}</b>
             </div>
           )}
-          {tuning.name !== "Standard" && result.standardName && (
+          {instrument === "guitar" && tuning.name !== "Standard" && result.standardName && (
             <div className="text-xs" style={{ color: "var(--t-text5)" }}>
               In Standard tuning this shape would be: <b>{result.standardName}</b>
             </div>
           )}
 
-          {/* F) Variations */}
-          {result.variations.length > 0 && (
-            <div className="flex flex-col gap-2 mt-1">
-              <div className="text-xs uppercase tracking-wider" style={{ color: "var(--t-text5)", fontFamily: MONO }}>Variations &amp; related chords</div>
-              <div className="grid grid-cols-2 gap-2">
-                {result.variations.map((v) => {
-                  const notes = chordNotesFromSuffix(NOTE_NAMES[result.root ?? 0], v.suffix);
-                  const open = expanded === v.name;
-                  const voicing = VOICINGS[v.name]?.[0];
-                  return (
-                    <div key={v.name} className="rounded-xl px-3 py-2 flex flex-col gap-1.5"
-                      style={{ background: "var(--t-bg)", border: `1px solid ${open ? accent : "var(--t-border)"}` }}>
-                      <button type="button" onClick={() => setExpanded(open ? null : v.name)}
-                        className="flex items-center justify-between" data-testid={`cd-var-${v.name.replace(/[^a-z0-9]/gi, "-")}`}>
-                        <span className="text-sm font-bold" style={{ color: "var(--t-text)", fontFamily: MONO }}>{v.name}</span>
-                        <span style={{ color: "var(--t-text6)", fontSize: 11 }}>{open ? "▲" : "▼"}</span>
-                      </button>
-                      <div className="flex flex-wrap gap-1">
-                        {notes.map((n, i) => (
-                          <span key={`${n}-${i}`} className="px-1.5 py-0.5 rounded text-[10px] font-bold"
-                            style={{ fontFamily: MONO, background: "var(--t-el-med)", color: "var(--t-text3)" }}>{n}</span>
-                        ))}
-                      </div>
-                      {open && (
-                        voicing ? (
-                          <FretboardDiagram mode="chord" instrument="guitar" tuning={tuning} accent={accent}
-                            chordDots={voicing.dots} startFret={voicing.startFret}
-                            openStrings={voicing.openStrings} mutedStrings={voicing.mutedStrings} />
-                        ) : (
-                          <div className="text-[10px]" style={{ color: "var(--t-text6)" }}>Diagram coming soon for this voicing</div>
-                        )
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {/* F) Emotional color system */}
+          {result.root != null && (
+            <ColorPanel
+              rootName={NOTE_NAMES[result.root]}
+              minorFamily={(() => { const sfx = result.chordName.slice(NOTE_NAMES[result.root].length); return sfx.startsWith("m") && !sfx.startsWith("maj"); })()}
+              accent={accent}
+              instrument={instrument}
+              tuning={tuning}
+            />
           )}
         </div>
       )}
