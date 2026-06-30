@@ -587,6 +587,8 @@ export default function MainChat() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  // Persistent ("warm") mic stream — acquired once, reused every press (mic fix 1/3).
+  const micStreamRef = useRef<MediaStream | null>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdActiveRef = useRef(false);
   const [isLocked, setIsLocked] = useState(false);
@@ -723,6 +725,9 @@ export default function MainChat() {
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(pollId);
+      // Release the warm mic stream on unmount — don't leave the mic open forever.
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // On mount: check for upcoming deadlines — show banner in background, don't block chat
@@ -1111,6 +1116,22 @@ export default function MainChat() {
     [messages, setMessages, recordRecentCommand, navigate, speakResponse],
   );
 
+  // Warm mic stream: getUserMedia ONCE, then reuse every press so the ~100-400ms
+  // per-press spin-up that clips the first word is paid only on the first acquire.
+  // Health-checked before reuse — a dead track (tab suspend/resume) reacquires once.
+  async function getWarmMicStream(): Promise<MediaStream> {
+    const existing = micStreamRef.current;
+    const track = existing?.getAudioTracks?.()[0];
+    if (existing && track && track.readyState === "live") return existing;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStreamRef.current = stream;
+    // If the track ends (suspend/resume, device change), null the ref so the next
+    // press reacquires cleanly instead of recording from a dead stream.
+    const t = stream.getAudioTracks()[0];
+    if (t) t.addEventListener("ended", () => { micStreamRef.current = null; }, { once: true });
+    return stream;
+  }
+
   // ─── Mic: 150ms hold-to-record ───────────────────────────────────────────
   function handleMicDown() {
     if (mediaRecorderRef.current) return; // already recording
@@ -1119,8 +1140,9 @@ export default function MainChat() {
     holdTimerRef.current = setTimeout(async () => {
       holdActiveRef.current = true;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        if (!holdActiveRef.current) { stream.getTracks().forEach((t) => t.stop()); return; }
+        const stream = await getWarmMicStream();
+        // Released before warm-up finished (quick tap) — keep the warm stream, just bail.
+        if (!holdActiveRef.current) { return; }
         streamRef.current = stream;
         audioChunksRef.current = [];
         const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -1134,7 +1156,8 @@ export default function MainChat() {
         mediaRecorderRef.current = recorder;
         recorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
         recorder.onstop = () => {
-          streamRef.current?.getTracks().forEach((t) => t.stop());
+          // Keep the warm mic stream alive for the next press — only the recorder is
+          // per-recording. The stream is stopped on unmount / when its track ends.
           streamRef.current = null;
           setIsRecording(false);
           setIsLocked(false);
@@ -1211,7 +1234,7 @@ export default function MainChat() {
       if (mediaRecorderRef.current.state !== "inactive") mediaRecorderRef.current.stop();
       mediaRecorderRef.current = null;
     }
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    // Keep the warm mic stream alive — only clear the per-recording reference.
     streamRef.current = null;
     audioChunksRef.current = [];
     setIsRecording(false);
