@@ -445,6 +445,20 @@ async function analyzeRecording(blob: Blob): Promise<{ voicedMs: number; rms: nu
   }
 }
 
+// Whisper silence hallucinations (mic 3/3) — tokens/phrases Whisper commonly emits
+// for near-silent audio. A clip that transcribes to one of these is treated as
+// silence and dropped, so a near-silent press can never become a chat message.
+const _SILENCE_ARTIFACTS = new Set([
+  "", "you", "thanks", "thank you", "bye", "okay", "ok", "uh", "um", "hmm",
+  "thank you for watching", "thanks for watching", "please subscribe", "subscribe",
+  "see you next time", "i'll see you next time", "you're welcome",
+]);
+// True when `text` is (just) a Whisper silence artifact — punctuation/casing-insensitive.
+function _isSilenceArtifact(text: string): boolean {
+  const c = (text || "").trim().toLowerCase().replace(/[.!?…]+$/g, "").trim();
+  return _SILENCE_ARTIFACTS.has(c);
+}
+
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
   const formData = new FormData();
   // Use the correct extension so OpenAI can detect the format
@@ -1211,23 +1225,32 @@ export default function MainChat() {
             // the old pre-record delay. Discard a short near-silent tap, or a clip
             // with too little voiced audio, BEFORE any Whisper upload — so a quick
             // accidental tap can never produce hallucinated text in the chat.
+            // mic 3/3: carry the energy reading forward (null if decode failed) so the
+            // post-Whisper guard can be stricter on clips whose energy we couldn't confirm.
+            let _voicedMs: number | null = null;
             try {
               const { voicedMs, rms } = await analyzeRecording(blob);
+              _voicedMs = voicedMs;
               if ((pressMs < _MIC_TAP_MS && rms < _MIC_SILENCE_RMS)
                   || voicedMs < _MIC_MIN_VOICED_MS) {
                 setIsTranscribing(false);
                 return; // silent discard — no Whisper call, nothing sent to chat
               }
-            } catch { /* decode failed -> proceed; the <8-char artifact filter backstops */ }
+            } catch { /* decode failed -> proceed; the post-Whisper silence guard backstops */ }
             transcribeAudio(blob)
               .then((transcript) => {
                 setIsTranscribing(false);
                 if (transcript) {
-                  // Discard Whisper silence artifacts (common hallucinations on short/silent recordings)
-                  const SILENCE_ARTIFACTS = ["you", "thanks", "thank you", "thank you.", "thanks.", "bye", "bye.", ""];
+                  // mic 3/3 silence/hallucination guard: a clip that transcribes to a
+                  // known Whisper silence artifact never becomes a chat message — even if
+                  // it reached Whisper (decode-fail fallthrough). Stricter when we could
+                  // not confirm real voiced energy.
                   const cleaned = transcript.trim().toLowerCase();
-                  if (cleaned.length < 8 && SILENCE_ARTIFACTS.includes(cleaned)) {
-                    return; // discard silently — isTranscribing and isRecording already cleared above
+                  if (_isSilenceArtifact(transcript)) {
+                    return; // known silence hallucination — drop, nothing to chat
+                  }
+                  if (_voicedMs === null && pressMs < _MIC_TAP_MS && cleaned.length < 12) {
+                    return; // unverified energy on a tap-length press + short result — treat as silence
                   }
                   const _vm = transcript.match(/\b(mix(?:ed)?\s*notes?|mixnode)\s*session[\s,;.:]*(.+)/i);
                   if (_vm) {
