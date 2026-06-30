@@ -413,6 +413,38 @@ function SuggestionBar({ command, onUse, onDismiss }: SuggestionBarProps) {
 }
 
 // ─── Whisper transcription ────────────────────────────────────────────────────
+// Mic tap/garbage gate (mic 2/3) — tunable. A press shorter than _MIC_TAP_MS that is
+// ALSO near-silent (RMS < _MIC_SILENCE_RMS) is an accidental tap; a clip with less
+// than _MIC_MIN_VOICED_MS of voiced audio has nothing worth transcribing. Short clips
+// that carry real speech energy are KEPT.
+const _MIC_TAP_MS = 200;
+const _MIC_MIN_VOICED_MS = 300;
+const _MIC_SILENCE_RMS = 0.015;
+
+// Post-stop energy analysis: decode the finalized blob and measure overall RMS plus
+// total voiced duration (20ms windows above the silence floor). Lightweight; runs once
+// per recording. Lets the gate discard near-silent quick taps without calling Whisper.
+async function analyzeRecording(blob: Blob): Promise<{ voicedMs: number; rms: number }> {
+  const AC = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+  const ctx = new AC();
+  try {
+    const audioBuf = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const data = audioBuf.getChannelData(0);
+    const sr = audioBuf.sampleRate || 48000;
+    const win = Math.max(1, Math.floor(sr * 0.02)); // 20ms windows
+    let sumSq = 0, voicedSamples = 0;
+    for (let i = 0; i < data.length; i += win) {
+      const end = Math.min(i + win, data.length);
+      let wSum = 0;
+      for (let j = i; j < end; j++) { const v = data[j]; wSum += v * v; sumSq += v * v; }
+      if (Math.sqrt(wSum / (end - i)) >= _MIC_SILENCE_RMS) voicedSamples += (end - i);
+    }
+    return { voicedMs: (voicedSamples / sr) * 1000, rms: Math.sqrt(sumSq / Math.max(1, data.length)) };
+  } finally {
+    try { await ctx.close(); } catch { /* ignore */ }
+  }
+}
+
 async function transcribeAudio(audioBlob: Blob): Promise<string> {
   const formData = new FormData();
   // Use the correct extension so OpenAI can detect the format
@@ -591,6 +623,10 @@ export default function MainChat() {
   const micStreamRef = useRef<MediaStream | null>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdActiveRef = useRef(false);
+  // Press timing for the post-stop tap gate (mic 2/3): when the press started and
+  // how long it lasted (pointer-down to pointer-up / locked-send).
+  const pressStartRef = useRef<number>(0);
+  const pressMsRef = useRef<number>(0);
   const [isLocked, setIsLocked] = useState(false);
   const pointerStartYRef = useRef<number>(0);
 
@@ -1132,16 +1168,20 @@ export default function MainChat() {
     return stream;
   }
 
-  // ─── Mic: 150ms hold-to-record ───────────────────────────────────────────
+  // ─── Mic: record IMMEDIATELY on press; tap/garbage gate runs AFTER stop ────
   function handleMicDown() {
     if (mediaRecorderRef.current) return; // already recording
-    holdActiveRef.current = false;
+    holdActiveRef.current = true;          // press active — guards the async first-press acquire
+    pressStartRef.current = Date.now();
     setRecordingError(null);
-    holdTimerRef.current = setTimeout(async () => {
-      holdActiveRef.current = true;
+    // Start capturing NOW — no 150ms pre-record delay (that delay clipped the first
+    // word). Quick accidental taps are no longer gated by a delay; instead the
+    // recording is evaluated AFTER stop (duration + audio energy) and discarded if
+    // it's a near-silent tap — so capture is instant AND tap-garbage stays gone.
+    void (async () => {
       try {
         const stream = await getWarmMicStream();
-        // Released before warm-up finished (quick tap) — keep the warm stream, just bail.
+        // Released during the (first-press) acquire — don't start a dangling recorder.
         if (!holdActiveRef.current) { return; }
         streamRef.current = stream;
         audioChunksRef.current = [];
@@ -1161,11 +1201,24 @@ export default function MainChat() {
           streamRef.current = null;
           setIsRecording(false);
           setIsLocked(false);
+          const pressMs = pressMsRef.current;
           // 800ms flush: Safari delivers dataavailable after onstop.
-          setTimeout(() => {
+          setTimeout(async () => {
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
             audioChunksRef.current = [];
             if (blob.size === 0) { setIsTranscribing(false); return; }
+            // ── Post-stop quality gate (mic 2/3) — the anti-garbage replacement for
+            // the old pre-record delay. Discard a short near-silent tap, or a clip
+            // with too little voiced audio, BEFORE any Whisper upload — so a quick
+            // accidental tap can never produce hallucinated text in the chat.
+            try {
+              const { voicedMs, rms } = await analyzeRecording(blob);
+              if ((pressMs < _MIC_TAP_MS && rms < _MIC_SILENCE_RMS)
+                  || voicedMs < _MIC_MIN_VOICED_MS) {
+                setIsTranscribing(false);
+                return; // silent discard — no Whisper call, nothing sent to chat
+              }
+            } catch { /* decode failed -> proceed; the <8-char artifact filter backstops */ }
             transcribeAudio(blob)
               .then((transcript) => {
                 setIsTranscribing(false);
@@ -1210,11 +1263,12 @@ export default function MainChat() {
         setIsRecording(false);
         setRecordingError("Microphone permission is blocked or unavailable.");
       }
-    }, 150);
+    })();
   }
 
   function handleMicUp() {
     if (isLocked) return;
+    pressMsRef.current = Date.now() - pressStartRef.current; // press duration for the tap gate
     if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; }
     holdActiveRef.current = false;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -1242,6 +1296,7 @@ export default function MainChat() {
 
   function handleSendLocked() {
     setIsLocked(false);
+    pressMsRef.current = Date.now() - pressStartRef.current; // locked press is long -> never tap-discarded
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current = null;
